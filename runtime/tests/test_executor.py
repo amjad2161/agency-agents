@@ -1,0 +1,263 @@
+"""End-to-end executor test with a stubbed Anthropic client.
+
+Drives the tool-use loop through:
+  turn 1: assistant calls list_dir
+  turn 2: assistant calls read_file
+  turn 3: assistant emits final text and ends the turn
+
+Verifies tool calls hit our sandbox, results round-trip back to the model in the
+correct shape, and (with a session) memory persists user/assistant turns.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from agency.executor import Executor
+from agency.memory import MemoryStore, Session
+from agency.skills import SkillRegistry, discover_repo_root
+
+
+@dataclass
+class _TextBlock:
+    text: str
+    type: str = "text"
+
+
+@dataclass
+class _ToolUseBlock:
+    id: str
+    name: str
+    input: dict
+    type: str = "tool_use"
+
+
+@dataclass
+class _Resp:
+    content: list
+    stop_reason: str
+
+
+@dataclass
+class _Cfg:
+    model: str = "fake-opus"
+    planner_model: str = "fake-haiku"
+    max_tokens: int = 16000
+
+
+class _ScriptedLLM:
+    """Yields a pre-baked sequence of responses, one per messages_create call.
+
+    Captures the kwargs of every call so the test can assert on them.
+    """
+
+    def __init__(self, responses: list[_Resp]):
+        self._responses = list(responses)
+        self.calls: list[dict[str, Any]] = []
+        self.config = _Cfg()
+
+    @staticmethod
+    def cached_system(text: str):
+        return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
+    def messages_create(self, **kwargs):
+        # Snapshot — the executor mutates the messages list across turns.
+        import copy
+        self.calls.append({k: copy.deepcopy(v) for k, v in kwargs.items()})
+        if not self._responses:
+            raise AssertionError("scripted LLM ran out of responses")
+        return self._responses.pop(0)
+
+
+def _registry_with_one_skill():
+    reg = SkillRegistry.load(discover_repo_root())
+    # Trim to one skill so we don't spend time iterating the full library here.
+    skill = reg.all()[0]
+    return SkillRegistry([skill]), skill
+
+
+def test_executor_runs_tool_use_loop_and_returns_final_text(tmp_path: Path):
+    (tmp_path / "data.txt").write_text("hello world")
+
+    reg, skill = _registry_with_one_skill()
+    llm = _ScriptedLLM([
+        _Resp(
+            stop_reason="tool_use",
+            content=[
+                _TextBlock("Let me look around."),
+                _ToolUseBlock(id="t1", name="list_dir", input={"path": "."}),
+            ],
+        ),
+        _Resp(
+            stop_reason="tool_use",
+            content=[
+                _ToolUseBlock(id="t2", name="read_file", input={"path": "data.txt"}),
+            ],
+        ),
+        _Resp(
+            stop_reason="end_turn",
+            content=[_TextBlock("The file says: hello world")],
+        ),
+    ])
+
+    executor = Executor(reg, llm, workdir=tmp_path)
+    result = executor.run(skill, "what's in data.txt?")
+
+    assert "hello world" in result.text
+    assert result.turns == 3
+
+    # Three API calls; on the 2nd call, the prior assistant + tool_result pair must be present.
+    assert len(llm.calls) == 3
+    msgs2 = llm.calls[1]["messages"]
+    assert msgs2[0] == {"role": "user", "content": "what's in data.txt?"}
+    assert msgs2[1]["role"] == "assistant"
+    assert msgs2[2]["role"] == "user"
+    tool_result_block = msgs2[2]["content"][0]
+    assert tool_result_block["type"] == "tool_result"
+    assert tool_result_block["tool_use_id"] == "t1"
+    assert "data.txt" in tool_result_block["content"]
+
+    # System prompt was sent as a cached block.
+    sys_block = llm.calls[0]["system"]
+    assert isinstance(sys_block, list)
+    assert sys_block[0]["cache_control"] == {"type": "ephemeral"}
+
+    # Event stream surfaces text, tool_use, tool_result, stop in order.
+    kinds = [e.kind for e in result.events]
+    assert kinds.count("tool_use") == 2
+    assert kinds.count("tool_result") == 2
+    assert kinds[-1] == "stop"
+
+
+def test_executor_persists_session_memory(tmp_path: Path):
+    reg, skill = _registry_with_one_skill()
+    llm = _ScriptedLLM([
+        _Resp(stop_reason="end_turn", content=[_TextBlock("first answer")]),
+        _Resp(stop_reason="end_turn", content=[_TextBlock("second answer")]),
+    ])
+
+    memory = MemoryStore(tmp_path / "sessions")
+    session = Session(session_id="test-session", skill_slug=skill.slug)
+
+    executor = Executor(reg, llm, memory=memory, workdir=tmp_path)
+    executor.run(skill, "first question", session=session)
+
+    # Round-trip from disk and continue the conversation.
+    loaded = memory.load("test-session")
+    assert loaded is not None
+    assert [t.text for t in loaded.turns] == ["first question", "first answer"]
+
+    executor.run(skill, "second question", session=loaded)
+    loaded2 = memory.load("test-session")
+    assert loaded2 is not None
+    assert [t.text for t in loaded2.turns] == [
+        "first question", "first answer",
+        "second question", "second answer",
+    ]
+
+    # On the second run, the user message in call[0] must include the prior turns.
+    second_run_msgs = llm.calls[1]["messages"]
+    assert len(second_run_msgs) == 3  # u1, a1, u2
+    assert second_run_msgs[0]["content"] == "first question"
+    assert second_run_msgs[1]["content"] == "first answer"
+    assert second_run_msgs[2]["content"] == "second question"
+
+
+@dataclass
+class _Delta:
+    text: str
+    type: str = "text_delta"
+
+
+@dataclass
+class _StreamEvent:
+    delta: Any
+    type: str = "content_block_delta"
+
+
+class _FakeStream:
+    """Context manager mimicking the SDK stream object."""
+
+    def __init__(self, deltas: list[str], final: _Resp):
+        self._deltas = deltas
+        self._final = final
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def __iter__(self):
+        for d in self._deltas:
+            yield _StreamEvent(delta=_Delta(text=d))
+
+    def get_final_message(self):
+        return self._final
+
+
+class _StreamingStubLLM(_ScriptedLLM):
+    def __init__(self, scripted_streams: list[tuple[list[str], _Resp]]):
+        super().__init__([s[1] for s in scripted_streams])
+        self._streams = list(scripted_streams)
+
+    def messages_stream(self, **kwargs):
+        import copy
+        self.calls.append({k: copy.deepcopy(v) for k, v in kwargs.items()})
+        if not self._streams:
+            raise AssertionError("scripted streaming LLM ran out of responses")
+        deltas, final = self._streams.pop(0)
+        return _FakeStream(deltas, final)
+
+
+def test_executor_streams_text_deltas_and_tool_events(tmp_path: Path):
+    reg, skill = _registry_with_one_skill()
+    (tmp_path / "data.txt").write_text("ok")
+
+    llm = _StreamingStubLLM([
+        (
+            ["Look", "ing ", "around."],
+            _Resp(
+                stop_reason="tool_use",
+                content=[
+                    _TextBlock("Looking around."),
+                    _ToolUseBlock(id="t1", name="list_dir", input={"path": "."}),
+                ],
+            ),
+        ),
+        (
+            ["Done."],
+            _Resp(stop_reason="end_turn", content=[_TextBlock("Done.")]),
+        ),
+    ])
+
+    executor = Executor(reg, llm, workdir=tmp_path)
+    events = list(executor.stream(skill, "what's here?"))
+
+    deltas = [e.payload for e in events if e.kind == "text_delta"]
+    assert "".join(deltas) == "Looking around.Done."
+    kinds = [e.kind for e in events]
+    assert "tool_use" in kinds
+    assert "tool_result" in kinds
+    assert kinds[-1] == "stop"
+
+
+def test_executor_handles_unknown_tool_gracefully(tmp_path: Path):
+    reg, skill = _registry_with_one_skill()
+    llm = _ScriptedLLM([
+        _Resp(
+            stop_reason="tool_use",
+            content=[_ToolUseBlock(id="t1", name="nonexistent_tool", input={})],
+        ),
+        _Resp(stop_reason="end_turn", content=[_TextBlock("ok, giving up on that tool")]),
+    ])
+
+    executor = Executor(reg, llm, workdir=tmp_path)
+    result = executor.run(skill, "use a missing tool")
+
+    assert "giving up" in result.text
+    tool_results = [e for e in result.events if e.kind == "tool_result"]
+    assert tool_results and tool_results[0].payload["is_error"] is True
+    assert "Unknown tool" in tool_results[0].payload["content"]

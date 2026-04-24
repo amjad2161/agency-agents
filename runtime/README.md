@@ -65,7 +65,12 @@ agency serve --port 8765
 # open http://127.0.0.1:8765
 ```
 
-API endpoints: `GET /api/skills`, `POST /api/plan`, `POST /api/run`.
+API endpoints:
+- `GET /api/skills` — list loaded skills
+- `POST /api/plan` — `{"message": "..."}` → which skill the planner picks
+- `POST /api/run` — `{"message": "...", "skill"?: "...", "session_id"?: "..."}` → final text
+- `POST /api/run/stream` — same body, streamed as Server-Sent Events
+  (`plan`, `text_delta`, `tool_use`, `tool_result`, `stop`, `done`, `error`)
 
 ## Architecture
 
@@ -97,8 +102,9 @@ runtime/agency/
 cd runtime && python3 -m pytest
 ```
 
-17 tests cover the skill loader, planner parser, planner/LLM wiring (with a
-stub), and the file-IO + shell-allowlist tool sandbox.
+21 tests cover the skill loader, planner parser, planner/LLM wiring (with a
+stub), the file-IO + shell-allowlist tool sandbox, and the executor's
+non-streaming and streaming tool-use loops with memory persistence.
 
 ## Extending
 

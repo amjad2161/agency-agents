@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import json
+
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .executor import Executor
@@ -64,6 +66,37 @@ def build_app(repo: Path | None = None) -> FastAPI:
             "candidates": [{"slug": c.slug, "name": c.name} for c in plan.candidates],
         }
 
+    @app.post("/api/run/stream")
+    def run_stream_endpoint(body: RunRequest) -> StreamingResponse:
+        try:
+            llm = _require_llm()
+        except LLMError as e:
+            raise HTTPException(503, str(e))
+        planner = Planner(registry, llm=llm)
+        plan = planner.plan(body.message, hint_slug=body.skill)
+
+        session: Session | None = None
+        if body.session_id:
+            session = memory.load(body.session_id) or Session(
+                session_id=body.session_id, skill_slug=plan.skill.slug
+            )
+
+        executor = Executor(registry, llm, memory=memory)
+
+        def gen():
+            yield _sse("plan", {
+                "skill": {"slug": plan.skill.slug, "name": plan.skill.name, "emoji": plan.skill.emoji},
+                "rationale": plan.rationale,
+            })
+            try:
+                for event in executor.stream(plan.skill, body.message, session=session):
+                    yield _sse(event.kind, event.payload)
+            except Exception as e:  # noqa: BLE001 - surface to the client
+                yield _sse("error", {"message": str(e)})
+            yield _sse("done", {})
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
     @app.post("/api/run")
     def run_endpoint(body: RunRequest) -> dict[str, Any]:
         try:
@@ -90,6 +123,10 @@ def build_app(repo: Path | None = None) -> FastAPI:
         }
 
     return app
+
+
+def _sse(event_kind: str, payload: Any) -> str:
+    return f"event: {event_kind}\ndata: {json.dumps(payload, default=str)}\n\n"
 
 
 def _maybe_llm() -> AnthropicLLM | None:
@@ -157,38 +194,79 @@ _CHAT_HTML = """<!doctype html>
     }
     document.getElementById("status").textContent = `${data.count} skills loaded`;
   }
+  function appendLog(s) { document.getElementById("log").textContent += s; }
+  function setStatus(s) { document.getElementById("status").textContent = s; }
+
+  function parseSSE(buf) {
+    // Returns [events, leftover]. Each event = {event, data}.
+    const events = [];
+    let idx;
+    while ((idx = buf.indexOf("\\n\\n")) !== -1) {
+      const block = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      let event = "message", data = "";
+      for (const line of block.split("\\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) data += line.slice(5).trim();
+      }
+      try { events.push({event, data: JSON.parse(data)}); }
+      catch { events.push({event, data}); }
+    }
+    return [events, buf];
+  }
+
   async function send() {
     const btn = document.getElementById("send");
-    const log = document.getElementById("log");
     const msg = document.getElementById("msg").value.trim();
     if (!msg) return;
     btn.disabled = true;
-    document.getElementById("status").textContent = "thinking…";
-    log.textContent = "";
+    setStatus("thinking…");
+    document.getElementById("log").textContent = "";
     try {
-      const r = await fetch("/api/run", {
+      const r = await fetch("/api/run/stream", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "accept": "text/event-stream" },
         body: JSON.stringify({
           message: msg,
           skill: document.getElementById("skill").value || null,
           session_id: document.getElementById("session").value || null,
         }),
       });
-      if (!r.ok) {
-        const text = await r.text();
-        log.textContent = `Error ${r.status}: ${text}`;
-        return;
+      if (!r.ok) { appendLog(`Error ${r.status}: ${await r.text()}`); return; }
+
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let events;
+        [events, buf] = parseSSE(buf);
+        for (const ev of events) {
+          if (ev.event === "plan") {
+            appendLog(`→ ${ev.data.skill.emoji} ${ev.data.skill.name} (${ev.data.skill.slug})\\n   ${ev.data.rationale}\\n\\n`);
+          } else if (ev.event === "text_delta") {
+            appendLog(ev.data);
+          } else if (ev.event === "tool_use") {
+            appendLog(`\\n[tool] ${ev.data.name}(${JSON.stringify(ev.data.input)})\\n`);
+          } else if (ev.event === "tool_result") {
+            const tag = ev.data.is_error ? "tool_error" : "tool_result";
+            const preview = String(ev.data.content).slice(0, 300);
+            appendLog(`[${tag}] ${preview}\\n`);
+          } else if (ev.event === "stop") {
+            appendLog(`\\n\\n[stop: ${ev.data}]`);
+          } else if (ev.event === "error") {
+            appendLog(`\\n[error] ${ev.data.message}`);
+          } else if (ev.event === "done") {
+            setStatus("done");
+          }
+        }
       }
-      const data = await r.json();
-      log.textContent =
-        `→ ${data.skill.emoji} ${data.skill.name} (${data.skill.slug})\\n` +
-        `   ${data.rationale}\\n\\n${data.text}\\n\\n[${data.turns} turn(s)]`;
     } catch (e) {
-      log.textContent = `Network error: ${e}`;
+      appendLog(`\\nNetwork error: ${e}`);
     } finally {
       btn.disabled = false;
-      document.getElementById("status").textContent = "";
     }
   }
   document.getElementById("send").addEventListener("click", send);

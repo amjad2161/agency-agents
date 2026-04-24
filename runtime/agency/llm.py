@@ -66,19 +66,48 @@ class AnthropicLLM:
     ) -> Any:
         """Direct call to messages.create with sensible defaults."""
         client = self._ensure_client()
+        kwargs = self._build_kwargs(
+            system=system, messages=messages, tools=tools,
+            model=model, max_tokens=max_tokens, thinking=thinking,
+        )
+        return client.messages.create(**kwargs)
+
+    def messages_stream(
+        self,
+        *,
+        system: str | list[dict[str, Any]],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        max_tokens: int | None = None,
+        thinking: dict[str, Any] | None = None,
+    ) -> Any:
+        """Open a streaming response. Returns the SDK's stream context manager.
+
+        Use as: `with llm.messages_stream(...) as stream: ...`
+        Stream exposes `.text_stream`, iterable events, and `.get_final_message()`.
+        """
+        client = self._ensure_client()
+        kwargs = self._build_kwargs(
+            system=system, messages=messages, tools=tools,
+            model=model, max_tokens=max_tokens, thinking=thinking,
+        )
+        return client.messages.stream(**kwargs)
+
+    def _build_kwargs(self, **opts: Any) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
-            "model": model or self.config.model,
-            "max_tokens": max_tokens or self.config.max_tokens,
-            "system": system,
-            "messages": messages,
+            "model": opts["model"] or self.config.model,
+            "max_tokens": opts["max_tokens"] or self.config.max_tokens,
+            "system": opts["system"],
+            "messages": opts["messages"],
         }
-        if tools:
-            kwargs["tools"] = tools
-        if thinking:
-            kwargs["thinking"] = thinking
+        if opts["tools"]:
+            kwargs["tools"] = opts["tools"]
+        if opts["thinking"]:
+            kwargs["thinking"] = opts["thinking"]
         if self.config.extra_headers:
             kwargs["extra_headers"] = self.config.extra_headers
-        return client.messages.create(**kwargs)
+        return kwargs
 
     @staticmethod
     def cached_system(text: str) -> list[dict[str, Any]]:

@@ -112,11 +112,71 @@ class Executor:
         return ExecutionResult(text=final_text, turns=turns, events=events)
 
     def stream(self, skill: Skill, user_message: str, session: Session | None = None) -> Iterator[ExecutionEvent]:
-        # Intentionally simple: re-runs the loop and yields each event in order.
-        # The web UI prefers streaming, but the server endpoint can also call run()
-        # and return the final text in one shot.
-        result = self.run(skill, user_message, session=session)
-        yield from result.events
+        """Yield events as they happen.
+
+        Emits `text_delta` events for each token chunk from the model and
+        `tool_use` / `tool_result` / `stop` events at turn boundaries. If the
+        underlying LLM doesn't support streaming, falls back to `run()` and
+        yields the buffered events.
+        """
+        if not hasattr(self.llm, "messages_stream"):
+            result = self.run(skill, user_message, session=session)
+            yield from result.events
+            return
+
+        text_parts: list[str] = []
+        messages = self._initial_messages(session, user_message)
+        system = AnthropicLLM.cached_system(skill.system_prompt)
+        tool_defs = [t.to_anthropic() for t in self.tools]
+
+        for _ in range(MAX_TURNS):
+            with self.llm.messages_stream(
+                system=system, messages=messages, tools=tool_defs,
+            ) as stream:
+                for event in stream:
+                    etype = getattr(event, "type", None)
+                    if etype == "content_block_delta":
+                        delta = getattr(event, "delta", None)
+                        if getattr(delta, "type", None) == "text_delta":
+                            yield ExecutionEvent("text_delta", delta.text)
+                final = stream.get_final_message()
+
+            assistant_blocks = [self._block_to_dict(b) for b in final.content]
+            messages.append({"role": "assistant", "content": assistant_blocks})
+
+            tool_uses = [b for b in final.content if getattr(b, "type", None) == "tool_use"]
+            for block in final.content:
+                if getattr(block, "type", None) == "text":
+                    text_parts.append(block.text)
+                elif getattr(block, "type", None) == "tool_use":
+                    yield ExecutionEvent("tool_use", {"name": block.name, "input": block.input})
+
+            if final.stop_reason != "tool_use" or not tool_uses:
+                yield ExecutionEvent("stop", final.stop_reason)
+                break
+
+            tool_results = []
+            for use in tool_uses:
+                result = self._run_tool(use.name, use.input)
+                yield ExecutionEvent("tool_result", {
+                    "name": use.name,
+                    "is_error": result.is_error,
+                    "content": result.content,
+                })
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": use.id,
+                    "content": result.content,
+                    "is_error": result.is_error,
+                })
+            messages.append({"role": "user", "content": tool_results})
+        else:
+            yield ExecutionEvent("stop", "max_turns_exceeded")
+
+        if self.memory is not None and session is not None:
+            session.append("user", user_message)
+            session.append("assistant", "\n".join(text_parts).strip())
+            self.memory.save(session)
 
     # ----- helpers -----
 
