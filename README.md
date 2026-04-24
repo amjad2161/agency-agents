@@ -110,6 +110,8 @@ Building the future, one commit at a time.
 | 🎙️ [Voice AI Integration Engineer](engineering/engineering-voice-ai-integration-engineer.md) | Speech-to-text pipelines, Whisper, ASR, speaker diarization | End-to-end transcription pipelines, audio preprocessing, structured transcript delivery |
 | 🛡️ [Prompt Injection Defender](engineering/engineering-prompt-injection-defender.md) | LLM app security, injection defense, MCP hardening, output validation | Securing agent stacks, RAG pipelines, and tool-using LLM apps against prompt injection and excessive agency |
 | 🗡️ [LLM Red-Teamer](engineering/engineering-llm-red-teamer.md) | Authorized adversarial testing of LLMs, agents, and MCP servers | Systematic red-team engagements that produce reproducible findings and durable remediation |
+| 📚 [RAG Engineer](engineering/engineering-rag-engineer.md) | End-to-end RAG pipelines — chunking, hybrid search, rerankers, evals, freshness | Grounding LLM answers in your corpus with citations, ACLs, and measured retrieval quality |
+| 🔭 [Observability Engineer](engineering/engineering-observability-engineer.md) | OpenTelemetry, metrics, logs, traces, profiles, dashboards & alerts | Making production debuggable with the three+one pillars and cost-aware telemetry |
 
 ### 🎨 Design Division
 
@@ -203,6 +205,7 @@ Building the right thing at the right time.
 | 💬 [Feedback Synthesizer](product/product-feedback-synthesizer.md) | User feedback analysis, insights extraction | Feedback analysis, user insights, product priorities |
 | 🧠 [Behavioral Nudge Engine](product/product-behavioral-nudge-engine.md) | Behavioral psychology, nudge design, engagement | Maximizing user motivation through behavioral science |
 | 🧭 [Product Manager](product/product-manager.md) | Full lifecycle product ownership | Discovery, PRDs, roadmap planning, GTM, outcome measurement |
+| 🤖 [AI Product Manager](product/product-ai-product-manager.md) | Product management for AI/LLM features, eval-driven launches, cost/safety tradeoffs | Shipping AI features with measurable quality, safety, cost, and latency bars |
 
 ### 🎬 Project Management Division
 
