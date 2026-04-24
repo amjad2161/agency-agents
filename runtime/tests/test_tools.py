@@ -121,3 +121,78 @@ def test_plan_scopes_per_session(tmp_path: Path):
 
     assert "A's plan" in _plan_tool({"action": "view"}, ctx_a).content
     assert "B's plan" in _plan_tool({"action": "view"}, ctx_b).content
+
+
+# ----- edit_file ---------------------------------------------------------
+
+
+from agency.tools import _edit_file, _extract_doc
+
+
+def test_edit_file_replaces_unique_occurrence(tmp_path: Path):
+    ctx = _ctx(tmp_path)
+    (tmp_path / "code.py").write_text("x = 1\ny = 2\nz = 3\n")
+
+    res = _edit_file({"path": "code.py", "old_string": "y = 2", "new_string": "y = 42"}, ctx)
+    assert not res.is_error
+    assert (tmp_path / "code.py").read_text() == "x = 1\ny = 42\nz = 3\n"
+
+
+def test_edit_file_rejects_missing_match(tmp_path: Path):
+    ctx = _ctx(tmp_path)
+    (tmp_path / "a.txt").write_text("hello\n")
+    res = _edit_file({"path": "a.txt", "old_string": "nope", "new_string": "hi"}, ctx)
+    assert res.is_error
+    assert "not found" in res.content.lower()
+
+
+def test_edit_file_rejects_ambiguous_match(tmp_path: Path):
+    ctx = _ctx(tmp_path)
+    (tmp_path / "a.txt").write_text("TODO\nTODO\n")
+    res = _edit_file({"path": "a.txt", "old_string": "TODO", "new_string": "done"}, ctx)
+    assert res.is_error
+    assert "unique" in res.content.lower() or "2 places" in res.content
+
+
+def test_edit_file_requires_existing_file(tmp_path: Path):
+    ctx = _ctx(tmp_path)
+    res = _edit_file({"path": "nope.txt", "old_string": "x", "new_string": "y"}, ctx)
+    assert res.is_error
+
+
+# ----- extract_doc -------------------------------------------------------
+
+
+def test_extract_doc_handles_plain_text(tmp_path: Path):
+    ctx = _ctx(tmp_path)
+    (tmp_path / "notes.md").write_text("# Hello\n\nworld")
+    res = _extract_doc({"path": "notes.md"}, ctx)
+    assert not res.is_error
+    assert "Hello" in res.content and "world" in res.content
+
+
+def test_extract_doc_rejects_missing(tmp_path: Path):
+    ctx = _ctx(tmp_path)
+    res = _extract_doc({"path": "does-not-exist.pdf"}, ctx)
+    assert res.is_error
+
+
+def test_extract_doc_gives_helpful_hint_when_dep_missing(tmp_path: Path, monkeypatch):
+    """If a `.pdf` is requested but pypdf is absent, we should say so — not crash."""
+    import builtins
+
+    # Sabotage the import so _extract_pdf raises _MissingDep.
+    real_import = builtins.__import__
+
+    def _fake_import(name, *args, **kwargs):
+        if name == "pypdf":
+            raise ImportError("no pypdf in this env")
+        return real_import(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, "__import__", _fake_import)
+
+    (tmp_path / "doc.pdf").write_bytes(b"%PDF-fake")  # content doesn't matter — we fail on import
+    ctx = _ctx(tmp_path)
+    res = _extract_doc({"path": "doc.pdf"}, ctx)
+    assert res.is_error
+    assert "pypdf" in res.content
+    assert "pip install" in res.content

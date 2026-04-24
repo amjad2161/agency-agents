@@ -131,6 +131,114 @@ def _write_file(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
     return ToolResult(f"Wrote {len(content)} chars to {path.relative_to(ctx.workdir)}")
 
 
+def _edit_file(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
+    """Replace an exact string with another in an existing file.
+
+    Modeled on Anthropic's `str_replace_based_edit_tool`. `old_string` must
+    appear exactly once; ambiguous or missing matches are errors.
+    """
+    path = _safe_path(ctx, args["path"])
+    old = args["old_string"]
+    new = args.get("new_string", "")
+    if not path.exists():
+        return ToolResult(f"File not found: {args['path']}", is_error=True)
+    if path.is_dir():
+        return ToolResult(f"Path is a directory: {args['path']}", is_error=True)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as e:
+        return ToolResult(f"Read error: {e}", is_error=True)
+    count = text.count(old)
+    if count == 0:
+        return ToolResult("old_string not found in file.", is_error=True)
+    if count > 1:
+        return ToolResult(
+            f"old_string matches {count} places; must be unique. Add more context around it.",
+            is_error=True,
+        )
+    try:
+        path.write_text(text.replace(old, new, 1), encoding="utf-8")
+    except OSError as e:
+        return ToolResult(f"Write error: {e}", is_error=True)
+    rel = path.relative_to(ctx.workdir)
+    return ToolResult(f"Replaced 1 occurrence in {rel}.")
+
+
+def _extract_doc(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
+    """Extract plain text from a document.
+
+    Supports .pdf (pypdf), .docx (python-docx), .xlsx (openpyxl), and falls
+    back to UTF-8 read for text-ish formats. Optional deps; missing ones
+    surface a clear install hint instead of a stack trace.
+    """
+    path = _safe_path(ctx, args["path"])
+    if not path.exists():
+        return ToolResult(f"File not found: {args['path']}", is_error=True)
+    if path.is_dir():
+        return ToolResult(f"Path is a directory: {args['path']}", is_error=True)
+
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".pdf":
+            return ToolResult(_truncate(_extract_pdf(path)))
+        if suffix == ".docx":
+            return ToolResult(_truncate(_extract_docx(path)))
+        if suffix == ".xlsx":
+            return ToolResult(_truncate(_extract_xlsx(path)))
+        # Text-ish fallback.
+        return ToolResult(_truncate(path.read_text(encoding="utf-8", errors="replace")))
+    except _MissingDep as e:
+        return ToolResult(str(e), is_error=True)
+    except Exception as e:  # noqa: BLE001 - surface to model
+        return ToolResult(f"Extract error: {type(e).__name__}: {e}", is_error=True)
+
+
+class _MissingDep(RuntimeError):
+    pass
+
+
+def _extract_pdf(path: Path) -> str:
+    try:
+        from pypdf import PdfReader  # type: ignore[import-not-found]
+    except ImportError as e:
+        raise _MissingDep(
+            "PDF extraction requires `pypdf`. Install with: pip install -e 'runtime[docs]'"
+        ) from e
+    reader = PdfReader(str(path))
+    pages = []
+    for i, page in enumerate(reader.pages, 1):
+        pages.append(f"--- page {i} ---\n{page.extract_text() or ''}")
+    return "\n".join(pages) or "(no extractable text)"
+
+
+def _extract_docx(path: Path) -> str:
+    try:
+        import docx  # type: ignore[import-not-found]
+    except ImportError as e:
+        raise _MissingDep(
+            "DOCX extraction requires `python-docx`. Install with: pip install -e 'runtime[docs]'"
+        ) from e
+    doc = docx.Document(str(path))
+    return "\n".join(p.text for p in doc.paragraphs)
+
+
+def _extract_xlsx(path: Path) -> str:
+    try:
+        import openpyxl  # type: ignore[import-not-found]
+    except ImportError as e:
+        raise _MissingDep(
+            "XLSX extraction requires `openpyxl`. Install with: pip install -e 'runtime[docs]'"
+        ) from e
+    wb = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
+    parts = []
+    for sheet in wb.sheetnames:
+        ws = wb[sheet]
+        parts.append(f"=== sheet: {sheet} ===")
+        for row in ws.iter_rows(values_only=True):
+            parts.append("\t".join("" if c is None else str(c) for c in row))
+    return "\n".join(parts)
+
+
 def _run_shell(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
     if not ctx.allow_shell:
         return ToolResult(
@@ -296,6 +404,38 @@ def builtin_tools() -> list[Tool]:
                 "required": ["path", "content"],
             },
             func=_write_file,
+        ),
+        Tool(
+            name="edit_file",
+            description=(
+                "Replace exactly one occurrence of old_string with new_string in "
+                "an existing file. Include enough surrounding context in "
+                "old_string to make it unique — an ambiguous match is an error."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "old_string": {"type": "string"},
+                    "new_string": {"type": "string"},
+                },
+                "required": ["path", "old_string"],
+            },
+            func=_edit_file,
+        ),
+        Tool(
+            name="extract_doc",
+            description=(
+                "Extract plain text from a document. Supports .pdf, .docx, "
+                ".xlsx, and any UTF-8 text file. Requires the optional `docs` "
+                "extra (pip install -e 'runtime[docs]') for binary formats."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+            },
+            func=_extract_doc,
         ),
         Tool(
             name="run_shell",
