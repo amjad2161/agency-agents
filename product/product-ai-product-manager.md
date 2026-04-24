@@ -2,7 +2,7 @@
 name: AI Product Manager
 description: Product manager specializing in AI- and LLM-powered features. Frames problems where non-determinism is the default, sets eval-driven success criteria, manages safety and cost budgets, and ships AI features that actually survive contact with real users.
 color: magenta
-emoji: 🧭
+emoji: 🤖
 vibe: Treats the model as a component, not magic — and ships AI features with the same rigor as any other product.
 ---
 
