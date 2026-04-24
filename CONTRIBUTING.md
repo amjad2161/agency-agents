@@ -34,7 +34,10 @@ Have an idea for a specialized agent? Great! Here's how to add one:
 2. **Choose the appropriate category** (or propose a new one):
    - `engineering/` - Software development specialists
    - `design/` - UX/UI and creative specialists
+   - `finance/` - Financial planning, accounting, and investment specialists
+   - `game-development/` - Game design and development specialists
    - `marketing/` - Growth and marketing specialists
+   - `paid-media/` - Paid acquisition and media specialists
    - `product/` - Product management specialists
    - `project-management/` - PM and coordination specialists
    - `testing/` - QA and testing specialists
@@ -238,6 +241,29 @@ quickstart guide wearing an agent costume does not.
 ---
 
 ## 🔄 Pull Request Process
+
+### What Belongs in a PR (and What Doesn't)
+
+The fastest path to a merged PR is **one markdown file** — a new or improved agent. That's the sweet spot.
+
+For anything beyond that, here's how we keep things smooth:
+
+#### Always welcome as a PR
+- Adding a new agent (one `.md` file)
+- Improving an existing agent's content, examples, or personality
+- Fixing typos or clarifying docs
+
+#### Start a Discussion first
+- New tooling, build systems, or CI workflows
+- Architectural changes (new directories, new scripts, site generators)
+- Changes that touch many files across the repo
+- New integration formats or platforms
+
+We love ambitious ideas — a [Discussion](https://github.com/msitarzewski/agency-agents/discussions) just gives the community a chance to align on approach before code gets written. It saves everyone time, especially yours.
+
+#### Things we'll always close
+- **Committed build output**: Generated files (`_site/`, compiled assets, converted agent files) should never be checked in. Users run `convert.sh` locally; all output is gitignored.
+- **PRs that bulk-modify existing agents** without a prior discussion — even well-intentioned reformatting can create merge conflicts for other contributors.
 
 ### Before Submitting
 
