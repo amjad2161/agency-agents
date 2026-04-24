@@ -89,6 +89,8 @@ Building the future, one commit at a time.
 | 💎 [Senior Developer](engineering/engineering-senior-developer.md) | Laravel/Livewire, advanced patterns | Complex implementations, architecture decisions |
 | 🔧 [Filament Optimization Specialist](engineering/engineering-filament-optimization-specialist.md) | Filament PHP admin UX, structural form redesign, resource optimization | Restructuring Filament resources/forms/tables for faster, cleaner admin workflows |
 | 🔒 [Security Engineer](engineering/engineering-security-engineer.md) | Threat modeling, secure code review, security architecture | Application security, vulnerability assessment, security CI/CD |
+| 🛡️ [Privacy Engineer](engineering/engineering-privacy-engineer.md) | Data mapping, DPIAs, DSRs, consent, retention, cross-border transfers | Operationalizing GDPR / CPRA / HIPAA / EU AI Act as code and controls |
+| 🛤️ [Platform Engineer](engineering/engineering-platform-engineer.md) | Internal dev platforms, golden paths, service catalog, self-service infra | Building paved-road developer experience on Kubernetes + Backstage + IaC |
 | ⚡ [Autonomous Optimization Architect](engineering/engineering-autonomous-optimization-architect.md) | LLM routing, cost optimization, shadow testing | Autonomous systems needing intelligent API selection and cost guardrails |
 | 🔩 [Embedded Firmware Engineer](engineering/engineering-embedded-firmware-engineer.md) | Bare-metal, RTOS, ESP32/STM32/Nordic firmware | Production-grade embedded systems and IoT devices |
 | 🚨 [Incident Response Commander](engineering/engineering-incident-response-commander.md) | Incident management, post-mortems, on-call | Managing production incidents and building incident readiness |
@@ -127,6 +129,7 @@ Making it beautiful, usable, and delightful.
 | ✨ [Whimsy Injector](design/design-whimsy-injector.md) | Personality, delight, playful interactions | Adding joy, micro-interactions, Easter eggs, brand personality |
 | 📷 [Image Prompt Engineer](design/design-image-prompt-engineer.md) | AI image generation prompts, photography | Photography prompts for Midjourney, DALL-E, Stable Diffusion |
 | 🌈 [Inclusive Visuals Specialist](design/design-inclusive-visuals-specialist.md) | Representation, bias mitigation, authentic imagery | Generating culturally accurate AI images and video |
+| ♿ [Accessibility Specialist](design/design-accessibility-specialist.md) | WCAG 2.2 / ARIA / assistive-tech testing, a11y CI gates, VPATs | Keyboard & screen-reader support, EAA / Section 508 / ADA conformance |
 
 ### 💰 Paid Media Division
 
