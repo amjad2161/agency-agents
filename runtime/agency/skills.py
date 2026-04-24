@@ -28,7 +28,7 @@ DEFAULT_CATEGORIES: tuple[str, ...] = (
     "testing",
 )
 
-_FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
+_FRONTMATTER = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n(.*)$", re.DOTALL)
 
 
 @dataclass(frozen=True)

@@ -294,6 +294,44 @@ def test_computer_use_rejects_unknown_action(tmp_path: Path, monkeypatch):
     assert "unsupported action" in res.content.lower()
 
 
+# ----- SSRF + web_fetch + _truncate -----------------------------------------
+
+
+def test_is_private_host_blocks_all_private_ranges():
+    from agency.tools import _is_private_host
+    for host in ["localhost", "127.0.0.1", "10.0.0.1", "192.168.1.1",
+                 "172.16.0.1", "169.254.169.254", "::1",
+                 "metadata", "metadata.google.internal"]:
+        assert _is_private_host(host), f"{host} should be rejected"
+
+
+def test_web_fetch_refuses_loopback(tmp_path: Path):
+    ctx = _ctx(tmp_path)
+    ctx.allow_network = True
+    from agency.tools import _web_fetch
+    res = _web_fetch({"url": "http://127.0.0.1:8080/secret"}, ctx)
+    assert res.is_error
+    assert "private" in res.content.lower() or "metadata" in res.content.lower() \
+        or "loopback" in res.content.lower()
+
+
+def test_web_fetch_refuses_aws_metadata(tmp_path: Path):
+    ctx = _ctx(tmp_path)
+    ctx.allow_network = True
+    from agency.tools import _web_fetch
+    res = _web_fetch({"url": "http://169.254.169.254/latest/meta-data/"}, ctx)
+    assert res.is_error
+
+
+def test_truncate_respects_byte_cap_with_multibyte_text():
+    """Even when the input is all multi-byte UTF-8, the encoded result must fit."""
+    from agency.tools import _truncate, MAX_OUTPUT_BYTES
+    big = "é" * (MAX_OUTPUT_BYTES)  # each 'é' is 2 bytes in UTF-8 → total 2×MAX
+    out = _truncate(big)
+    assert len(out.encode("utf-8")) <= MAX_OUTPUT_BYTES
+    assert "truncated" in out
+
+
 def test_extract_doc_gives_helpful_hint_when_dep_missing(tmp_path: Path, monkeypatch):
     """If a `.pdf` is requested but pypdf is absent, we should say so — not crash."""
     import builtins

@@ -5,8 +5,9 @@ Each tool has:
  - a Python implementation that returns a string result
 
 Shell access is gated by AGENCY_ALLOW_SHELL (default off). When enabled, only
-commands whose first token is in SHELL_ALLOWLIST run. Network fetch is read-only
-HTTPS GET.
+commands whose first token is in SHELL_ALLOWLIST run. Network fetch is a
+read-only GET over http/https with private-range hosts blocked (see
+`_is_private_host`).
 """
 
 from __future__ import annotations
@@ -65,12 +66,16 @@ class ToolContext:
 
     @classmethod
     def from_env(cls, workdir: Path | None = None) -> "ToolContext":
+        try:
+            timeout_s = int(os.environ.get("AGENCY_TOOL_TIMEOUT", "30"))
+        except ValueError:
+            timeout_s = 30
         return cls(
             workdir=(workdir or Path.cwd()).resolve(),
             allow_shell=_truthy(os.environ.get("AGENCY_ALLOW_SHELL")),
             allow_network=not _truthy(os.environ.get("AGENCY_NO_NETWORK")),
             allow_computer_use=_truthy(os.environ.get("AGENCY_ENABLE_COMPUTER_USE")),
-            timeout_s=int(os.environ.get("AGENCY_TOOL_TIMEOUT", "30")),
+            timeout_s=timeout_s,
         )
 
 
@@ -89,10 +94,68 @@ def _safe_path(ctx: ToolContext, raw: str) -> Path:
 
 
 def _truncate(text: str) -> str:
-    if len(text.encode("utf-8", errors="ignore")) <= MAX_OUTPUT_BYTES:
+    """Return `text` trimmed to at most MAX_OUTPUT_BYTES encoded bytes.
+
+    Does a binary search on a character prefix so the final encoded size —
+    including the truncation marker — fits the cap even for multi-byte UTF-8.
+    """
+    encoded_len = len(text.encode("utf-8", errors="ignore"))
+    if encoded_len <= MAX_OUTPUT_BYTES:
         return text
-    cut = text[:MAX_OUTPUT_BYTES]
-    return cut + f"\n\n[... truncated, {len(text) - len(cut)} chars omitted]"
+
+    low, high = 0, len(text)
+    best = ""
+    best_suffix = ""
+    while low <= high:
+        mid = (low + high) // 2
+        cut = text[:mid]
+        suffix = f"\n\n[... truncated, {len(text) - mid} chars omitted]"
+        total = len(cut.encode("utf-8")) + len(suffix.encode("utf-8"))
+        if total <= MAX_OUTPUT_BYTES:
+            best, best_suffix = cut, suffix
+            low = mid + 1
+        else:
+            high = mid - 1
+    return best + best_suffix
+
+
+def _is_private_host(host: str) -> bool:
+    """Reject hosts that resolve to loopback, link-local, private, or metadata ranges.
+
+    Uses `socket.getaddrinfo` to cover every resolved IP; any private or
+    otherwise-unsafe target disqualifies the host.
+    """
+    import ipaddress
+    import socket
+
+    # Quick literal checks on the host string.
+    lowered = host.lower().strip()
+    if lowered in ("localhost", "metadata", "metadata.google.internal",
+                   "instance-data", "metadata.internal"):
+        return True
+
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except (socket.gaierror, UnicodeError):
+        # DNS failure: treat as private — safer to reject than leak.
+        return True
+
+    for info in infos:
+        sockaddr = info[4]
+        ip_str = sockaddr[0].split("%")[0]  # strip zone id if present
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return True
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_multicast or ip.is_reserved
+                or ip.is_unspecified):
+            return True
+        # AWS / GCP metadata endpoints use 169.254.169.254 (caught by link_local
+        # above) and fd00:ec2::254 (caught by is_private). Extra safety belt:
+        if ip_str == "169.254.169.254":
+            return True
+    return False
 
 
 # ----- Tool implementations -----------------------------------------------
@@ -284,18 +347,57 @@ def _run_shell(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
 
 
 def _web_fetch(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
+    """Fetch an http(s) URL with SSRF protection, manual redirect control, and byte cap.
+
+    - Rejects URLs that resolve to private / loopback / link-local / metadata IPs.
+    - Re-checks the target of every redirect hop (max 5).
+    - Streams the response, stops when the body hits MAX_OUTPUT_BYTES.
+    """
     if not ctx.allow_network:
         return ToolResult("Network access disabled (AGENCY_NO_NETWORK).", is_error=True)
     url = args["url"]
     if not (url.startswith("https://") or url.startswith("http://")):
         return ToolResult("Only http/https URLs are allowed.", is_error=True)
+
     try:
-        resp = httpx.get(url, follow_redirects=True, timeout=ctx.timeout_s,
-                         headers={"User-Agent": "agency-runtime/0.1"})
+        with httpx.Client(
+            follow_redirects=False, timeout=ctx.timeout_s,
+            headers={"User-Agent": "agency-runtime/0.1"},
+        ) as client:
+            for hop in range(6):
+                parsed = httpx.URL(url)
+                host = parsed.host
+                if not host:
+                    return ToolResult("URL has no host.", is_error=True)
+                if _is_private_host(host):
+                    return ToolResult(
+                        f"Refusing to fetch {host}: private / loopback / metadata address.",
+                        is_error=True,
+                    )
+                req = client.build_request("GET", url)
+                with client.send(req, stream=True) as resp:
+                    if 300 <= resp.status_code < 400 and "location" in resp.headers:
+                        url = str(resp.next_request.url if resp.next_request else resp.headers["location"])
+                        resp.close()
+                        continue
+                    prefix = f"HTTP {resp.status_code}\n\n"
+                    prefix_bytes = prefix.encode("utf-8")
+                    remaining = max(MAX_OUTPUT_BYTES - len(prefix_bytes), 0)
+                    buf = bytearray()
+                    if remaining > 0:
+                        for chunk in resp.iter_bytes():
+                            if not chunk:
+                                continue
+                            if len(chunk) >= remaining:
+                                buf.extend(chunk[:remaining])
+                                break
+                            buf.extend(chunk)
+                            remaining -= len(chunk)
+                    body = buf.decode("utf-8", errors="replace")
+                    return ToolResult(prefix + body)
+            return ToolResult("Too many redirects (>5).", is_error=True)
     except httpx.HTTPError as e:
         return ToolResult(f"Fetch error: {e}", is_error=True)
-    text = resp.text
-    return ToolResult(_truncate(f"HTTP {resp.status_code}\n\n{text}"))
 
 
 def _list_skills(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
@@ -370,7 +472,10 @@ def _computer_use(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
             buf = io.BytesIO()
             img.save(buf, format="PNG")
             b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-            return ToolResult(f"screenshot:base64,png,{len(b64)}bytes")  # summary; UI can re-fetch
+            # Include the full payload so downstream consumers (or the model
+            # via a vision-capable wrapper) can actually decode the pixels.
+            # Format is a `data:` URL so clients can recognize the encoding.
+            return ToolResult(f"data:image/png;base64,{b64}")
         if action == "cursor_position":
             x, y = pyautogui.position()
             return ToolResult(f"{x},{y}")

@@ -33,7 +33,7 @@ class MemoryStore:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, session_id: str) -> Path:
-        safe = "".join(c for c in session_id if c.isalnum() or c in "-_")
+        safe = "".join(c for c in session_id if c.isalnum() or c in "-_") or "default"
         return self.root / f"{safe}.jsonl"
 
     def load(self, session_id: str) -> Session | None:

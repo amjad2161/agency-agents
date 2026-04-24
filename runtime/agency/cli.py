@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-import uuid
 from pathlib import Path
 
 import click
@@ -90,14 +89,15 @@ def run_cmd(ctx: click.Context, request: str, skill_slug: str | None,
     plan = planner.plan(request, hint_slug=skill_slug)
     click.echo(f"→ {plan.skill.emoji} {plan.skill.name} ({plan.skill.slug}) — {plan.rationale}", err=True)
 
-    memory_root = Path.home() / ".agency" / "sessions"
-    memory = MemoryStore(memory_root)
+    # Memory + persistence is opt-in: only wire them up when the user passes
+    # --session, so ad-hoc runs don't accumulate files or enable the plan tool.
+    memory: MemoryStore | None = None
     session: Session | None = None
-    sid = session_id or uuid.uuid4().hex[:12]
+    sid: str | None = None
     if session_id:
+        sid = session_id
+        memory = MemoryStore(Path.home() / ".agency" / "sessions")
         session = memory.load(sid) or Session(session_id=sid, skill_slug=plan.skill.slug)
-    else:
-        session = Session(session_id=sid, skill_slug=plan.skill.slug)
 
     executor = Executor(registry, llm, memory=memory, workdir=workdir)
     result = executor.run(plan.skill, request, session=session)

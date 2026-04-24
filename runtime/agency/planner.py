@@ -13,7 +13,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from .llm import AnthropicLLM, LLMConfig, LLMError
+from .llm import AnthropicLLM, LLMError
 from .skills import Skill, SkillRegistry
 
 

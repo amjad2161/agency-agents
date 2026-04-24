@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
@@ -230,6 +230,29 @@ class Executor:
         system = AnthropicLLM.cached_system(skill.system_prompt)
         tool_defs = [t.to_anthropic() for t in self.tools]
 
+        # `try/finally` guarantees memory persistence even if an SDK error or
+        # tool crash aborts mid-stream — a partial answer is saved so the next
+        # turn can continue or the user can see what happened.
+        try:
+            yield from self._stream_turns(
+                skill, messages, system, tool_defs, text_parts, usage,
+            )
+        finally:
+            if self.memory is not None and session is not None:
+                session.append("user", user_message)
+                session.append("assistant", "\n".join(text_parts).strip())
+                self.memory.save(session)
+
+    def _stream_turns(
+        self,
+        skill: Skill,
+        messages: list[dict[str, Any]],
+        system: list[dict[str, Any]],
+        tool_defs: list[dict[str, Any]],
+        text_parts: list[str],
+        usage: Usage,
+    ) -> Iterator[ExecutionEvent]:
+        """Inner loop extracted so the outer stream() can wrap it in try/finally."""
         for _ in range(MAX_TURNS):
             with self.llm.messages_stream(
                 system=system, messages=messages, tools=tool_defs,
@@ -288,11 +311,6 @@ class Executor:
 
         yield ExecutionEvent("usage", usage.as_dict())
 
-        if self.memory is not None and session is not None:
-            session.append("user", user_message)
-            session.append("assistant", "\n".join(text_parts).strip())
-            self.memory.save(session)
-
     # ----- helpers -----
 
     def _initial_messages(self, session: Session | None, user_message: str) -> list[dict[str, Any]]:
@@ -322,10 +340,22 @@ class Executor:
                 if len(group) == 1:
                     results[i] = self._run_tool(group[0].name, group[0].input)
                 else:
+                    # Cap the wall-clock wait per future; each tool already has
+                    # its own timeout via ToolContext, but a runaway / deadlocked
+                    # tool shouldn't freeze the whole turn.
+                    per_future_timeout = max(self.ctx.timeout_s * 2, 60)
                     with ThreadPoolExecutor(max_workers=min(4, len(group))) as pool:
                         futures = [pool.submit(self._run_tool, u.name, u.input) for u in group]
                         for k, fut in enumerate(futures):
-                            results[i + k] = fut.result()
+                            try:
+                                results[i + k] = fut.result(timeout=per_future_timeout)
+                            except FuturesTimeoutError:
+                                from .tools import ToolResult
+                                results[i + k] = ToolResult(
+                                    f"Parallel tool '{group[k].name}' exceeded "
+                                    f"{per_future_timeout}s wall-clock cap.",
+                                    is_error=True,
+                                )
                 i = j
             else:
                 results[i] = self._run_tool(tool_uses[i].name, tool_uses[i].input)

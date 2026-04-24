@@ -54,26 +54,18 @@ def test_default_categories_matches_repo_layout():
     forgets to teach the loader about it (or vice versa)."""
     from agency.skills import DEFAULT_CATEGORIES
 
-    # Fixed set of top-level non-category dirs we know to skip.
-    NON_CATEGORY = {
-        ".git", ".github", "scripts", "integrations", "examples",
-        "runtime", "academic", "design", "engineering", "finance",
-        "game-development", "marketing", "paid-media", "product",
-        "project-management", "sales", "spatial-computing", "specialized",
-        "strategy", "support", "testing",
-    }
+    # Top-level dirs that are NOT category folders and should never be scanned.
+    SKIP_DIRS = {".git", ".github", "scripts", "integrations", "examples", "runtime"}
 
     # Every entry in DEFAULT_CATEGORIES exists as a real directory.
     for cat in DEFAULT_CATEGORIES:
         assert (REPO / cat).is_dir(), f"DEFAULT_CATEGORIES has '{cat}' but no dir"
 
     # Every top-level dir that contains .md persona files (with YAML frontmatter)
-    # is in DEFAULT_CATEGORIES.
+    # must be in DEFAULT_CATEGORIES.
     import re
     for entry in REPO.iterdir():
-        if not entry.is_dir() or entry.name.startswith(".") or entry.name == "runtime":
-            continue
-        if entry.name in NON_CATEGORY and entry.name not in DEFAULT_CATEGORIES:
+        if not entry.is_dir() or entry.name.startswith(".") or entry.name in SKIP_DIRS:
             continue
         # Does the folder contain persona-shaped .md files?
         has_persona = False
@@ -81,7 +73,7 @@ def test_default_categories_matches_repo_layout():
             if md.name.lower() == "readme.md":
                 continue
             text = md.read_text(encoding="utf-8", errors="ignore")[:200]
-            if re.match(r"^---\n", text):
+            if re.match(r"^---\r?\n", text):
                 has_persona = True
                 break
         if has_persona:

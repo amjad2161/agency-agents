@@ -140,12 +140,13 @@ runtime/agency/
 cd runtime && python3 -m pytest
 ```
 
-56 tests cover the skill loader, planner (parser + LLM wiring with a stub),
-the file-IO + shell-allowlist tool sandbox, edit_file, extract_doc, the plan
-tool, the executor's non-streaming and streaming tool-use loops, token-usage
-accumulation, parallel-safe tool fan-out, session-memory round-trips,
-delegation between skills, LLM config + task-budget + MCP routing, the CLI
-(Click `CliRunner`), and the server endpoints (FastAPI `TestClient`).
+The test suite covers the skill loader, planner (parser + LLM wiring with a
+stub), the file-IO + shell-allowlist tool sandbox, edit_file, extract_doc,
+the plan tool, the executor's non-streaming and streaming tool-use loops,
+token-usage accumulation, parallel-safe tool fan-out, session-memory
+round-trips, delegation between skills, LLM config + task-budget + MCP
+routing, the CLI (Click `CliRunner`), and the server endpoints (FastAPI
+`TestClient`).
 
 ## Delegation
 

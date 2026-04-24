@@ -335,6 +335,52 @@ def test_delegate_tool_invokes_another_skill(tmp_path: Path):
     assert "B done: 42" in tool_results[0].payload["content"]
 
 
+def test_delegate_depth_cap_blocks_fourth_hop(tmp_path: Path):
+    """A -> B -> C is allowed; the next hop must raise via the delegate tool."""
+    from agency.executor import Executor as _Exec, MAX_DELEGATION_DEPTH
+    from agency.tools import ToolContext, ToolResult
+
+    assert MAX_DELEGATION_DEPTH == 2
+    reg, skill = _registry_with_one_skill()
+    llm = _ScriptedLLM([])  # never invoked — delegate runs synchronously
+    executor = _Exec(reg, llm, workdir=tmp_path, delegation_depth=MAX_DELEGATION_DEPTH)
+    try:
+        executor._delegate(skill.slug, "do it")
+    except RecursionError as e:
+        assert "Delegation depth" in str(e)
+    else:
+        raise AssertionError("expected RecursionError")
+
+
+def test_streaming_persists_memory_when_exception_aborts_mid_stream(tmp_path: Path):
+    """If the generator aborts mid-stream, the session save in the finally block still runs."""
+    reg, skill = _registry_with_one_skill()
+
+    class _Boom(_StreamingStubLLM):
+        def messages_stream(self, **kwargs):
+            self.calls.append({})
+            raise RuntimeError("simulated SDK failure")
+
+    memory = MemoryStore(tmp_path / "sessions")
+    session = Session(session_id="s-boom", skill_slug=skill.slug)
+
+    llm = _Boom([])
+    executor = Executor(reg, llm, memory=memory, workdir=tmp_path)
+
+    try:
+        for _ in executor.stream(skill, "trigger an error", session=session):
+            pass
+    except RuntimeError:
+        pass  # expected
+
+    # The finally block should have persisted a user turn (empty assistant is OK).
+    loaded = memory.load("s-boom")
+    assert loaded is not None
+    assert loaded.turns, "no turns persisted after abort"
+    assert loaded.turns[0].role == "user"
+    assert loaded.turns[0].text == "trigger an error"
+
+
 def test_delegate_tool_rejects_unknown_skill(tmp_path: Path):
     reg, skill = _registry_with_one_skill()
     llm = _ScriptedLLM([
