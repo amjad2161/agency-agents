@@ -255,6 +255,55 @@ def test_executor_streams_text_deltas_and_tool_events(tmp_path: Path):
     assert kinds[-1] == "usage"
 
 
+@dataclass
+class _ServerToolUseBlock:
+    id: str
+    name: str
+    input: dict
+    type: str = "server_tool_use"
+
+
+@dataclass
+class _WebSearchResultBlock:
+    content: str = "top result..."
+    type: str = "web_search_tool_result"
+
+
+def test_executor_surfaces_server_side_blocks_without_executing(tmp_path: Path):
+    """server_tool_use and *_tool_result blocks should flow through, not trigger client dispatch."""
+    reg, skill = _registry_with_one_skill()
+    llm = _ScriptedLLM([
+        _Resp(
+            stop_reason="end_turn",
+            content=[
+                _ServerToolUseBlock(id="s1", name="web_search", input={"query": "x"}),
+                _WebSearchResultBlock(),
+                _TextBlock("Based on search, here's the answer."),
+            ],
+        ),
+    ])
+    executor = Executor(reg, llm, workdir=tmp_path)
+    result = executor.run(skill, "research x")
+    kinds = [e.kind for e in result.events]
+    assert "server_tool_use" in kinds
+    assert "web_search_tool_result" in kinds
+    # No client-side tool_result events because no client tool_use was emitted.
+    assert "tool_result" not in kinds
+
+
+def test_executor_resumes_on_pause_turn(tmp_path: Path):
+    """pause_turn means the server-side loop hit its limit; we should re-send and continue."""
+    reg, skill = _registry_with_one_skill()
+    llm = _ScriptedLLM([
+        _Resp(stop_reason="pause_turn", content=[_TextBlock("hmm, need more...")]),
+        _Resp(stop_reason="end_turn", content=[_TextBlock("final answer")]),
+    ])
+    executor = Executor(reg, llm, workdir=tmp_path)
+    result = executor.run(skill, "long-running query")
+    assert "final answer" in result.text
+    assert result.turns == 2
+
+
 def test_delegate_tool_invokes_another_skill(tmp_path: Path):
     """Skill A delegates to skill B; B returns text; A reports it back."""
     reg_full = SkillRegistry.load(discover_repo_root())
@@ -331,6 +380,55 @@ def test_executor_sums_usage_across_turns(tmp_path: Path):
     last = result.events[-1]
     assert last.kind == "usage"
     assert last.payload["output_tokens"] == 50
+
+
+def test_parallel_tools_actually_run_concurrently(tmp_path: Path):
+    """Three slow read-only tool calls should finish close to single-tool latency."""
+    import time
+    from agency.tools import Tool, ToolResult, ToolContext, _read_file
+    from agency.executor import Executor, PARALLEL_SAFE_TOOLS
+
+    # Register a sleepy tool and mark it parallel-safe for this test.
+    def _slow(args, ctx):
+        time.sleep(0.2)
+        return ToolResult(f"slept {args.get('tag', '?')}")
+
+    slow_tool = Tool(
+        name="slow_read",
+        description="Sleep a bit then return.",
+        input_schema={"type": "object", "properties": {"tag": {"type": "string"}}},
+        func=_slow,
+    )
+
+    reg, skill = _registry_with_one_skill()
+    llm = _ScriptedLLM([
+        _Resp(
+            stop_reason="tool_use",
+            content=[
+                _ToolUseBlock(id="t1", name="slow_read", input={"tag": "a"}),
+                _ToolUseBlock(id="t2", name="slow_read", input={"tag": "b"}),
+                _ToolUseBlock(id="t3", name="slow_read", input={"tag": "c"}),
+            ],
+        ),
+        _Resp(stop_reason="end_turn", content=[_TextBlock("done")]),
+    ])
+
+    # Monkeypatch the parallel-safe set to include our test tool.
+    import agency.executor as ex_mod
+    original = ex_mod.PARALLEL_SAFE_TOOLS
+    ex_mod.PARALLEL_SAFE_TOOLS = frozenset(original | {"slow_read"})
+    try:
+        executor = Executor(reg, llm, workdir=tmp_path, tools=[slow_tool])
+        t0 = time.monotonic()
+        result = executor.run(skill, "sleep three times")
+        elapsed = time.monotonic() - t0
+    finally:
+        ex_mod.PARALLEL_SAFE_TOOLS = original
+
+    # Serial would be ~0.6s; parallel should be well under ~0.4s.
+    assert elapsed < 0.4, f"expected parallel (<0.4s), got {elapsed:.2f}s"
+    tool_results = [e for e in result.events if e.kind == "tool_result"]
+    assert [r.payload["content"] for r in tool_results] == ["slept a", "slept b", "slept c"]
 
 
 def test_parallel_tools_preserve_order(tmp_path: Path):

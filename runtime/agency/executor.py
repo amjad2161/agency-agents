@@ -13,6 +13,27 @@ from .skills import Skill, SkillRegistry
 from .tools import Tool, ToolContext, builtin_tools, tools_by_name
 
 MAX_TURNS = 12  # safety cap on tool-use iterations
+
+
+def _summarize_server_tool_result(block: Any) -> dict:
+    """Compact a server-side tool result block into an event payload.
+
+    The SDK returns richly-nested objects (web_search results, code-execution
+    stdout/stderr, MCP results). We surface enough to render a line of UI
+    without attempting to deeply parse every variant.
+    """
+    content = getattr(block, "content", None)
+    if content is None:
+        return {"type": block.type, "content": None}
+    if isinstance(content, str):
+        return {"type": block.type, "content": content}
+    # Try to stringify list-of-blocks / pydantic-model forms.
+    if hasattr(content, "model_dump"):
+        return {"type": block.type, "content": content.model_dump()}
+    try:
+        return {"type": block.type, "content": list(content)[:5]}
+    except Exception:  # noqa: BLE001
+        return {"type": block.type, "content": repr(content)[:500]}
 MAX_DELEGATION_DEPTH = 2  # A → B → C is allowed; A → B → C → D is not
 PARALLEL_SAFE_TOOLS = frozenset({
     "read_file", "list_dir", "list_skills", "extract_doc", "web_fetch",
@@ -145,7 +166,18 @@ class Executor:
                     events.append(ExecutionEvent("text", block.text))
                 elif btype == "tool_use":
                     events.append(ExecutionEvent("tool_use", {"name": block.name, "input": block.input}))
+                elif btype in ("server_tool_use", "mcp_tool_use"):
+                    events.append(ExecutionEvent(btype, {
+                        "name": getattr(block, "name", None),
+                        "input": getattr(block, "input", None),
+                    }))
+                elif btype and btype.endswith("_tool_result"):
+                    # web_search_tool_result, code_execution_tool_result, etc.
+                    events.append(ExecutionEvent(btype, _summarize_server_tool_result(block)))
 
+            # pause_turn = server-side loop hit its iteration cap; resume by looping.
+            if response.stop_reason == "pause_turn":
+                continue
             if response.stop_reason != "tool_use" or not tool_uses:
                 events.append(ExecutionEvent("stop", response.stop_reason))
                 break
@@ -217,11 +249,21 @@ class Executor:
 
             tool_uses = [b for b in final.content if getattr(b, "type", None) == "tool_use"]
             for block in final.content:
-                if getattr(block, "type", None) == "text":
+                btype = getattr(block, "type", None)
+                if btype == "text":
                     text_parts.append(block.text)
-                elif getattr(block, "type", None) == "tool_use":
+                elif btype == "tool_use":
                     yield ExecutionEvent("tool_use", {"name": block.name, "input": block.input})
+                elif btype in ("server_tool_use", "mcp_tool_use"):
+                    yield ExecutionEvent(btype, {
+                        "name": getattr(block, "name", None),
+                        "input": getattr(block, "input", None),
+                    })
+                elif btype and btype.endswith("_tool_result"):
+                    yield ExecutionEvent(btype, _summarize_server_tool_result(block))
 
+            if final.stop_reason == "pause_turn":
+                continue
             if final.stop_reason != "tool_use" or not tool_uses:
                 yield ExecutionEvent("stop", final.stop_reason)
                 break

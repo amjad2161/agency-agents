@@ -74,3 +74,31 @@ def test_build_kwargs_adds_mcp_servers_and_beta():
     assert use_beta is True
     assert kwargs["mcp_servers"] == servers
     assert "mcp-client-2025-11-20" in kwargs["betas"]
+
+
+def test_build_kwargs_appends_web_search_tool_when_enabled():
+    llm = AnthropicLLM(LLMConfig(enable_web_search=True))
+    kwargs, _ = llm._build_kwargs(
+        system="hi", messages=[],
+        tools=[{"name": "custom", "description": "x", "input_schema": {"type": "object"}}],
+        model=None, max_tokens=None, thinking=None,
+    )
+    names = [t.get("name") or t.get("type") for t in kwargs["tools"]]
+    assert "custom" in names
+    assert any(t.get("type") == "web_search_20260209" for t in kwargs["tools"])
+
+
+def test_build_kwargs_appends_code_execution_tool_when_enabled():
+    llm = AnthropicLLM(LLMConfig(enable_code_execution=True))
+    kwargs, _ = llm._build_kwargs(
+        system="hi", messages=[], tools=None, model=None, max_tokens=None, thinking=None,
+    )
+    assert any(t.get("type") == "code_execution_20260120" for t in kwargs["tools"])
+
+
+def test_from_env_reads_feature_flags(monkeypatch):
+    monkeypatch.setenv("AGENCY_ENABLE_WEB_SEARCH", "1")
+    monkeypatch.setenv("AGENCY_ENABLE_CODE_EXECUTION", "yes")
+    cfg = LLMConfig.from_env()
+    assert cfg.enable_web_search is True
+    assert cfg.enable_code_execution is True

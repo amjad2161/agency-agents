@@ -16,6 +16,11 @@ class LLMError(RuntimeError):
     """Raised when the LLM client is misconfigured or a call fails."""
 
 
+def _truthy_env(name: str) -> bool:
+    import os
+    return (os.environ.get(name, "") or "").strip().lower() in ("1", "true", "yes", "on")
+
+
 @dataclass
 class LLMConfig:
     model: str = DEFAULT_MODEL
@@ -29,6 +34,10 @@ class LLMConfig:
     betas: list[str] = field(default_factory=list)
     # MCP server passthrough (beta). Each entry is a dict per Anthropic's schema.
     mcp_servers: list[dict] = field(default_factory=list)
+    # Opt-in server-side tools that run on Anthropic infra. When enabled, their
+    # tool declarations are appended to every request.
+    enable_web_search: bool = False
+    enable_code_execution: bool = False
 
     @classmethod
     def from_env(cls) -> "LLMConfig":
@@ -55,6 +64,8 @@ class LLMConfig:
                     cfg.mcp_servers = servers
             except json.JSONDecodeError:
                 pass
+        cfg.enable_web_search = _truthy_env("AGENCY_ENABLE_WEB_SEARCH")
+        cfg.enable_code_execution = _truthy_env("AGENCY_ENABLE_CODE_EXECUTION")
         return cfg
 
 
@@ -137,8 +148,13 @@ class AnthropicLLM:
             "system": opts["system"],
             "messages": opts["messages"],
         }
-        if opts["tools"]:
-            kwargs["tools"] = opts["tools"]
+        tools = list(opts["tools"] or [])
+        if self.config.enable_web_search:
+            tools.append({"type": "web_search_20260209", "name": "web_search"})
+        if self.config.enable_code_execution:
+            tools.append({"type": "code_execution_20260120", "name": "code_execution"})
+        if tools:
+            kwargs["tools"] = tools
         if opts["thinking"]:
             kwargs["thinking"] = opts["thinking"]
         if self.config.extra_headers:
