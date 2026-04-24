@@ -17,6 +17,12 @@ supported agentic coding tools.
 - **[Kimi Code](#kimi-code)** — YAML agent specs in `kimi/`
 - **[Qwen Code](#qwen-code)** — project-scoped `.md` SubAgents in `.qwen/agents/`
 
+## Cross-cutting guides
+
+- **[Model Context Protocol (MCP)](./mcp.md)** — how to wire any agent in this
+  catalog to real-world tools (filesystem, GitHub, browsers, databases, SaaS)
+  via MCP servers, with per-host config examples and security guidance.
+
 ## Quick Install
 
 ```bash

@@ -108,6 +108,8 @@ Building the future, one commit at a time.
 | 🧱 [CMS Developer](engineering/engineering-cms-developer.md) | WordPress & Drupal themes, plugins/modules, content architecture | Code-first CMS implementation and customization |
 | 📧 [Email Intelligence Engineer](engineering/engineering-email-intelligence-engineer.md) | Email parsing, MIME extraction, structured data for AI agents | Turning raw email threads into reasoning-ready context |
 | 🎙️ [Voice AI Integration Engineer](engineering/engineering-voice-ai-integration-engineer.md) | Speech-to-text pipelines, Whisper, ASR, speaker diarization | End-to-end transcription pipelines, audio preprocessing, structured transcript delivery |
+| 🛡️ [Prompt Injection Defender](engineering/engineering-prompt-injection-defender.md) | LLM app security, injection defense, MCP hardening, output validation | Securing agent stacks, RAG pipelines, and tool-using LLM apps against prompt injection and excessive agency |
+| 🗡️ [LLM Red-Teamer](engineering/engineering-llm-red-teamer.md) | Authorized adversarial testing of LLMs, agents, and MCP servers | Systematic red-team engagements that produce reproducible findings and durable remediation |
 
 ### 🎨 Design Division
 
@@ -229,6 +231,7 @@ Breaking things so users don't have to.
 | 🛠️ [Tool Evaluator](testing/testing-tool-evaluator.md) | Technology assessment, tool selection | Evaluating tools, software recommendations, tech decisions |
 | 🔄 [Workflow Optimizer](testing/testing-workflow-optimizer.md) | Process analysis, workflow improvement | Process optimization, efficiency gains, automation opportunities |
 | ♿ [Accessibility Auditor](testing/testing-accessibility-auditor.md) | WCAG auditing, assistive technology testing | Accessibility compliance, screen reader testing, inclusive design verification |
+| 📏 [Prompt Eval Engineer](testing/testing-prompt-eval-engineer.md) | LLM/agent/RAG evaluation with promptfoo, DeepEval, LM Eval Harness | Turning "is this prompt better?" into a CI-gated, metric-driven answer |
 
 ### 🛟 Support Division
 
@@ -237,6 +240,7 @@ The backbone of the operation.
 | Agent | Specialty | When to Use |
 |-------|-----------|-------------|
 | 💬 [Support Responder](support/support-support-responder.md) | Customer service, issue resolution | Customer support, user experience, support operations |
+| 📞 [Voice Support Agent](support/support-voice-agent.md) | Real-time voice/phone support, LiveKit/Pipecat/Vocode pipelines, warm transfer | Inbound and outbound voice calls with low-latency ASR→LLM→TTS and structured call records |
 | 📊 [Analytics Reporter](support/support-analytics-reporter.md) | Data analysis, dashboards, insights | Business intelligence, KPI tracking, data visualization |
 | 💰 [Finance Tracker](support/support-finance-tracker.md) | Financial planning, budget management | Financial analysis, cash flow, business performance |
 | 🏗️ [Infrastructure Maintainer](support/support-infrastructure-maintainer.md) | System reliability, performance optimization | Infrastructure management, system operations, monitoring |
