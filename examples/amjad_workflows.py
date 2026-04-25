@@ -102,10 +102,10 @@ def workflow_feature_development():
         agent_sequence=[
             "engineering-backend-architect",
             "engineering-database-optimizer",
-            "engineering-engineering-frontend-developer",
-            "engineering-engineering-security-engineer",
-            "testing-testing-reality-checker",
-            "engineering-engineering-technical-writer",
+            "engineering-frontend-developer",
+            "engineering-security-engineer",
+            "testing-reality-checker",
+            "engineering-technical-writer",
         ],
         parallel=False,  # Sequential - each builds on prior
     )
@@ -150,11 +150,11 @@ def workflow_incident_response():
         workflow_name="incident_response",
         primary_request=request,
         agent_sequence=[
-            "engineering-engineering-devops-automator",
-            "engineering-engineering-backend-architect",
-            "engineering-engineering-frontend-developer",
-            "engineering-engineering-sre",
-            "engineering-engineering-incident-response-commander",
+            "engineering-devops-automator",
+            "engineering-backend-architect",
+            "engineering-frontend-developer",
+            "engineering-sre",
+            "engineering-incident-response-commander",
         ],
         parallel=True,  # Initial diagnostics in parallel
     )
@@ -200,11 +200,11 @@ def workflow_security_audit():
         workflow_name="security_audit",
         primary_request=request,
         agent_sequence=[
-            "engineering-engineering-security-engineer",
-            "engineering-engineering-code-reviewer",
-            "support-support-infrastructure-maintainer",
-            "engineering-engineering-backend-architect",
-            "support-support-legal-compliance-checker",
+            "engineering-security-engineer",
+            "engineering-code-reviewer",
+            "support-infrastructure-maintainer",
+            "engineering-backend-architect",
+            "support-legal-compliance-checker",
         ],
         parallel=True,
     )
@@ -251,11 +251,11 @@ def workflow_gtm_campaign():
         workflow_name="gtm_campaign",
         primary_request=request,
         agent_sequence=[
-            "marketing-marketing-content-creator",
-            "marketing-marketing-social-media-strategist",
-            "paid-media-paid-media-ppc-strategist",
-            "marketing-marketing-growth-hacker",
-            "support-support-analytics-reporter",
+            "marketing-content-creator",
+            "marketing-social-media-strategist",
+            "paid-media-ppc-strategist",
+            "marketing-growth-hacker",
+            "support-analytics-reporter",
         ],
         parallel=True,
     )
@@ -300,11 +300,11 @@ def workflow_codebase_analysis():
         workflow_name="codebase_analysis",
         primary_request=request,
         agent_sequence=[
-            "engineering-engineering-code-reviewer",
-            "engineering-engineering-security-engineer",
-            "testing-testing-performance-benchmarker",
-            "engineering-engineering-software-architect",
-            "engineering-engineering-database-optimizer",
+            "engineering-code-reviewer",
+            "engineering-security-engineer",
+            "testing-performance-benchmarker",
+            "engineering-software-architect",
+            "engineering-database-optimizer",
         ],
         parallel=True,
     )

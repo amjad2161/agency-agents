@@ -384,6 +384,18 @@ def serve_cmd(ctx: click.Context, host: str, port: int) -> None:
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
+# Wire the Amjad-Jarvis subcommand group into the main CLI as `agency amjad …`.
+# The group lives in its own module so the orchestrator-specific code stays
+# isolated from the core CLI; this just gives it a stable entry point.
+try:
+    from .amjad_jarvis_cli import amjad_group as _amjad_group
+    main.add_command(_amjad_group, name="amjad")
+except ImportError:
+    # The amjad_jarvis module is optional — if it fails to import for any
+    # reason we don't want to break the rest of the CLI.
+    pass
+
+
 def _maybe_llm() -> AnthropicLLM | None:
     """Return an LLM client if configured, else None (for offline planning)."""
     try:
