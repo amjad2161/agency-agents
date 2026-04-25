@@ -259,7 +259,11 @@ class SandboxedCodeRunner:
         
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
             if packages:
-                f.write(f"import subprocess\nsubprocess.run(['pip', 'install', '-q', {repr(' '.join(packages))}], check=True)\n")
+                # Validate package names against a basic allowlist or typosquatting check
+                validated = [p for p in packages if _is_safe_package_name(p)]
+                if len(validated) != len(packages):
+                    return {"success": False, "error": "One or more package names failed safety validation"}
+                f.write(f"import subprocess\nsubprocess.run(['pip', 'install', '-q', {repr(' '.join(validated))}], check=True)\n")
             f.write(code)
             script_path = f.name
         
@@ -267,7 +271,7 @@ class SandboxedCodeRunner:
             result = await asyncio.create_subprocess_exec(
                 "docker", "run", "--rm",
                 "--memory=512m", "--cpus=1.0",  # Resource limits
-                "--network=host",  # Or "none" for fully isolated
+                "--network=none",  # Fully network-isolated by default; set network=host only if explicitly required
                 "-v", f"{script_path}:/code/script.py:ro",
                 "python:3.12-slim",
                 "python", "/code/script.py",

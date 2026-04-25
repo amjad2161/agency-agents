@@ -83,6 +83,19 @@ class ReActAgent:
             return str(self.tools[tool_name](tool_input))
         except Exception as e:
             return f"ERROR executing {tool_name}: {type(e).__name__}: {e}"
+    
+    def _extract_best_answer(self, trajectory: list) -> str:
+        """Extract the best partial answer when max iterations are reached.
+        Looks for the most recent observation that appears to be a final answer,
+        or synthesizes a summary from the last few trajectory steps."""
+        # Search backwards for a step that looks like a conclusion
+        for step in reversed(trajectory):
+            obs = step.get("observation", "")
+            if any(kw in obs.lower() for kw in ("answer:", "result:", "conclusion:", "final:")):
+                return obs
+        # Fall back: summarise the last 3 observations
+        recent = [s.get("observation", "") for s in trajectory[-3:]]
+        return "Max iterations reached. Best partial result: " + " | ".join(filter(None, recent))
 ```
 
 #### Pattern 2: LangGraph State Machine
@@ -326,7 +339,7 @@ class SafeAutonomousLoop:
         m = self.metrics
         s = self.safeguards
         
-        elapsed = (datetime.now() - m["start_time"]).seconds
+        elapsed = (datetime.now() - m["start_time"]).total_seconds()
         
         if m["iterations"] >= s.max_iterations:
             raise LoopLimitExceeded(f"Max iterations ({s.max_iterations}) reached")
