@@ -5,6 +5,14 @@ All notable changes to the agency runtime, newest first.
 ## Unreleased
 
 ### Added
+- **Cross-session lessons journal.** `~/.agency/lessons.md` (path
+  override `AGENCY_LESSONS`) is loaded on every executor run and
+  injected as a system block alongside the always-on profile, so the
+  agent has a durable cross-session memory without re-training. The
+  loader keeps the most recent `MAX_LESSONS_BYTES` if the file grows
+  past the cap (recency wins). New CLI: `agency lessons {show, path,
+  edit, add <text>, clear}`. Subagents inherit the same lessons
+  string via the executor delegation path.
 - **Persistent trust mode.** `agency trust set <off|on-my-machine|yolo>`
   writes `~/.agency/trust.conf` so a personal machine can be marked
   once and runs in the chosen mode on every subsequent invocation —

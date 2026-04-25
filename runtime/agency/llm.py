@@ -201,14 +201,22 @@ class AnthropicLLM:
         return kwargs, use_beta
 
     @staticmethod
-    def cached_system(text: str, profile: str | None = None) -> list[dict[str, Any]]:
+    def cached_system(
+        text: str,
+        profile: str | None = None,
+        lessons: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Build a system prompt list with a cache_control breakpoint at the end.
 
-        If `profile` is provided, it's prepended as a separate text block
-        (no breakpoint of its own — the breakpoint stays on the persona
-        block, and Anthropic caches every system block before it as part
-        of the same prefix). Skipping `profile` produces the original
-        single-block shape.
+        Optional `profile` and `lessons` are prepended as separate text
+        blocks before the persona body. Neither carries its own
+        breakpoint — the breakpoint stays on the persona block, so
+        Anthropic caches the whole prelude (profile + lessons + persona)
+        as one prefix. Order matters: profile first (who the user is),
+        then lessons (what we've learned working together), then the
+        persona (how to behave for this specific skill).
+
+        Skipping both produces the original single-block shape.
         """
         blocks: list[dict[str, Any]] = []
         if profile:
@@ -217,6 +225,16 @@ class AnthropicLLM:
                 "text": (
                     "Always-on user profile (background context, not a request):\n\n"
                     + profile
+                ),
+            })
+        if lessons:
+            blocks.append({
+                "type": "text",
+                "text": (
+                    "Cross-session lessons journal — read this before "
+                    "deciding anything; older entries may have been "
+                    "trimmed for size:\n\n"
+                    + lessons
                 ),
             })
         blocks.append({

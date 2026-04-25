@@ -39,6 +39,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `AGENCY_TOOL_TIMEOUT` | Per-tool wall-clock seconds (default 30). |
 | `AGENCY_DISABLE_HEALTH=1` | Don't register `/api/health`. Set this if you bind 0.0.0.0 on an untrusted network and don't want the diagnostic snapshot exposed. |
 | `AGENCY_PROFILE` | Override the profile file path (default `~/.agency/profile.md`). |
+| `AGENCY_LESSONS` | Override the lessons-journal path (default `~/.agency/lessons.md`). |
 | `AGENCY_TRUST_MODE` | `off` (default), `on-my-machine`, or `yolo`. See **Trust modes** below. |
 
 Example MCP config:
@@ -249,6 +250,44 @@ agency profile clear    # delete it
 Set `AGENCY_PROFILE` to override the path. Subagents (via
 `delegate_to_skill`) inherit the same profile so the context stays
 consistent across hops.
+
+## Lessons journal (cross-session memory)
+
+Companion to the profile. Where the profile says *who you are*, the
+lessons journal says *what we've learned working together*. The
+runtime loads `~/.agency/lessons.md` (or wherever `AGENCY_LESSONS`
+points) on every run and injects it as a second system block before
+the persona body. Same caching prefix; free on cache reads.
+
+```bash
+agency lessons                        # show current
+agency lessons path                   # print where it lives
+agency lessons edit                   # open in $EDITOR
+agency lessons add "never use word 'leverage'"
+agency lessons clear                  # delete it
+```
+
+The agent itself can append to the file with `write_file`/shell tools
+mid-session — the canonical entry shape is:
+
+```
+## YYYY-MM-DD HH:MM · short topic
+
+WORKED:    what delivered
+COST:      what cost more than it should have
+NEVER-AGAIN: what the user said don't do again
+NEXT-TIME: what to change next time
+```
+
+The loader keeps the most recent ~64 KB if the journal outgrows the
+cap. To prune older entries by hand, just edit the file. Subagents
+inherit the lessons string via the same delegation path as the
+profile, so a multi-skill workflow gets one consistent memory.
+
+This is the runtime's answer to "self-learning" without re-training:
+the model weights don't change, but the system prompt prefix grows
+with the user's accumulated context. The Brainiac persona
+(`jarvis-brainiac`) is built around this loop.
 
 ## Trust modes
 
