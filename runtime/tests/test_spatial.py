@@ -264,7 +264,7 @@ def test_run_with_unknown_skill_slug_surfaces_error_not_dropped_socket(monkeypat
         def cached_system(text):
             return [{"type": "text", "text": text,
                      "cache_control": {"type": "ephemeral"}}]
-        def messages_create(self, **_k):  # pragma: no cover
+        def messages_create(self, **_kwargs):  # pragma: no cover
             raise AssertionError("should not reach")
 
     monkeypatch.setattr(server_mod, "_require_llm", lambda: _StubLLM())

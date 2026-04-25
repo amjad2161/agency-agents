@@ -20,7 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
-from typing import Any, Awaitable, Callable
+from typing import Any, Callable
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -200,7 +200,7 @@ async def _handle_run(
         finally:
             loop.call_soon_threadsafe(queue.put_nowait, {"type": "done"})
 
-    fut: Awaitable = loop.run_in_executor(None, _drain)
+    fut: asyncio.Future = loop.run_in_executor(None, _drain)
     try:
         while True:
             item = await queue.get()

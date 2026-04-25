@@ -434,20 +434,26 @@ function spawnResultPanel(text, position) {
   ctx.fillStyle = "#c8deff";
   ctx.font = "13px ui-monospace, monospace";
   ctx.textBaseline = "top";
-  const words = text.split(" ");
-  let line = "", lineY = 42;
-  for (const word of words) {
-    const testLine = line ? line + " " + word : word;
-    if (ctx.measureText(testLine).width > W - 28 || testLine.includes("\n")) {
-      ctx.fillText(line, 14, lineY);
-      line = word.replace(/\n/g, " ");
-      lineY += 18;
-      if (lineY > H - 20) break;
-    } else {
-      line = testLine;
+  // Pre-split on explicit newlines so they produce hard line breaks in the panel.
+  const rawLines = text.split("\n");
+  let lineY = 42;
+  outer: for (const rawLine of rawLines) {
+    const words = rawLine.split(" ");
+    let line = "";
+    for (const word of words) {
+      const testLine = line ? line + " " + word : word;
+      if (ctx.measureText(testLine).width > W - 28) {
+        ctx.fillText(line, 14, lineY);
+        line = word;
+        lineY += 18;
+        if (lineY > H - 20) break outer;
+      } else {
+        line = testLine;
+      }
     }
+    if (line) { ctx.fillText(line, 14, lineY); lineY += 18; }
+    if (lineY > H - 20) break;
   }
-  if (line) ctx.fillText(line, 14, lineY);
 
   const tex = new THREE.CanvasTexture(canvas);
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
