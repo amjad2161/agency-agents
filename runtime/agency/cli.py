@@ -220,6 +220,7 @@ def trust_cmd() -> None:
     click.echo(f"  shell denylist enforced   : {g.enforce_shell_denylist}")
     click.echo(f"  workdir sandbox enforced  : {g.sandbox_paths_to_workdir}")
     click.echo(f"  block private/loopback IPs: {g.block_private_ip_fetches}")
+    click.echo(f"  block metadata endpoints  : {g.block_metadata_fetches}")
 
 
 @main.command("doctor")

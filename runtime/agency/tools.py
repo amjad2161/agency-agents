@@ -190,10 +190,18 @@ def _is_metadata_host(host: str) -> bool:
     lowered = host.lower().strip()
     if lowered in _METADATA_HOSTNAMES:
         return True
+    if lowered in _METADATA_IPS:  # IP literal in URL bypasses DNS
+        return True
     ips = _resolve_ips(host)
     if ips is None:
-        # DNS failure: treat as metadata — safer to reject than leak creds.
-        return True
+        # DNS failure. Don't blanket-reject as metadata — in `on-my-machine`
+        # the private-IP gate is intentionally lifted, and a flaky local
+        # hostname (`my-dev.local`, mDNS down) would otherwise be reported
+        # as "cloud instance metadata" instead of surfacing a real
+        # connection error. Only the literal metadata names/IPs above
+        # are treated as metadata when DNS is unavailable; everything
+        # else falls through to httpx.
+        return False
     for ip_str in ips:
         if ip_str in _METADATA_IPS:
             return True

@@ -289,6 +289,39 @@ def test_web_fetch_allows_metadata_in_yolo(tmp_path: Path, monkeypatch):
     assert "fetch error" in res.content.lower()
 
 
+def test_web_fetch_dns_failure_in_on_my_machine_is_not_metadata(
+    tmp_path: Path, monkeypatch,
+):
+    """Regression: the metadata gate must distinguish DNS failure from a
+    confirmed metadata endpoint. In `on-my-machine` the private-IP gate is
+    intentionally lifted, so a flaky `.local` hostname should surface a
+    real connection error — not get masquerade-rejected as 'cloud metadata
+    address'."""
+    import httpx
+    import socket as _socket
+
+    from agency.tools import ToolContext, _web_fetch
+
+    monkeypatch.setenv("AGENCY_TRUST_MODE", "on-my-machine")
+    ctx = ToolContext.from_env(workdir=tmp_path)
+
+    def fake_getaddrinfo(*args, **kwargs):
+        raise _socket.gaierror("stubbed: DNS unreachable")
+
+    monkeypatch.setattr(_socket, "getaddrinfo", fake_getaddrinfo)
+
+    def fake_send(self, request, **kwargs):
+        raise httpx.ConnectError("stubbed: no connection")
+
+    monkeypatch.setattr(httpx.Client, "send", fake_send)
+
+    res = _web_fetch({"url": "http://my-dev-server.local:8080/api"}, ctx)
+    assert res.is_error
+    # The fix: DNS failure on a non-metadata-looking host falls through.
+    assert "metadata" not in res.content.lower()
+    assert "fetch error" in res.content.lower()
+
+
 # ----- _write_file / _edit_file display path -----------------------------
 
 
