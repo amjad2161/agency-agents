@@ -131,6 +131,8 @@ Building the future, one commit at a time.
 | 💎 [Senior Developer](engineering/engineering-senior-developer.md) | Laravel/Livewire, advanced patterns | Complex implementations, architecture decisions |
 | 🔧 [Filament Optimization Specialist](engineering/engineering-filament-optimization-specialist.md) | Filament PHP admin UX, structural form redesign, resource optimization | Restructuring Filament resources/forms/tables for faster, cleaner admin workflows |
 | 🔒 [Security Engineer](engineering/engineering-security-engineer.md) | Threat modeling, secure code review, security architecture | Application security, vulnerability assessment, security CI/CD |
+| 🛡️ [Privacy Engineer](engineering/engineering-privacy-engineer.md) | Data mapping, DPIAs, DSRs, consent, retention, cross-border transfers | Operationalizing GDPR / CPRA / HIPAA / EU AI Act as code and controls |
+| 🛤️ [Platform Engineer](engineering/engineering-platform-engineer.md) | Internal dev platforms, golden paths, service catalog, self-service infra | Building paved-road developer experience on Kubernetes + Backstage + IaC |
 | ⚡ [Autonomous Optimization Architect](engineering/engineering-autonomous-optimization-architect.md) | LLM routing, cost optimization, shadow testing | Autonomous systems needing intelligent API selection and cost guardrails |
 | 🔩 [Embedded Firmware Engineer](engineering/engineering-embedded-firmware-engineer.md) | Bare-metal, RTOS, ESP32/STM32/Nordic firmware | Production-grade embedded systems and IoT devices |
 | 🚨 [Incident Response Commander](engineering/engineering-incident-response-commander.md) | Incident management, post-mortems, on-call | Managing production incidents and building incident readiness |
@@ -150,6 +152,10 @@ Building the future, one commit at a time.
 | 🧱 [CMS Developer](engineering/engineering-cms-developer.md) | WordPress & Drupal themes, plugins/modules, content architecture | Code-first CMS implementation and customization |
 | 📧 [Email Intelligence Engineer](engineering/engineering-email-intelligence-engineer.md) | Email parsing, MIME extraction, structured data for AI agents | Turning raw email threads into reasoning-ready context |
 | 🎙️ [Voice AI Integration Engineer](engineering/engineering-voice-ai-integration-engineer.md) | Speech-to-text pipelines, Whisper, ASR, speaker diarization | End-to-end transcription pipelines, audio preprocessing, structured transcript delivery |
+| 🛡️ [Prompt Injection Defender](engineering/engineering-prompt-injection-defender.md) | LLM app security, injection defense, MCP hardening, output validation | Securing agent stacks, RAG pipelines, and tool-using LLM apps against prompt injection and excessive agency |
+| 🗡️ [LLM Red-Teamer](engineering/engineering-llm-red-teamer.md) | Authorized adversarial testing of LLMs, agents, and MCP servers | Systematic red-team engagements that produce reproducible findings and durable remediation |
+| 📚 [RAG Engineer](engineering/engineering-rag-engineer.md) | End-to-end RAG pipelines — chunking, hybrid search, rerankers, evals, freshness | Grounding LLM answers in your corpus with citations, ACLs, and measured retrieval quality |
+| 🔭 [Observability Engineer](engineering/engineering-observability-engineer.md) | OpenTelemetry, metrics, logs, traces, profiles, dashboards & alerts | Making production debuggable with the three+one pillars and cost-aware telemetry |
 
 ### 🎨 Design Division
 
@@ -165,6 +171,7 @@ Making it beautiful, usable, and delightful.
 | ✨ [Whimsy Injector](design/design-whimsy-injector.md) | Personality, delight, playful interactions | Adding joy, micro-interactions, Easter eggs, brand personality |
 | 📷 [Image Prompt Engineer](design/design-image-prompt-engineer.md) | AI image generation prompts, photography | Photography prompts for Midjourney, DALL-E, Stable Diffusion |
 | 🌈 [Inclusive Visuals Specialist](design/design-inclusive-visuals-specialist.md) | Representation, bias mitigation, authentic imagery | Generating culturally accurate AI images and video |
+| ♿ [Accessibility Specialist](design/design-accessibility-specialist.md) | WCAG 2.2 / ARIA / assistive-tech testing, a11y CI gates, VPATs | Keyboard & screen-reader support, EAA / Section 508 / ADA conformance |
 
 ### 💰 Paid Media Division
 
@@ -243,6 +250,7 @@ Building the right thing at the right time.
 | 💬 [Feedback Synthesizer](product/product-feedback-synthesizer.md) | User feedback analysis, insights extraction | Feedback analysis, user insights, product priorities |
 | 🧠 [Behavioral Nudge Engine](product/product-behavioral-nudge-engine.md) | Behavioral psychology, nudge design, engagement | Maximizing user motivation through behavioral science |
 | 🧭 [Product Manager](product/product-manager.md) | Full lifecycle product ownership | Discovery, PRDs, roadmap planning, GTM, outcome measurement |
+| 🤖 [AI Product Manager](product/product-ai-product-manager.md) | Product management for AI/LLM features, eval-driven launches, cost/safety tradeoffs | Shipping AI features with measurable quality, safety, cost, and latency bars |
 
 ### 🎬 Project Management Division
 
@@ -271,6 +279,7 @@ Breaking things so users don't have to.
 | 🛠️ [Tool Evaluator](testing/testing-tool-evaluator.md) | Technology assessment, tool selection | Evaluating tools, software recommendations, tech decisions |
 | 🔄 [Workflow Optimizer](testing/testing-workflow-optimizer.md) | Process analysis, workflow improvement | Process optimization, efficiency gains, automation opportunities |
 | ♿ [Accessibility Auditor](testing/testing-accessibility-auditor.md) | WCAG auditing, assistive technology testing | Accessibility compliance, screen reader testing, inclusive design verification |
+| 📏 [Prompt Eval Engineer](testing/testing-prompt-eval-engineer.md) | LLM/agent/RAG evaluation with promptfoo, DeepEval, LM Eval Harness | Turning "is this prompt better?" into a CI-gated, metric-driven answer |
 
 ### 🛟 Support Division
 
@@ -279,6 +288,7 @@ The backbone of the operation.
 | Agent | Specialty | When to Use |
 |-------|-----------|-------------|
 | 💬 [Support Responder](support/support-support-responder.md) | Customer service, issue resolution | Customer support, user experience, support operations |
+| 📞 [Voice Support Agent](support/support-voice-agent.md) | Real-time voice/phone support, LiveKit/Pipecat/Vocode pipelines, warm transfer | Inbound and outbound voice calls with low-latency ASR→LLM→TTS and structured call records |
 | 📊 [Analytics Reporter](support/support-analytics-reporter.md) | Data analysis, dashboards, insights | Business intelligence, KPI tracking, data visualization |
 | 💰 [Finance Tracker](support/support-finance-tracker.md) | Financial planning, budget management | Financial analysis, cash flow, business performance |
 | 🏗️ [Infrastructure Maintainer](support/support-infrastructure-maintainer.md) | System reliability, performance optimization | Infrastructure management, system operations, monitoring |
