@@ -244,10 +244,17 @@ def doctor_cmd(ctx: click.Context) -> None:
         bracket = f"[{group}]"
         if info["installed"]:
             status = "ok"
-        elif info["missing"]:
-            status = f"missing: {', '.join(info['missing'])}"
         else:
-            status = "broken: " + "; ".join(f"{k}: {v}" for k, v in info["errors"].items())
+            # Show both — a group can have some missing AND some broken at once
+            # (e.g. PIL not installed + pyautogui imports but raises on no DISPLAY).
+            parts = []
+            if info["missing"]:
+                parts.append(f"missing: {', '.join(info['missing'])}")
+            if info["errors"]:
+                parts.append("broken: " + "; ".join(
+                    f"{k}: {v}" for k, v in info["errors"].items()
+                ))
+            status = "; ".join(parts)
         click.echo(f"  {bracket:12s}  {status}")
 
     # Tool context defaults

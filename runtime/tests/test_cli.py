@@ -105,6 +105,36 @@ def test_doctor_reports_skill_counts_and_env(runner, no_api_key):
     assert "tool context" in result.output
 
 
+def test_doctor_shows_both_missing_and_errors_for_same_group(runner, no_api_key, monkeypatch):
+    """Regression: doctor used to show only `missing` and silently swallow `errors`.
+
+    Stub `optional_deps_status` to return one group with both kinds of failure
+    and assert the rendered line includes both.
+    """
+    from agency import cli as cli_mod
+
+    def _stub() -> dict:
+        return {
+            "fake": {
+                "installed": False,
+                "missing": ["lib_a"],
+                "errors": {"lib_b": "OSError: DISPLAY not set"},
+            },
+        }
+
+    # The doctor imports the helper inside the function, so patch
+    # `agency.diagnostics.optional_deps_status` (the source).
+    from agency import diagnostics
+    monkeypatch.setattr(diagnostics, "optional_deps_status", _stub)
+
+    result = runner.invoke(main, ["doctor"])
+    assert result.exit_code == 0, result.output
+    assert "missing: lib_a" in result.output
+    assert "broken:" in result.output
+    assert "lib_b" in result.output
+    assert "DISPLAY not set" in result.output
+
+
 def test_init_refuses_to_overwrite(runner, no_api_key, tmp_path):
     (tmp_path / "engineering").mkdir()
     (tmp_path / "engineering" / "existing.md").write_text("x")
