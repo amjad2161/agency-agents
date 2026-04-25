@@ -171,6 +171,35 @@ round-trips, delegation between skills, LLM config + task-budget + MCP
 routing, the CLI (Click `CliRunner`), and the server endpoints (FastAPI
 `TestClient`).
 
+## Per-skill tool policy
+
+A persona's frontmatter can constrain which tools that skill is allowed
+to use. The two knobs:
+
+```yaml
+---
+name: Marketing Strategist
+tools_denied: [run_shell, edit_file, computer_use]
+---
+```
+
+```yaml
+---
+name: Read-only Researcher
+tools_allowed: [read_file, list_dir, web_fetch, list_skills]
+---
+```
+
+- If `tools_allowed` is set, **only** those tool names are exposed.
+- If `tools_denied` is set, those tool names are removed from the
+  default set.
+- Both can take a YAML list or a comma-separated string.
+- If neither is present, the skill gets every builtin tool (status quo).
+
+The filter is applied at the request level — the disallowed tools
+are never declared to the API for that skill, so the model can't
+call them.
+
 ## Delegation
 
 Agents can hand off to each other via the `delegate_to_skill` tool. The

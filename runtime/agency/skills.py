@@ -45,6 +45,12 @@ class Skill:
     body: str
     path: Path
     extra: dict = field(default_factory=dict)
+    # Optional tool policy from frontmatter. If `tools_allowed` is set, only
+    # those tool names are exposed to this skill. If `tools_denied` is set,
+    # those names are removed. If both are absent, the skill gets every
+    # builtin tool (status quo).
+    tools_allowed: tuple[str, ...] | None = None
+    tools_denied: tuple[str, ...] = ()
 
     @property
     def system_prompt(self) -> str:
@@ -53,6 +59,14 @@ class Skill:
 
     def summary(self) -> str:
         return f"{self.emoji} {self.name} ({self.category}) — {self.description}"
+
+    def tool_is_allowed(self, name: str) -> bool:
+        """Return True if `name` may be exposed to this skill."""
+        if self.tools_allowed is not None and name not in self.tools_allowed:
+            return False
+        if name in self.tools_denied:
+            return False
+        return True
 
 
 def _slugify(path: Path) -> str:
@@ -78,8 +92,11 @@ def _parse_one(path: Path, category: str) -> Skill | None:
     color = str(meta.get("color") or "white").strip()
     emoji = str(meta.get("emoji") or "🤖").strip()
     vibe = str(meta.get("vibe") or "").strip()
+    tools_allowed = _parse_tool_list(meta.get("tools_allowed"))
+    tools_denied = _parse_tool_list(meta.get("tools_denied")) or ()
 
-    known = {"name", "description", "color", "emoji", "vibe"}
+    known = {"name", "description", "color", "emoji", "vibe",
+             "tools_allowed", "tools_denied"}
     extra = {k: v for k, v in meta.items() if k not in known}
 
     return Skill(
@@ -93,7 +110,25 @@ def _parse_one(path: Path, category: str) -> Skill | None:
         body=body,
         path=path,
         extra=extra,
+        tools_allowed=tools_allowed,
+        tools_denied=tools_denied,
     )
+
+
+def _parse_tool_list(raw) -> tuple[str, ...] | None:
+    """Accept a YAML list, a comma-separated string, or None.
+
+    Returns None when the field is absent (so callers can distinguish
+    'no policy' from 'explicit empty list').
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        items = [s.strip() for s in raw.split(",") if s.strip()]
+        return tuple(items)
+    if isinstance(raw, (list, tuple)):
+        return tuple(str(x).strip() for x in raw if str(x).strip())
+    return None
 
 
 def discover_repo_root(start: Path | None = None) -> Path:

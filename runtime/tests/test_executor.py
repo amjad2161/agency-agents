@@ -335,6 +335,42 @@ def test_delegate_tool_invokes_another_skill(tmp_path: Path):
     assert "B done: 42" in tool_results[0].payload["content"]
 
 
+def test_executor_filters_tools_per_skill_policy(tmp_path: Path):
+    """A skill with tools_denied should not expose those tools to the API."""
+    from dataclasses import replace
+    reg, skill = _registry_with_one_skill()
+    constrained = replace(skill, tools_denied=("run_shell", "delegate_to_skill"))
+
+    llm = _ScriptedLLM([
+        _Resp(stop_reason="end_turn", content=[_TextBlock("ok")]),
+    ])
+    executor = Executor(reg, llm, workdir=tmp_path)
+    executor.run(constrained, "hi")
+
+    sent_tools = llm.calls[0]["tools"]
+    sent_names = [t["name"] for t in sent_tools]
+    assert "run_shell" not in sent_names
+    assert "delegate_to_skill" not in sent_names
+    # Other tools still present
+    assert "read_file" in sent_names
+
+
+def test_executor_honors_tools_allowed_whitelist(tmp_path: Path):
+    """A skill with an allowlist sees ONLY those tools."""
+    from dataclasses import replace
+    reg, skill = _registry_with_one_skill()
+    locked = replace(skill, tools_allowed=("read_file", "list_dir"))
+
+    llm = _ScriptedLLM([
+        _Resp(stop_reason="end_turn", content=[_TextBlock("ok")]),
+    ])
+    executor = Executor(reg, llm, workdir=tmp_path)
+    executor.run(locked, "hi")
+
+    sent_names = [t["name"] for t in llm.calls[0]["tools"]]
+    assert set(sent_names) == {"read_file", "list_dir"}
+
+
 def test_delegate_depth_cap_blocks_fourth_hop(tmp_path: Path):
     """A -> B -> C is allowed; the next hop must raise via the delegate tool."""
     from agency.executor import Executor as _Exec, MAX_DELEGATION_DEPTH
