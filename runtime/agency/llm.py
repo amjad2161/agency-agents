@@ -120,8 +120,9 @@ class AnthropicLLM:
         log = get_logger()
         with timed("llm.create", model=kwargs.get("model"), beta=use_beta,
                    tools=len(kwargs.get("tools") or []),
-                   messages=len(kwargs.get("messages") or [])):
+                   messages=len(kwargs.get("messages") or [])) as fields:
             response = target.create(**kwargs)
+            fields["stop"] = getattr(response, "stop_reason", None)
         usage = getattr(response, "usage", None)
         if usage is not None:
             log.info(

@@ -81,7 +81,7 @@ def test_planner_logs_pick(monkeypatch):
 
 
 def test_executor_logs_tool_run(tmp_path):
-    """A tool invocation should produce a tool.run record with elapsed_ms."""
+    """A tool invocation should produce a tool.run record with elapsed_ms + is_error."""
     from agency.executor import Executor
     from agency.skills import SkillRegistry, discover_repo_root
     from agency.tools import builtin_tools
@@ -92,7 +92,6 @@ def test_executor_logs_tool_run(tmp_path):
 
     reg = SkillRegistry.load(discover_repo_root())
     skill = reg.all()[0]
-    # Invoke a builtin tool directly via the executor's _run_tool path.
     executor = Executor(reg, llm=type("LLM", (), {})(), workdir=tmp_path,
                         tools=builtin_tools())
     (tmp_path / "x.txt").write_text("hi")
@@ -101,3 +100,49 @@ def test_executor_logs_tool_run(tmp_path):
     out = sink.getvalue()
     assert "tool.run" in out
     assert "name=read_file" in out
+    assert "is_error=False" in out  # Copilot review: tool.run carries the outcome
+
+
+def test_tool_run_log_records_error_outcome(tmp_path):
+    """A tool that returns is_error=True should log `is_error=True` on tool.run."""
+    from agency.executor import Executor
+    from agency.skills import SkillRegistry, discover_repo_root
+    from agency.tools import builtin_tools
+
+    _reset_logger()
+    sink = io.StringIO()
+    configure("INFO", stream=sink)
+
+    reg = SkillRegistry.load(discover_repo_root())
+    executor = Executor(reg, llm=type("LLM", (), {})(), workdir=tmp_path,
+                        tools=builtin_tools())
+    # Read a file that doesn't exist — the read_file tool returns is_error=True.
+    result = executor._run_tool("read_file", {"path": "nope.txt"})
+    assert result.is_error
+    out = sink.getvalue()
+    assert "tool.run" in out
+    assert "is_error=True" in out
+
+
+def test_timed_short_circuits_when_logging_off():
+    """timed() must not call time.monotonic when the logger is below INFO."""
+    import time
+    from agency.logging import timed
+
+    _reset_logger()  # WARNING level — no INFO
+
+    calls = {"count": 0}
+    real_monotonic = time.monotonic
+
+    def _spy():
+        calls["count"] += 1
+        return real_monotonic()
+
+    time.monotonic = _spy
+    try:
+        with timed("noop", a=1):
+            pass
+    finally:
+        time.monotonic = real_monotonic
+
+    assert calls["count"] == 0, "timed() should skip time.monotonic when INFO is off"

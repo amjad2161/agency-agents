@@ -370,17 +370,20 @@ class Executor:
             log.warning("tool.unknown name=%s", name)
             from .tools import ToolResult
             return ToolResult(f"Unknown tool: {name}", is_error=True)
-        with timed("tool.run", name=name):
+        with timed("tool.run", name=name) as fields:
             try:
                 result = tool.func(args, self.ctx)
             except PermissionError as e:
                 from .tools import ToolResult
                 log.warning("tool.permission_error name=%s err=%s", name, e)
+                fields["is_error"] = True
                 return ToolResult(str(e), is_error=True)
             except Exception as e:  # noqa: BLE001 - surface tool errors to the model
                 from .tools import ToolResult
                 log.exception("tool.unhandled name=%s", name)
+                fields["is_error"] = True
                 return ToolResult(f"Tool error: {type(e).__name__}: {e}", is_error=True)
+            fields["is_error"] = result.is_error
         if result.is_error:
             log.info("tool.error name=%s preview=%r", name, result.content[:120])
         return result

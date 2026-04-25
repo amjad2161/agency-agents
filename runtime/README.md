@@ -93,9 +93,10 @@ Off by default. Turn on with `AGENCY_LOG=info` (or `debug`) or pass
 `-v` / `-vv` to the CLI. Records:
 
 - `plan.picked slug=<...> reason=<...>` — every routing decision
-- `llm.create elapsed_ms=<...> model=<...>` — every API call
+- `llm.create elapsed_ms=<...> model=<...> stop=<...>` — every API call
 - `llm.usage input=<...> output=<...> cache_w=<...> cache_r=<...>` — token spend per call
-- `tool.run elapsed_ms=<...> name=<...>` — every tool invocation
+- `tool.run elapsed_ms=<...> name=<...> is_error=<...>` — every tool invocation
+  (additional `tool.error` / `tool.permission_error` / `tool.unhandled` records when something fails)
 
 ```bash
 agency -v run "summarize the README"

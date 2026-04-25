@@ -3,9 +3,9 @@
 A single named logger (`agency`) that every module uses. Off by default
 (WARNING). Enable with `AGENCY_LOG=info` or the CLI `--verbose` flag.
 
-Records carry structured `extra` fields so a downstream handler (or a
-search over the log file) can filter by skill / tool / model without
-parsing message text.
+Records include searchable `key=value` fields appended to the log message
+text so a downstream handler or log-file search can filter by skill /
+tool / model, though machine consumers must parse message text.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import os
 import sys
 import time
 from contextlib import contextmanager
+from typing import Any
 
 LOGGER_NAME = "agency"
 
@@ -49,16 +50,26 @@ def configure(level: str | int | None = None, *, stream=None) -> logging.Logger:
 
 
 @contextmanager
-def timed(event: str, **fields):
+def timed(event: str, **fields: Any):
     """Measure a block and emit one INFO record with elapsed_ms + fields.
 
-        with timed("tool", name="read_file"):
-            run_tool(...)
+    No-op (no timing, no string formatting) when INFO is disabled, so
+    wrapping every tool/LLM call costs near-zero in production where
+    logging is off by default. Callers can attach more fields after the
+    fact by mutating the dict yielded into the `as` clause:
+
+        with timed("tool.run", name="read_file") as fields:
+            result = run_tool(...)
+            fields["is_error"] = result.is_error
     """
     logger = get_logger()
+    if not logger.isEnabledFor(logging.INFO):
+        yield fields
+        return
+
     start = time.monotonic()
     try:
-        yield
+        yield fields
     finally:
         ms = round((time.monotonic() - start) * 1000)
         logger.info("%s elapsed_ms=%d %s",

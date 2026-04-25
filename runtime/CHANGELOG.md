@@ -8,7 +8,11 @@ All notable changes to the agency runtime, newest first.
 - **Structured logging.** A single `agency` named logger (`runtime/agency/logging.py`).
   Off by default; enable with `AGENCY_LOG=info` / `debug` or CLI `-v` / `-vv`.
   Emits records for every routing decision, LLM call (with timings + token
-  usage), and tool invocation (with elapsed_ms and error flag).
+  usage), and tool invocation (`tool.run` with `elapsed_ms` and `is_error`,
+  plus separate `tool.error` / `tool.permission_error` / `tool.unhandled`
+  events for error detail). The `timed()` helper short-circuits when INFO
+  logging is disabled, so wrapping every tool / LLM call costs near-zero
+  in production with logging off.
 - **Runnable examples.** `runtime/examples/` ships four scripts that exercise
   the programmatic API: list skills, route a prompt (no key), stream a full
   run, and drive cross-skill delegation. See `runtime/examples/README.md`.
