@@ -182,6 +182,15 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 | Privacy & Data Governance | `jarvis-privacy-data-governance` |
 | Circular Economy & Regenerative Design | `jarvis-circular-economy` |
 | Accessibility & Inclusive Tech | `jarvis-accessibility-inclusive-tech` |
+| E-Commerce & Retail Tech | `jarvis-e-commerce-retail-tech` |
+| LegalTech & Legal Operations | `jarvis-legaltech` |
+| Energy Systems | `jarvis-energy-systems` |
+| Construction & PropTech | `jarvis-construction-proptech` |
+| Creator Economy | `jarvis-creator-economy` |
+| Water Resources & Hydrology | `jarvis-water-resources` |
+| Future of Work & Workforce Transformation | `jarvis-future-of-work` |
+| Disaster & Emergency Management | `jarvis-disaster-emergency-management` |
+| Elder Care & Aging Tech | `jarvis-elder-care-aging` |
 
 ## 💭 Your Communication Style
 

@@ -82,7 +82,7 @@ allowlist, web fetch, document extraction, and skill delegation.
 ```bash
 pip install -e runtime
 export ANTHROPIC_API_KEY=...
-agency list                     # browse 270+ skills
+agency list                     # browse 328+ skills
 agency run "review this repo"   # auto-route to the best agent
 agency serve                    # chat UI on http://127.0.0.1:8765
 ```
