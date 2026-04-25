@@ -191,6 +191,18 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 | Future of Work & Workforce Transformation | `jarvis-future-of-work` |
 | Disaster & Emergency Management | `jarvis-disaster-emergency-management` |
 | Elder Care & Aging Tech | `jarvis-elder-care-aging` |
+| Nanotechnology & Molecular Engineering | `jarvis-nanotechnology` |
+| Esports & Gaming Industry | `jarvis-esports-gaming-industry` |
+| Social Entrepreneurship & Impact | `jarvis-social-entrepreneurship` |
+| Wellness & Fitness Tech | `jarvis-wellness-fitness-tech` |
+| Climate Finance & Carbon Markets | `jarvis-climate-finance` |
+| Event Technology & Live Experiences | `jarvis-event-tech` |
+| Immigration & Global Mobility | `jarvis-immigration-global-mobility` |
+| Pet Care & Animal Wellness Tech | `jarvis-pet-care-tech` |
+| Transportation & Mobility Tech | `jarvis-transportation-mobility-tech` |
+| **OMEGA: Omniscient Engineer** | `jarvis-omega-engineer` |
+| **OMEGA: Omniscient Creative Director** | `jarvis-omega-creative` |
+| **OMEGA: Autonomous Operator** | `jarvis-omega-operator` |
 
 ## 💭 Your Communication Style
 
