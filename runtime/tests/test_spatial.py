@@ -87,6 +87,36 @@ def test_run_returns_error_when_no_api_key(monkeypatch):
         assert "ANTHROPIC_API_KEY" in msg["message"]
 
 
+def test_run_with_unknown_skill_slug_surfaces_error_not_dropped_socket(monkeypatch):
+    """Regression: planner raises ValueError on unknown slug, but the connection
+    must stay alive and the client must see a typed error envelope."""
+    from agency import server as server_mod
+
+    class _StubLLM:
+        class config:
+            model = "fake"; planner_model = "fake"; max_tokens = 1024
+        @staticmethod
+        def cached_system(text):
+            return [{"type": "text", "text": text,
+                     "cache_control": {"type": "ephemeral"}}]
+        def messages_create(self, **k):  # pragma: no cover - never reached
+            raise AssertionError("planner shouldn't get this far")
+
+    monkeypatch.setattr(server_mod, "_require_llm", lambda: _StubLLM())
+
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({
+            "type": "run", "message": "hi",
+            "skill": "definitely-not-a-real-slug",
+        }))
+        msg = json.loads(ws.receive_text())
+        assert msg["type"] == "error"
+        assert "Unknown skill slug" in msg["message"]
+        # And the socket is still open: a follow-up ping is honored.
+        ws.send_text(json.dumps({"type": "ping"}))
+        assert json.loads(ws.receive_text()) == {"type": "pong"}
+
+
 def test_run_when_executor_raises_still_delivers_done_sentinel(monkeypatch):
     """If the executor blows up mid-stream, the protocol still yields a final
     'done' after the error envelope. Regression for the previous bug where

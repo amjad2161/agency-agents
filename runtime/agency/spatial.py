@@ -106,9 +106,22 @@ async def spatial_ws_handler(
                     await _send(ws, {"type": "error",
                                      "message": f"unknown gesture: {name!r}"})
             elif t == "run":
-                await _handle_run(
-                    ws, msg, registry=registry, memory=memory, llm_factory=llm_factory,
-                )
+                # Surface ALL exceptions to the client, not just LLMError. The
+                # most concrete way to hit this is `skill: "nonexistent"`,
+                # which raises ValueError out of Planner.plan() — without this
+                # wrapper that would silently kill the WebSocket.
+                try:
+                    await _handle_run(
+                        ws, msg, registry=registry, memory=memory,
+                        llm_factory=llm_factory,
+                    )
+                except WebSocketDisconnect:
+                    raise
+                except Exception as exc:  # noqa: BLE001 — surface to client
+                    await _send(ws, {
+                        "type": "error",
+                        "message": f"{type(exc).__name__}: {exc}",
+                    })
     except WebSocketDisconnect:
         return
 
@@ -134,7 +147,17 @@ async def _handle_run(
         await _send(ws, {"type": "error", "message": str(e)})
         return
 
-    plan = Planner(registry, llm=llm).plan(user_message, hint_slug=skill_hint)
+    loop = asyncio.get_running_loop()
+
+    # Planner.plan() makes a synchronous HTTP call to Anthropic when it has to
+    # disambiguate among multiple candidate skills (the common case). Running
+    # it inline would freeze the asyncio loop — and every other open WebSocket
+    # — for the duration of that ~1s request. Offload to a thread.
+    plan = await loop.run_in_executor(
+        None, lambda: Planner(registry, llm=llm).plan(
+            user_message, hint_slug=skill_hint,
+        ),
+    )
     await _send(ws, {
         "type": "plan",
         "skill": {"slug": plan.skill.slug, "name": plan.skill.name,
@@ -144,7 +167,9 @@ async def _handle_run(
 
     session: Session | None = None
     if session_id:
-        session = memory.load(session_id) or Session(
+        # memory.load() does disk IO; offload alongside the planner call.
+        loaded = await loop.run_in_executor(None, memory.load, session_id)
+        session = loaded or Session(
             session_id=session_id, skill_slug=plan.skill.slug,
         )
 
@@ -153,7 +178,6 @@ async def _handle_run(
     # The executor's stream() is sync; run it in a worker thread so the
     # WebSocket loop stays responsive (heartbeats, gesture events, etc.).
     queue: asyncio.Queue = asyncio.Queue()
-    loop = asyncio.get_running_loop()
 
     def _drain() -> None:
         try:
