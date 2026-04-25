@@ -98,6 +98,24 @@ If you're assembling a stack, complementary community lists:
 
 ## 🎨 The Agency Roster
 
+### 🧠 JARVIS — The Omniscient AI Brainiac
+
+The ultimate super-agent. Not a specialist — a **convergence of every domain into one unified intelligence**. Steve Jobs' vision + Linus Torvalds' engineering + a thousand-agent swarm.
+
+| Module | Specialty | When to Use |
+|--------|-----------|-------------|
+| 🧠 [JARVIS Core](jarvis/jarvis-core.md) | Omniscient orchestrator, polymath intelligence, visionary architect | Any complex task spanning multiple domains, when you need the best of everything |
+| 🔨 [Engineering Module](jarvis/jarvis-engineering.md) | Full-stack development, systems architecture, DevOps, performance | Building production systems across any language, framework, or platform |
+| 🤖 [AI/ML/AGI Module](jarvis/jarvis-ai-ml.md) | Foundation models, computer vision, NLP, autonomous agents, AI safety | ML pipelines, LLM apps, RAG systems, computer vision, agent swarms |
+| ⚙️ [Automation Module](jarvis/jarvis-automation.md) | Desktop control, browser automation, RPA, workflow orchestration | Automating anything — browsers, desktops, pipelines, multi-agent coordination |
+| 🎨 [Design & Creative](jarvis/jarvis-design-creative.md) | UI/UX, brand design, motion, video/audio, generative AI art | Design systems, brand identity, creative production, AI-powered design |
+| 🌍 [AR/XR/Spatial](jarvis/jarvis-ar-xr-spatial.md) | Augmented reality, VR/MR, 3D reconstruction, spatial intelligence | AR apps, VR experiences, spatial computing, 3D vision, XR development |
+| 🎯 [Strategy & Ops](jarvis/jarvis-strategy-ops.md) | Product strategy, project management, business ops, leadership | Strategic planning, team management, business analysis, operational excellence |
+
+> See the full [JARVIS README](jarvis/README.md) for architecture details and usage guide.
+
+---
+
 ### 💻 Engineering Division
 
 Building the future, one commit at a time.

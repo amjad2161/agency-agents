@@ -16,6 +16,7 @@ DEFAULT_CATEGORIES: tuple[str, ...] = (
     "engineering",
     "finance",
     "game-development",
+    "jarvis",
     "marketing",
     "paid-media",
     "product",
