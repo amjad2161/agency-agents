@@ -59,7 +59,10 @@ _DENY_ON_MACHINE: tuple[Pattern[str], ...] = (
     # dd writing to a raw block device.
     re.compile(r"\bdd\b[^|]*\bof=/dev/"),
     # chmod 000 / chmod -R 000 on /, locks you out of your own machine.
-    re.compile(r"\bchmod\s+-?R?\s*000\s+/(?:\s|$)"),
+    # Lowercase `r` because shell_command_is_denied normalizes to lowercase
+    # before matching — an uppercase `R?` here was a no-op and let
+    # `chmod -R 000 /` slip through.
+    re.compile(r"\bchmod\s+-?r?\s*000\s+/(?:\s|$)"),
 )
 
 
@@ -73,7 +76,6 @@ class TrustGate:
     enforce_shell_denylist: bool    # if True, run unless command matches denylist
     sandbox_paths_to_workdir: bool  # if False, paths anywhere are allowed
     block_private_ip_fetches: bool  # if False, web_fetch can hit loopback / RFC1918
-    allow_network_default: bool     # default for ToolContext.allow_network when env isn't set
 
     @classmethod
     def for_mode(cls, mode: TrustMode) -> "TrustGate":
@@ -85,7 +87,6 @@ class TrustGate:
                 enforce_shell_denylist=False,
                 sandbox_paths_to_workdir=True,
                 block_private_ip_fetches=True,
-                allow_network_default=True,
             )
         if mode is TrustMode.ON_MY_MACHINE:
             return cls(
@@ -95,7 +96,6 @@ class TrustGate:
                 enforce_shell_denylist=True,  # tiny catastrophic-typo denylist
                 sandbox_paths_to_workdir=False,
                 block_private_ip_fetches=False,
-                allow_network_default=True,
             )
         # YOLO
         return cls(
@@ -105,7 +105,6 @@ class TrustGate:
             enforce_shell_denylist=False,
             sandbox_paths_to_workdir=False,
             block_private_ip_fetches=False,
-            allow_network_default=True,
         )
 
 
@@ -117,10 +116,21 @@ def shell_command_is_denied(command: str) -> tuple[bool, str | None]:
     """Return (denied, matched_pattern_repr) for a shell command line.
 
     Only consulted when the active TrustGate has `enforce_shell_denylist=True`
-    (i.e. on-my-machine, not yolo). Normalizes whitespace and lowercases
-    before matching.
+    (i.e. on-my-machine, not yolo). Normalizes whitespace, strips shell quotes
+    via shlex round-trip, and lowercases before matching — so quoted variants
+    like `rm -rf "/"` or `dd of='/dev/sda'` match the same patterns as their
+    unquoted forms.
     """
+    import shlex as _shlex
+
     norm = re.sub(r"\s+", " ", command.strip()).lower()
+    try:
+        # shlex.split removes quotes/backslash escapes; join back into a flat
+        # token stream so the regex doesn't have to know about shell quoting.
+        norm = " ".join(_shlex.split(norm))
+    except ValueError:
+        # Malformed quoting — fall through and match against the raw form.
+        pass
     for pat in _DENY_ON_MACHINE:
         if pat.search(norm):
             return True, pat.pattern

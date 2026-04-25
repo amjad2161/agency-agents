@@ -91,6 +91,20 @@ def _truthy(v: str | None) -> bool:
     return (v or "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def _display_path(path: Path, workdir: Path) -> str:
+    """Render `path` relative to `workdir` if possible, else the absolute form.
+
+    In trust modes that lift the workdir sandbox, tools can land outside
+    `workdir`, so `path.relative_to(workdir)` would raise `ValueError`. The
+    caller wants a human-readable string for a success message — falling
+    back to the absolute path is the right answer there.
+    """
+    try:
+        return str(path.relative_to(workdir))
+    except ValueError:
+        return str(path)
+
+
 def _safe_path(ctx: ToolContext, raw: str) -> Path:
     """Resolve `raw` against the workdir.
 
@@ -209,7 +223,7 @@ def _write_file(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
         path.write_text(content, encoding="utf-8")
     except OSError as e:
         return ToolResult(f"Write error: {e}", is_error=True)
-    return ToolResult(f"Wrote {len(content)} chars to {path.relative_to(ctx.workdir)}")
+    return ToolResult(f"Wrote {len(content)} chars to {_display_path(path, ctx.workdir)}")
 
 
 def _edit_file(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
@@ -241,8 +255,7 @@ def _edit_file(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
         path.write_text(text.replace(old, new, 1), encoding="utf-8")
     except OSError as e:
         return ToolResult(f"Write error: {e}", is_error=True)
-    rel = path.relative_to(ctx.workdir)
-    return ToolResult(f"Replaced 1 occurrence in {rel}.")
+    return ToolResult(f"Replaced 1 occurrence in {_display_path(path, ctx.workdir)}.")
 
 
 def _extract_doc(args: dict[str, Any], ctx: ToolContext) -> ToolResult:

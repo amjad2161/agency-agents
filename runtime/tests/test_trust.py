@@ -89,6 +89,16 @@ def test_yolo_lifts_everything(monkeypatch):
     "mkfs.ext4 /dev/sda1",
     "dd if=/dev/zero of=/dev/sda bs=1M",
     "chmod 000 /",
+    # Recursive chmod — input is lowercased before regex, so the pattern
+    # must match `r` not `R`. Catches both -R and -r forms.
+    "chmod -R 000 /",
+    "chmod -r 000 /",
+    # Quoted variants — shlex round-trip strips the quotes so these match
+    # the same patterns as their unquoted forms.
+    'rm -rf "/"',
+    "rm -rf '/'",
+    'dd if=/dev/zero of="/dev/sda" bs=1M',
+    "mkfs.ext4 '/dev/sda1'",
 ])
 def test_denylist_catches_catastrophic_typos(cmd):
     denied, pat = shell_command_is_denied(cmd)
@@ -209,3 +219,65 @@ def test_web_fetch_allows_loopback_when_trust_on(tmp_path: Path, monkeypatch):
     assert res.is_error
     assert "private" not in res.content.lower()
     assert "refusing to fetch" not in res.content.lower()
+
+
+# ----- _write_file / _edit_file display path -----------------------------
+
+
+def test_write_file_outside_workdir_in_trust_mode_does_not_crash(
+    tmp_path: Path, monkeypatch,
+):
+    """Regression: _write_file used path.relative_to(ctx.workdir) for the
+    success message, which raised ValueError when trust mode lifted the
+    sandbox. The agent saw a fake error after a successful write and
+    retried, leading to spurious double-writes."""
+    from agency.tools import ToolContext, _write_file
+
+    monkeypatch.setenv("AGENCY_TRUST_MODE", "on-my-machine")
+    ctx = ToolContext.from_env(workdir=tmp_path)
+
+    # Pick a target outside the workdir but inside another tmp dir we can
+    # write to without elevated permissions.
+    other = tmp_path.parent / "other-dir-for-trust-test"
+    other.mkdir(exist_ok=True)
+    target = other / "out-of-workdir.txt"
+
+    res = _write_file({"path": str(target), "content": "hi"}, ctx)
+    assert not res.is_error, res.content
+    assert target.read_text() == "hi"
+    # Message should contain the absolute path (not crash trying to render
+    # it relative to a workdir it isn't under).
+    assert str(target) in res.content
+
+
+def test_edit_file_outside_workdir_in_trust_mode_does_not_crash(
+    tmp_path: Path, monkeypatch,
+):
+    """Same regression for _edit_file."""
+    from agency.tools import ToolContext, _edit_file
+
+    monkeypatch.setenv("AGENCY_TRUST_MODE", "on-my-machine")
+    ctx = ToolContext.from_env(workdir=tmp_path)
+
+    other = tmp_path.parent / "other-dir-for-trust-test-edit"
+    other.mkdir(exist_ok=True)
+    target = other / "out.txt"
+    target.write_text("hello WORLD\n")
+
+    res = _edit_file({
+        "path": str(target),
+        "old_string": "WORLD",
+        "new_string": "trust",
+    }, ctx)
+    assert not res.is_error, res.content
+    assert target.read_text() == "hello trust\n"
+    assert str(target) in res.content
+
+
+def test_trust_gate_no_longer_carries_dead_field():
+    """Removed: TrustGate.allow_network_default. ToolContext.from_env reads
+    AGENCY_NO_NETWORK directly; that field was unused in every code path
+    and falsely implied per-mode network defaults."""
+    from agency.trust import TrustGate
+    fields = {f.name for f in TrustGate.__dataclass_fields__.values()}
+    assert "allow_network_default" not in fields
