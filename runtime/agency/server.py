@@ -11,6 +11,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
+from . import __version__
+from .diagnostics import optional_deps_status
 from .executor import Executor
 from .llm import AnthropicLLM, LLMConfig, LLMError
 from .memory import MemoryStore, Session
@@ -38,6 +40,63 @@ def build_app(repo: Path | None = None) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         return _CHAT_HTML
+
+    @app.get("/api/version")
+    def version_endpoint() -> dict[str, str]:
+        return {"name": "agency-runtime", "version": __version__}
+
+    import os as _os
+    health_disabled = (_os.environ.get("AGENCY_DISABLE_HEALTH", "").strip().lower()
+                       in ("1", "true", "yes", "on"))
+    if not health_disabled:
+        @app.get("/api/health")
+        def health_endpoint() -> dict[str, Any]:
+            """Liveness + diagnostic snapshot.
+
+            Always responds 200 with a JSON body — k8s readiness probes can
+            key on `status="ok"` for healthy and `status="error"` if any
+            diagnostic step blew up. Body includes enough to debug "why
+            isn't it working" without shelling in.
+
+            Note: this endpoint reveals model defaults, feature-flag state,
+            and whether an API key is configured. The CLI binds to
+            127.0.0.1 by default so it's local-only out of the box; if you
+            bind 0.0.0.0 on an untrusted network, set
+            `AGENCY_DISABLE_HEALTH=1` to turn this off, or front the
+            server with auth.
+            """
+            try:
+                cfg = LLMConfig.from_env()
+                return {
+                    "status": "ok",
+                    "version": __version__,
+                    "skills": {
+                        "count": len(registry),
+                        "categories": registry.categories(),
+                    },
+                    "models": {
+                        "execution": cfg.model,
+                        "planner": cfg.planner_model,
+                    },
+                    "api_key_set": bool(_os.environ.get("ANTHROPIC_API_KEY")),
+                    "features": {
+                        "web_search": cfg.enable_web_search,
+                        "code_execution": cfg.enable_code_execution,
+                        "computer_use": (_os.environ.get("AGENCY_ENABLE_COMPUTER_USE", "")
+                                         .strip().lower() in ("1", "true", "yes", "on")),
+                        "task_budget_tokens": cfg.task_budget_tokens,
+                        "mcp_servers": len(cfg.mcp_servers),
+                        "shell_allowed": (_os.environ.get("AGENCY_ALLOW_SHELL", "")
+                                          .strip().lower() in ("1", "true", "yes", "on")),
+                    },
+                    "optional_deps": optional_deps_status(),
+                }
+            except Exception as e:  # noqa: BLE001 — true always-200 contract
+                return {
+                    "status": "error",
+                    "error": f"{type(e).__name__}: {e}",
+                    "version": __version__,
+                }
 
     @app.get("/api/skills")
     def list_skills() -> dict[str, Any]:
