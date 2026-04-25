@@ -15,11 +15,55 @@ sandboxed shell, and web fetch.
 
 ## Install
 
+### Windows: one-shot installer
+
+If you're on Windows and want zero ceremony, paste this into a
+PowerShell window:
+
+```powershell
+iwr -UseBasicParsing https://raw.githubusercontent.com/amjad2161/agency-agents/main/scripts/install.ps1 | iex
+```
+
+The script handles everything end-to-end: removes the broken
+Microsoft-Store Python aliases, installs Python 3.13 via winget if
+no real interpreter is on PATH, clones the repo to
+`%USERPROFILE%\agency`, builds a venv, installs the runtime + extras,
+prompts for your `ANTHROPIC_API_KEY` (hidden input), persists it as a
+User env var, sets `AGENCY_TRUST_MODE=yolo` via `~/.agency/trust.conf`,
+enables `AGENCY_ENABLE_COMPUTER_USE`, lays down a starter
+`profile.md` and `lessons.md`, runs `agency doctor`, and finally
+launches `agency serve` on `http://127.0.0.1:8765`.
+
+It's idempotent — re-run after a partial-failure run, or to update
+to latest `main`.
+
+If you've already cloned the repo, the equivalent local invocations:
+
+```powershell
+.\scripts\install.ps1                                   # full setup
+.\scripts\install.ps1 -ApiKey "sk-ant-..." -NoLaunch    # unattended
+
+# Or double-click scripts\install.bat (wraps the .ps1 for non-technical users).
+```
+
+### Manual (Mac / Linux / WSL / Windows-power-user)
+
 ```bash
 pip install -e runtime            # base runtime
 pip install -e 'runtime[docs]'    # add PDF / DOCX / XLSX extraction
+pip install -e 'runtime[computer]' # add browser/desktop automation
 pip install -e 'runtime[dev]'     # add pytest
 export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Then the personal-machine setup (one time):
+
+```bash
+agency trust set yolo                   # persistent ~/.agency/trust.conf
+agency profile edit                     # who you are
+agency lessons add "starting now"       # seed the cross-session memory
+agency doctor                           # verify everything's wired up
+agency serve --port 8765                # launch
 ```
 
 ### Config via env
