@@ -291,11 +291,18 @@ def profile_cmd(ctx: click.Context) -> None:
 
 @profile_cmd.command("show")
 def profile_show_cmd() -> None:
-    """Print the current profile, or note that no file is set."""
-    text = load_profile_text()
+    """Print the current profile, or report why nothing is loaded."""
+    p = profile_path()
+    text = load_profile_text(p)
     if text is None:
-        click.echo(f"No profile file at {profile_path()}.")
-        click.echo("Create one with `agency profile edit`.")
+        # Distinguish "no file at all" from "exists but empty/unreadable" so the
+        # user knows whether to create or fix.
+        if not p.exists():
+            click.echo(f"No profile file at {p}.")
+            click.echo("Create one with `agency profile edit`.")
+        else:
+            click.echo(f"Profile at {p} is empty or unreadable.")
+            click.echo("Open it with `agency profile edit` to add content.")
         return
     click.echo(text)
 
@@ -317,11 +324,18 @@ def profile_edit_cmd() -> None:
 def profile_clear_cmd() -> None:
     """Delete the profile file (the runtime will then send no profile context)."""
     p = profile_path()
-    if p.exists():
-        p.unlink()
-        click.echo(f"Removed {p}.")
-    else:
+    if not p.exists():
         click.echo(f"No profile at {p}; nothing to remove.")
+        return
+    if not p.is_file():
+        raise click.ClickException(
+            f"Profile path is not a regular file and cannot be removed: {p}"
+        )
+    try:
+        p.unlink()
+    except OSError as e:
+        raise click.ClickException(f"Could not remove profile {p}: {e}") from e
+    click.echo(f"Removed {p}.")
 
 
 @main.command("serve")

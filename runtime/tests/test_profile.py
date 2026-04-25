@@ -57,6 +57,43 @@ def test_ensure_default_profile_creates_starter_when_absent(tmp_path: Path):
     assert "About me" in p.read_text()
 
 
+def test_ensure_default_profile_rejects_non_file_path(tmp_path: Path):
+    """If the configured path exists but isn't a regular file (e.g. a dir),
+    fail loudly rather than silently skip creation."""
+    d = tmp_path / "is-a-directory"
+    d.mkdir()
+    with pytest.raises(ValueError, match="not a regular file"):
+        ensure_default_profile(d)
+
+
+def test_load_profile_reads_only_up_to_cap(tmp_path: Path, monkeypatch):
+    """Sanity-check that we don't slurp a 100 MB file into memory."""
+    from agency.profile import MAX_PROFILE_BYTES
+    p = tmp_path / "big.md"
+    p.write_text("x" * (MAX_PROFILE_BYTES * 4))
+    # Patch open() to trip if more than MAX+1 is requested in one read.
+    real_open = Path.open
+
+    captured = []
+
+    def _spy_open(self, mode="r", *args, **kwargs):  # type: ignore[no-redef]
+        f = real_open(self, mode, *args, **kwargs)
+        if "b" in mode:
+            real_read = f.read
+            def _spy_read(n=-1):
+                captured.append(n)
+                return real_read(n)
+            f.read = _spy_read  # type: ignore[method-assign]
+        return f
+
+    monkeypatch.setattr(Path, "open", _spy_open)
+    text = load_profile_text(p)
+    assert text is not None
+    assert "[profile truncated to fit]" in text
+    # The first binary read should have asked for at most MAX+1 bytes.
+    assert any(0 < n <= MAX_PROFILE_BYTES + 1 for n in captured), captured
+
+
 def test_ensure_default_profile_doesnt_overwrite(tmp_path: Path):
     p = tmp_path / "existing.md"
     p.write_text("user content")
@@ -128,6 +165,42 @@ def test_executor_omits_profile_block_when_none(tmp_path: Path, monkeypatch):
 
     system = llm.calls[0]["system"]
     assert len(system) == 1
+
+
+def test_executor_rejects_non_string_profile(tmp_path: Path, monkeypatch):
+    """Constructor should TypeError if profile is neither str/None/sentinel."""
+    monkeypatch.setenv("AGENCY_PROFILE", str(tmp_path / "absent.md"))
+    from tests.test_executor import _registry_with_one_skill
+    from agency.executor import Executor
+
+    reg, _ = _registry_with_one_skill()
+    with pytest.raises(TypeError, match="profile must be a str"):
+        Executor(reg, llm=type("L", (), {})(), workdir=tmp_path,
+                 profile=123)  # type: ignore[arg-type]
+
+
+def test_executor_lazy_profile_load_doesnt_fire_at_construction(
+    tmp_path: Path, monkeypatch,
+):
+    """Construction should NOT touch ~/.agency/profile.md — only run() should."""
+    from tests.test_executor import _registry_with_one_skill
+    from agency.executor import Executor
+    from agency import profile as profile_mod
+
+    monkeypatch.setenv("AGENCY_PROFILE", str(tmp_path / "absent.md"))
+
+    calls = {"n": 0}
+    real = profile_mod.load_profile_text
+
+    def _spy(*a, **k):
+        calls["n"] += 1
+        return real(*a, **k)
+
+    monkeypatch.setattr("agency.executor.load_profile_text", _spy)
+
+    reg, _ = _registry_with_one_skill()
+    Executor(reg, llm=type("L", (), {})(), workdir=tmp_path)
+    assert calls["n"] == 0, "profile should not be loaded at __init__"
 
 
 def test_executor_inherits_profile_in_subagent(tmp_path: Path, monkeypatch):

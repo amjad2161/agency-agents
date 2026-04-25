@@ -86,6 +86,14 @@ class ExecutionResult:
     usage: Usage = field(default_factory=Usage)
 
 
+class _ProfileDefault:
+    """Marker type for the default-load-from-disk sentinel on Executor."""
+    __slots__ = ()
+
+
+_PROFILE_DEFAULT = _ProfileDefault()
+
+
 class Executor:
     """One Executor per agent loop. Reuse across turns of a session."""
 
@@ -97,7 +105,7 @@ class Executor:
         tools: list[Tool] | None = None,
         workdir: Path | None = None,
         delegation_depth: int = 0,
-        profile: str | None | object = ...,  # sentinel: load by default
+        profile: "str | None | _ProfileDefault" = _PROFILE_DEFAULT,
     ):
         self.registry = registry
         self.llm = llm
@@ -106,12 +114,26 @@ class Executor:
         self._tool_index = tools_by_name(self.tools)
         self.ctx = ToolContext.from_env(workdir=workdir)
         self._delegation_depth = delegation_depth
-        # Profile resolution: pass `profile=None` to opt out explicitly.
-        # Default (`...`) loads from disk lazily on first call.
-        if profile is ...:
-            self._profile: str | None = load_profile_text()
+
+        # Profile resolution.
+        # - profile=_PROFILE_DEFAULT (the default sentinel): load lazily from
+        #   disk on the first run()/stream() call. Means tests don't pay the
+        #   IO cost up front, and a developer's local ~/.agency/profile.md
+        #   doesn't leak into Executor-construction-only tests.
+        # - profile=None: explicit opt-out; no profile block is sent.
+        # - profile="...": use the provided string verbatim.
+        if isinstance(profile, _ProfileDefault):
+            self._profile_resolved: bool = False
+            self._profile: str | None = None
+        elif profile is None or isinstance(profile, str):
+            self._profile_resolved = True
+            self._profile = profile
         else:
-            self._profile = profile  # type: ignore[assignment]
+            raise TypeError(
+                "profile must be a str, None, or omitted; got "
+                f"{type(profile).__name__}"
+            )
+
         # Inject sibling-skill summary so the `list_skills` tool can describe them.
         summary_lines = [
             f"- {s.slug}: {s.name} ({s.category}) — {s.description}"
@@ -119,6 +141,13 @@ class Executor:
         ]
         setattr(self.ctx, "_skills_summary", "\n".join(summary_lines))
         setattr(self.ctx, "_delegate_runner", self._delegate)
+
+    def _resolve_profile(self) -> str | None:
+        """Load the profile from disk on first use; cached thereafter."""
+        if not self._profile_resolved:
+            self._profile = load_profile_text()
+            self._profile_resolved = True
+        return self._profile
 
     def _bind_session_to_ctx(self, session: Session | None) -> None:
         if session is None:
@@ -140,7 +169,7 @@ class Executor:
         sub = Executor(
             self.registry, self.llm, memory=None, tools=self.tools,
             workdir=self.ctx.workdir, delegation_depth=self._delegation_depth + 1,
-            profile=self._profile,  # subagent gets the same user context
+            profile=self._resolve_profile(),  # subagent gets the same user context
         )
         return sub.run(sub_skill, request).text
 
@@ -151,7 +180,7 @@ class Executor:
 
         self._bind_session_to_ctx(session)
         messages = self._initial_messages(session, user_message)
-        system = AnthropicLLM.cached_system(skill.system_prompt, profile=self._profile)
+        system = AnthropicLLM.cached_system(skill.system_prompt, profile=self._resolve_profile())
         tool_defs = self._tool_defs_for(skill)
 
         turns = 0
@@ -237,7 +266,7 @@ class Executor:
         text_parts: list[str] = []
         usage = Usage()
         messages = self._initial_messages(session, user_message)
-        system = AnthropicLLM.cached_system(skill.system_prompt, profile=self._profile)
+        system = AnthropicLLM.cached_system(skill.system_prompt, profile=self._resolve_profile())
         tool_defs = self._tool_defs_for(skill)
 
         # `try/finally` guarantees memory persistence even if an SDK error or

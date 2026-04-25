@@ -28,22 +28,29 @@ def profile_path() -> Path:
 
 
 def load_profile_text(path: Path | None = None) -> str | None:
-    """Return the profile body (trimmed) or None if absent / empty / too big."""
+    """Return the profile body (trimmed) or None if absent / empty / unreadable.
+
+    If the file exceeds `MAX_PROFILE_BYTES` it's truncated and a marker is
+    appended — the caller still gets text. We only read up to
+    `MAX_PROFILE_BYTES + 1` bytes from disk so a giant file doesn't spike
+    memory in server mode where a new Executor is instantiated per request.
+    """
     p = path or profile_path()
     try:
         if not p.is_file():
             return None
-        raw = p.read_text(encoding="utf-8", errors="replace")
+        with p.open("rb") as f:
+            raw = f.read(MAX_PROFILE_BYTES + 1)
     except OSError:
         return None
-    text = raw.strip()
+    truncated = len(raw) > MAX_PROFILE_BYTES
+    if truncated:
+        raw = raw[:MAX_PROFILE_BYTES]
+    text = raw.decode("utf-8", errors="replace").strip()
     if not text:
         return None
-    if len(text.encode("utf-8", errors="ignore")) > MAX_PROFILE_BYTES:
-        # Refuse rather than silently send a giant prefix.
-        return text.encode("utf-8", errors="ignore")[:MAX_PROFILE_BYTES].decode(
-            "utf-8", errors="ignore"
-        ) + "\n\n[profile truncated to fit]"
+    if truncated:
+        return text + "\n\n[profile truncated to fit]"
     return text
 
 
@@ -69,9 +76,18 @@ PROFILE_TEMPLATE = """\
 
 
 def ensure_default_profile(path: Path | None = None) -> Path:
-    """Create the profile file with a starter template if it doesn't exist."""
+    """Create the profile file with a starter template if it doesn't exist.
+
+    Errors out cleanly (ValueError) if the configured path exists but isn't
+    a regular file (e.g. someone pointed `AGENCY_PROFILE` at a directory) —
+    silently skipping creation would lead to confusing failures downstream
+    in `agency profile edit`.
+    """
     p = path or profile_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    if not p.exists():
-        p.write_text(PROFILE_TEMPLATE, encoding="utf-8")
+    if p.exists():
+        if not p.is_file():
+            raise ValueError(f"Profile path exists but is not a regular file: {p}")
+        return p
+    p.write_text(PROFILE_TEMPLATE, encoding="utf-8")
     return p
