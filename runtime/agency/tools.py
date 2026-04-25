@@ -425,24 +425,33 @@ def _run_shell(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
 
     if shutil.which(head) is None:
         return ToolResult(f"Executable not found: {head}", is_error=True)
+
+    # Use the supervisor: it captures partial output on kill so the
+    # next LLM turn has a real crash dump to read, and hard-caps the
+    # timeout via AGENCY_PROCESS_HARD_TIMEOUT so a runaway agent can't
+    # pin a worker forever. Falls back to a friendly error string on
+    # any uncaught OS-level failure.
+    from .supervisor import crash_message, run_supervised
+
     try:
-        proc = subprocess.run(
+        result = run_supervised(
             tokens,
             cwd=str(ctx.workdir),
-            capture_output=True,
-            text=True,
-            timeout=ctx.timeout_s,
-            check=False,
+            timeout_s=ctx.timeout_s,
         )
-    except subprocess.TimeoutExpired:
-        return ToolResult(f"Timed out after {ctx.timeout_s}s.", is_error=True)
     except OSError as e:
         return ToolResult(f"Exec error: {e}", is_error=True)
-    out = proc.stdout
-    if proc.stderr:
-        out = (out + "\n[stderr]\n" + proc.stderr) if out else proc.stderr
-    out = out + f"\n[exit: {proc.returncode}]"
-    return ToolResult(_truncate(out), is_error=proc.returncode != 0)
+
+    if result.killed_reason:
+        return ToolResult(
+            _truncate(crash_message(result, command)),
+            is_error=True,
+        )
+    out = result.stdout
+    if result.stderr:
+        out = (out + "\n[stderr]\n" + result.stderr) if out else result.stderr
+    out = out + f"\n[exit: {result.returncode}]"
+    return ToolResult(_truncate(out), is_error=result.returncode != 0)
 
 
 def _web_fetch(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
@@ -516,6 +525,60 @@ def _list_skills(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
     if not skills:
         return ToolResult("No sibling skills are registered in this session.", is_error=True)
     return ToolResult(skills)
+
+
+def _recall_lesson(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
+    """Vector-memory lookup over ~/.agency/lessons.md.
+
+    Pulls the top-K most-similar past entries by TF-IDF cosine. Useful
+    when the current task echoes something the agent has seen before
+    and the user wants the lessons file actually consulted instead of
+    treated as a backdrop.
+    """
+    query = (args.get("query") or "").strip()
+    if not query:
+        return ToolResult("Empty query.", is_error=True)
+    k = int(args.get("k", 5))
+
+    # Lazy import: vector_memory pulls in sqlite3 + opens a DB file;
+    # don't pay the cost on every executor instantiation, only when
+    # the tool is actually invoked.
+    from .lessons import load_lessons_text, lessons_path
+    from .vector_memory import VectorMemory, index_lessons
+
+    # Reuse a single VM instance per ToolContext via a lazy attr on ctx.
+    vm = getattr(ctx, "_vector_memory", None)
+    indexed_at = getattr(ctx, "_vector_memory_indexed_at", None)
+    p = lessons_path()
+    mtime = p.stat().st_mtime if p.exists() else 0.0
+
+    if vm is None:
+        vm = VectorMemory()
+        setattr(ctx, "_vector_memory", vm)
+
+    # Re-index when the lessons file has been modified since our
+    # last index pass (or on first use).
+    if indexed_at is None or mtime > indexed_at:
+        text = load_lessons_text(p) or ""
+        if text:
+            index_lessons(vm, text)
+        setattr(ctx, "_vector_memory_indexed_at", mtime)
+
+    if vm.count() == 0:
+        return ToolResult(
+            "Lessons journal is empty — no past lessons to recall yet.",
+        )
+
+    hits = vm.search(query, k=k)
+    if not hits:
+        return ToolResult(f"No lessons matched query: {query!r}")
+
+    out = [f"Top {len(hits)} lesson(s) matching {query!r}:\n"]
+    for i, h in enumerate(hits, 1):
+        out.append(f"--- #{i}  score={h.score:.3f}  id={h.id}")
+        out.append(h.text.strip())
+        out.append("")
+    return ToolResult(_truncate("\n".join(out)))
 
 
 def _delegate_to_skill(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
@@ -769,6 +832,28 @@ def builtin_tools() -> list[Tool]:
             description="List the other agency skills available for delegation.",
             input_schema={"type": "object", "properties": {}},
             func=_list_skills,
+        ),
+        Tool(
+            name="recall_lesson",
+            description=(
+                "Search the user's cross-session lessons journal "
+                "(~/.agency/lessons.md) for past entries similar to "
+                "`query`. Returns the top-K matches by TF-IDF cosine. "
+                "Use this when a request echoes something the user has "
+                "worked on before — the journal often contains the "
+                "exact gotcha or rule you need."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string",
+                              "description": "Free-form search query."},
+                    "k": {"type": "integer", "default": 5,
+                          "description": "Max number of results."},
+                },
+                "required": ["query"],
+            },
+            func=_recall_lesson,
         ),
         Tool(
             name="delegate_to_skill",

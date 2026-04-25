@@ -204,7 +204,81 @@ class Executor:
         )
         return sub.run(sub_skill, request).text
 
+    def _run_via_managed_agents(self, skill: Skill, user_message: str,
+                                session: Session | None) -> ExecutionResult:
+        """Forward a request to Anthropic's hosted managed-agents
+        infrastructure. Streams events back, normalizes them into our
+        ExecutionEvent shape, and returns a regular ExecutionResult so
+        the rest of the runtime is backend-agnostic.
+
+        Activated by AGENCY_BACKEND=managed_agents. The persona's
+        full system prompt (with profile + lessons prelude) is sent
+        as the agent's system message; the user's message is the
+        first event. Tool runs happen in Anthropic's container, not
+        on the user's machine.
+        """
+        from . import managed_agents as _ma
+
+        # Build the same system payload we'd send locally so the
+        # managed agent inherits the persona, profile, and lessons.
+        system_blocks = AnthropicLLM.cached_system(
+            skill.system_prompt,
+            profile=self._resolve_profile(),
+            lessons=self._resolve_lessons(),
+        )
+        system_text = "\n\n---\n\n".join(b["text"] for b in system_blocks)
+
+        backend = _ma.default_backend(
+            name=skill.slug,
+            model=getattr(self.llm.config, "model", "claude-opus-4-7"),
+            system=system_text,
+        )
+
+        events: list[ExecutionEvent] = []
+        text_parts: list[str] = []
+        sess_id = session.session_id if session else None
+        try:
+            for ev in backend.run(user_message, session_id=sess_id):
+                if ev.kind == "text":
+                    text_parts.append(ev.payload)
+                    events.append(ExecutionEvent("text", ev.payload))
+                elif ev.kind == "tool_use":
+                    events.append(ExecutionEvent("tool_use", ev.payload))
+                elif ev.kind == "tool_result":
+                    events.append(ExecutionEvent("tool_result", ev.payload))
+                elif ev.kind == "stop":
+                    events.append(ExecutionEvent("stop", ev.payload))
+                    break
+                elif ev.kind == "error":
+                    events.append(ExecutionEvent("error", ev.payload))
+                    break
+                elif ev.kind == "status":
+                    # Surface the new session_id back to the caller via
+                    # the events stream so a UI can save it.
+                    events.append(ExecutionEvent("status", ev.payload))
+        except Exception as e:  # noqa: BLE001 — surface to caller
+            events.append(ExecutionEvent("error", {
+                "message": f"managed-agents backend failed: {e}",
+            }))
+
+        final_text = "".join(text_parts).strip()
+        return ExecutionResult(
+            text=final_text,
+            turns=1,  # the managed runner counts internally; we see one round-trip
+            events=events,
+            usage=Usage(),  # backend doesn't surface per-call usage in the same shape
+        )
+
     def run(self, skill: Skill, user_message: str, session: Session | None = None) -> ExecutionResult:
+        # Backend switch: when AGENCY_BACKEND=managed_agents is set,
+        # delegate the whole execution to Anthropic's hosted runner
+        # instead of looping locally. This is purely opt-in and falls
+        # back transparently if the SDK doesn't support it.
+        from . import managed_agents as _ma
+
+        if _ma.is_enabled():
+            return self._run_via_managed_agents(skill, user_message, session)
+
         events: list[ExecutionEvent] = []
         text_parts: list[str] = []
         usage = Usage()
