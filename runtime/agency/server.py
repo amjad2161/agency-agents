@@ -101,16 +101,17 @@ def build_app(repo: Path | None = None) -> FastAPI:
 
     @app.get("/spatial", response_class=HTMLResponse)
     def spatial_index() -> str:
-        """Serve the webcam-driven 3D HUD."""
-        path = Path(__file__).parent / "static" / "spatial.html"
-        return path.read_text(encoding="utf-8")
+        """Serve the webcam-driven 3D holographic HUD."""
+        html_path = Path(__file__).parent / "static" / "spatial.html"
+        return html_path.read_text(encoding="utf-8")
 
     @app.websocket("/ws/spatial")
     async def spatial_ws(ws: WebSocket) -> None:
         """Bidirectional WebSocket for the spatial HUD.
 
-        Accepts a closed set of typed events (hello / gesture / run / ping).
-        Anything else is rejected. See `agency.spatial` for the protocol.
+        Accepts a closed set of typed events (hello / gesture / run /
+        hologram_action / ping). Anything else is rejected.
+        See `agency.spatial` for the full protocol.
         """
         await spatial_ws_handler(
             ws, registry=registry, memory=memory, llm_factory=_require_llm,
