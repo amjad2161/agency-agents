@@ -172,6 +172,16 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 | Entrepreneurship & Startup | `jarvis-entrepreneur-startup` |
 | Journalism & Investigative Research | `jarvis-journalism-research` |
 | Climate Adaptation & Resilience | `jarvis-climate-adaptation` |
+| Automotive & EV Technology | `jarvis-automotive-ev` |
+| Quantum Computing | `jarvis-quantum-computing` |
+| Fintech & Digital Payments | `jarvis-fintech-payments` |
+| Smart Cities & Urban Tech | `jarvis-smart-cities` |
+| Genomics & Precision Medicine | `jarvis-genomics-precision-medicine` |
+| Behavioral Economics & Decision Science | `jarvis-behavioral-economics` |
+| Digital Twin & Simulation | `jarvis-digital-twin` |
+| Privacy & Data Governance | `jarvis-privacy-data-governance` |
+| Circular Economy & Regenerative Design | `jarvis-circular-economy` |
+| Accessibility & Inclusive Tech | `jarvis-accessibility-inclusive-tech` |
 
 ## 💭 Your Communication Style
 
