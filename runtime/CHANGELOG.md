@@ -4,6 +4,40 @@ All notable changes to the agency runtime, newest first.
 
 ## Unreleased
 
+### Added
+- **GRAVIS-style HUD chat UI.** New `runtime/agency/static/chat.html`
+  replaces the inline `_CHAT_HTML`. Dark holographic layout, code-rain
+  background, glassmorphism panels, animated AI orb, sidebar with all
+  306+ specialists categorized + searchable, voice input via Web Speech
+  API, terminal typewriter for streaming responses, live trust-mode
+  badge, code-rain canvas. server.py serves it from disk; the inline
+  HTML stays as a developer-mode fallback.
+- **`/api/skills/graph` endpoint.** Returns total counts, per-category
+  breakdown with top slugs, and a heuristic "delegation hubs" list
+  (skills with `core` / `brainiac` / `elder` / `omega` / `orchestrator`
+  / `master` in their slug). Powers the HUD's specialist sidebar.
+- **Vector memory (`agency/vector_memory.py`).** Pure-stdlib TF-IDF
+  similarity store backed by SQLite (no external embedding model
+  required, swap one in via `set_embedder()`). Persists to
+  `~/.agency/vector_memory.db` (override with `AGENCY_VECTOR_DB`).
+  `index_lessons()` splits a `lessons.md` body on `## ` headers and
+  upserts each entry. Used to give the agent fast similarity lookups
+  on past lessons instead of a linear text scan.
+- **Process supervisor (`agency/supervisor.py`).** `run_supervised()`
+  wraps `subprocess.Popen` with timeout (default + hard-cap via
+  `AGENCY_PROCESS_HARD_TIMEOUT`), optional memory limit (psutil),
+  SIGTERM→SIGKILL escalation, partial-output capture on kill, and
+  a structured `crash_dump` field the next LLM turn can read. Powers
+  the kernel-level self-heal loop: agent writes code → supervisor
+  runs → if killed, agent reads the dump and rewrites.
+- **Managed Agents backend (`agency/managed_agents.py`).** Optional
+  alternative LLM/runner that delegates a request to Anthropic's
+  hosted `managed-agents-2026-04-01` infrastructure (creates an
+  agent, environment, session; streams events back). Activate via
+  `AGENCY_BACKEND=managed_agents`. Useful when local trust mode is
+  `off` but the user still wants the model to run code in a
+  sandboxed container.
+
 ### Fixed
 - **Installer hardening (Windows).** Multiple real bugs that could
   silently break the install flow:
