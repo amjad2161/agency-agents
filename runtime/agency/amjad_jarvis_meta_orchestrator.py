@@ -214,13 +214,13 @@ class AmjadJarvisMetaOrchestrator:
         if session_id and self.memory:
             session = self.memory.load(session_id)
             if session is None:
-                session = Session(session_id=session_id)
+                session = Session(session_id=session_id, skill_slug=primary_agent_slug or "")
 
         planner = Planner(self.registry, self.llm)
         plan_result = planner.plan(request, hint_slug=primary_agent_slug)
 
-        executor = self._create_context_aware_executor(plan_result.skill)
-        result = executor.run(plan_result.skill, request, session=session)
+        executor, enhanced_skill = self._create_context_aware_executor(plan_result.skill)
+        result = executor.run(enhanced_skill, request, session=session)
 
         return result
 
@@ -257,14 +257,13 @@ class AmjadJarvisMetaOrchestrator:
 
         return results
 
-    def _create_context_aware_executor(self, skill: Skill) -> Executor:
-        """Create an executor with Amjad's profile injected."""
-        executor = Executor(
-            registry=self.registry,
-            llm=self.llm,
-            memory=self.memory,
-        )
+    def _create_context_aware_executor(self, skill: Skill) -> tuple[Executor, Skill]:
+        """Create an executor with Amjad's profile injected.
 
+        Returns a ``(Executor, enhanced_Skill)`` tuple.  The enhanced skill has
+        Amjad's context prepended to the system prompt and must be passed directly
+        to ``executor.run()`` so the LLM receives the augmented system prompt.
+        """
         original_prompt = skill.system_prompt
         amjad_prefix = self.amjad.to_system_prompt_prefix()
         enhanced_prompt = f"{amjad_prefix}\n\n---\n\n{original_prompt}"
@@ -282,9 +281,17 @@ class AmjadJarvisMetaOrchestrator:
             extra=skill.extra,
         )
 
-        executor.registry = SkillRegistry([enhanced_skill] + [s for s in self.registry.all() if s.slug != skill.slug])
+        enhanced_registry = SkillRegistry(
+            [enhanced_skill] + [s for s in self.registry.all() if s.slug != skill.slug]
+        )
 
-        return executor
+        executor = Executor(
+            registry=enhanced_registry,
+            llm=self.llm,
+            memory=self.memory,
+        )
+
+        return executor, enhanced_skill
 
     def _execute_workflow_agent(self, agent_slug: str, request: str) -> ExecutionResult:
         """Execute a single agent in a workflow."""
@@ -292,8 +299,8 @@ class AmjadJarvisMetaOrchestrator:
         if skill is None:
             raise ValueError(f"Unknown agent slug: {agent_slug}")
 
-        executor = self._create_context_aware_executor(skill)
-        return executor.run(skill, request)
+        executor, enhanced_skill = self._create_context_aware_executor(skill)
+        return executor.run(enhanced_skill, request)
 
     def _identify_workflow_agents(self, request: str) -> list[str]:
         """Auto-identify agents needed for a multi-agent workflow."""

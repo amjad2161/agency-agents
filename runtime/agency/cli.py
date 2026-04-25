@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 
+from .amjad_jarvis_cli import amjad_group
 from .executor import Executor
 from .llm import AnthropicLLM, LLMConfig, LLMError
 from .logging import configure as configure_logging
@@ -41,6 +42,9 @@ def main(ctx: click.Context, repo: Path | None, verbose: int) -> None:
         configure_logging("INFO")
     else:
         configure_logging()  # respects AGENCY_LOG env var; default WARNING
+
+
+main.add_command(amjad_group, "amjad")
 
 
 @main.command("list")
