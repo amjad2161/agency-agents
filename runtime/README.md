@@ -87,6 +87,29 @@ Shows loaded skills per category, which env flags are set, which optional
 deps (`[docs]`, `[computer]`) are installed, and the tool context defaults.
 Run it first if something isn't working.
 
+### Logging
+
+Off by default. Turn on with `AGENCY_LOG=info` (or `debug`) or pass
+`-v` / `-vv` to the CLI. Records:
+
+- `plan.picked slug=<...> reason=<...>` — every routing decision
+- `llm.create elapsed_ms=<...> model=<...> stop=<...>` — every API call
+- `llm.usage input=<...> output=<...> cache_w=<...> cache_r=<...>` — token spend per call
+- `tool.run elapsed_ms=<...> name=<...> is_error=<...>` — every tool invocation
+  (additional `tool.error` / `tool.permission_error` / `tool.unhandled` records when something fails)
+
+```bash
+agency -v run "summarize the README"
+agency -vv run ...        # DEBUG
+AGENCY_LOG=info agency serve
+```
+
+### Programmatic examples
+
+`runtime/examples/` has runnable scripts: list skills, route a prompt,
+stream a full run, drive multi-skill delegation. See
+[`runtime/examples/README.md`](examples/README.md).
+
 ### Debug the tool-use loop
 
 ```bash
