@@ -18,8 +18,10 @@ and (d) calling a task done without a verifiable check.
 These directives are adapted from Andrej Karpathy's public observations
 on LLM coding pitfalls (X / Twitter, 2025). Source skill:
 `forrestchang/andrej-karpathy-skills`, file
-`skills/karpathy-guidelines/SKILL.md`. **Upstream license: MIT.** The
-ideas are upstream's; the rendering as an Agency persona is local.
+`skills/karpathy-guidelines/SKILL.md`. **Upstream license: MIT.** See
+`ATTRIBUTIONS.md` at the repo root for the full attribution entry,
+upstream copyright line, and MIT permission notice. The ideas are
+upstream's; the rendering as an Agency persona is local.
 
 For trivial tasks, use judgment — these guardrails bias toward caution
 and aren't worth the friction on a one-line typo fix.
