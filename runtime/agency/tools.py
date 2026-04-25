@@ -149,30 +149,79 @@ def _truncate(text: str) -> str:
     return best + best_suffix
 
 
-def _is_private_host(host: str) -> bool:
-    """Reject hosts that resolve to loopback, link-local, private, or metadata ranges.
+# Hostnames that resolve to (or are aliases for) cloud instance metadata.
+# Kept separate from the broader private-host literal list so trust modes
+# can lift loopback/RFC1918 without lifting metadata.
+_METADATA_HOSTNAMES = frozenset({
+    "metadata",                    # AWS shorthand
+    "metadata.google.internal",    # GCP
+    "instance-data",               # AWS shorthand
+    "metadata.internal",           # GCP shorthand
+    "metadata.azure.com",          # Azure
+})
 
-    Uses `socket.getaddrinfo` to cover every resolved IP; any private or
-    otherwise-unsafe target disqualifies the host.
-    """
-    import ipaddress
+# Literal IPs used by cloud metadata services. 169.254.169.254 is also
+# link-local (caught by ip.is_link_local) and fd00:ec2::254 is also
+# in fc00::/7 (caught by ip.is_private), but we match them explicitly so
+# the metadata-only gate works even when the broader private check is off.
+_METADATA_IPS = frozenset({
+    "169.254.169.254",   # AWS / Azure / Alibaba
+    "fd00:ec2::254",     # AWS IPv6
+})
+
+
+def _resolve_ips(host: str) -> list[str] | None:
+    """Resolve `host` to its set of IP literals. Returns None on DNS failure."""
     import socket
-
-    # Quick literal checks on the host string.
-    lowered = host.lower().strip()
-    if lowered in ("localhost", "metadata", "metadata.google.internal",
-                   "instance-data", "metadata.internal"):
-        return True
-
     try:
         infos = socket.getaddrinfo(host, None)
     except (socket.gaierror, UnicodeError):
+        return None
+    return [info[4][0].split("%")[0] for info in infos]
+
+
+def _is_metadata_host(host: str) -> bool:
+    """True if `host` is a cloud-instance metadata endpoint.
+
+    Checked separately from the broader private-host check so trust modes
+    can allow loopback / RFC1918 traffic without exposing IAM credentials
+    on dev boxes that happen to be EC2 / GCE / Azure instances.
+    """
+    lowered = host.lower().strip()
+    if lowered in _METADATA_HOSTNAMES:
+        return True
+    ips = _resolve_ips(host)
+    if ips is None:
+        # DNS failure: treat as metadata — safer to reject than leak creds.
+        return True
+    for ip_str in ips:
+        if ip_str in _METADATA_IPS:
+            return True
+    return False
+
+
+def _is_private_host(host: str) -> bool:
+    """Reject hosts that resolve to loopback, link-local, or private ranges.
+
+    Uses `socket.getaddrinfo` to cover every resolved IP; any private or
+    otherwise-unsafe target disqualifies the host. Metadata endpoints are
+    handled by `_is_metadata_host`; this function returns True for them
+    too (they're a strict subset of private), so callers that want to gate
+    metadata separately should consult `_is_metadata_host` directly.
+    """
+    import ipaddress
+
+    # Quick literal checks on the host string.
+    lowered = host.lower().strip()
+    if lowered in ("localhost",) or lowered in _METADATA_HOSTNAMES:
+        return True
+
+    ips = _resolve_ips(host)
+    if ips is None:
         # DNS failure: treat as private — safer to reject than leak.
         return True
 
-    for info in infos:
-        sockaddr = info[4]
-        ip_str = sockaddr[0].split("%")[0]  # strip zone id if present
+    for ip_str in ips:
         try:
             ip = ipaddress.ip_address(ip_str)
         except ValueError:
@@ -181,9 +230,7 @@ def _is_private_host(host: str) -> bool:
                 or ip.is_multicast or ip.is_reserved
                 or ip.is_unspecified):
             return True
-        # AWS / GCP metadata endpoints use 169.254.169.254 (caught by link_local
-        # above) and fd00:ec2::254 (caught by is_private). Extra safety belt:
-        if ip_str == "169.254.169.254":
+        if ip_str in _METADATA_IPS:
             return True
     return False
 
@@ -408,15 +455,25 @@ def _web_fetch(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
             follow_redirects=False, timeout=ctx.timeout_s,
             headers={"User-Agent": "agency-runtime/0.1"},
         ) as client:
-            block_private = trust_gate().block_private_ip_fetches
+            tgate = trust_gate()
+            block_private = tgate.block_private_ip_fetches
+            block_metadata = tgate.block_metadata_fetches
             for hop in range(6):
                 parsed = httpx.URL(url)
                 host = parsed.host
                 if not host:
                     return ToolResult("URL has no host.", is_error=True)
+                # Metadata gate runs even when the private-IP gate is off:
+                # in `on-my-machine` we let the agent reach loopback/RFC1918
+                # but keep instance-credential endpoints blocked.
+                if block_metadata and _is_metadata_host(host):
+                    return ToolResult(
+                        f"Refusing to fetch {host}: cloud instance metadata address.",
+                        is_error=True,
+                    )
                 if block_private and _is_private_host(host):
                     return ToolResult(
-                        f"Refusing to fetch {host}: private / loopback / metadata address.",
+                        f"Refusing to fetch {host}: private / loopback address.",
                         is_error=True,
                     )
                 req = client.build_request("GET", url)

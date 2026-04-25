@@ -57,6 +57,7 @@ def test_off_gate_keeps_all_existing_guards(monkeypatch):
     assert g.enforce_shell_denylist is False
     assert g.sandbox_paths_to_workdir is True
     assert g.block_private_ip_fetches is True
+    assert g.block_metadata_fetches is True
 
 
 def test_on_my_machine_lifts_sandboxes_keeps_denylist(monkeypatch):
@@ -67,6 +68,9 @@ def test_on_my_machine_lifts_sandboxes_keeps_denylist(monkeypatch):
     assert g.enforce_shell_denylist is True
     assert g.sandbox_paths_to_workdir is False
     assert g.block_private_ip_fetches is False
+    # Metadata IPs stay blocked: even on a trusted dev box, an agent
+    # reading IAM creds from 169.254.169.254 is a credential-exfil pathway.
+    assert g.block_metadata_fetches is True
 
 
 def test_yolo_lifts_everything(monkeypatch):
@@ -76,6 +80,7 @@ def test_yolo_lifts_everything(monkeypatch):
     assert g.enforce_shell_denylist is False
     assert g.sandbox_paths_to_workdir is False
     assert g.block_private_ip_fetches is False
+    assert g.block_metadata_fetches is False
 
 
 # ----- shell denylist -----------------------------------------------------
@@ -207,18 +212,81 @@ def test_web_fetch_blocks_loopback_when_trust_off(tmp_path: Path, monkeypatch):
 
 
 def test_web_fetch_allows_loopback_when_trust_on(tmp_path: Path, monkeypatch):
-    """In trust mode, the SSRF block is lifted. We don't have a real
-    loopback server, so we expect a connection error instead of the
-    'Refusing to fetch' SSRF message."""
+    """In trust mode, the private-IP SSRF block is lifted. Stub the
+    transport so the test doesn't depend on whether port 1 happens to be
+    closed (CI sandboxes have surprised us here): we just verify the
+    request reached the network layer instead of being short-circuited
+    by the 'Refusing to fetch' SSRF check."""
+    import httpx
+
     from agency.tools import ToolContext, _web_fetch
 
     monkeypatch.setenv("AGENCY_TRUST_MODE", "on-my-machine")
     ctx = ToolContext.from_env(workdir=tmp_path)
-    res = _web_fetch({"url": "http://127.0.0.1:1/"}, ctx)
-    # We should hit a Fetch error (refused / unreachable), not the SSRF refusal.
+
+    def fake_send(self, request, **kwargs):
+        raise httpx.ConnectError("stubbed: no connection")
+
+    monkeypatch.setattr(httpx.Client, "send", fake_send)
+
+    res = _web_fetch({"url": "http://127.0.0.1:8080/"}, ctx)
+    # We should hit a Fetch error (the stubbed ConnectError), not the SSRF refusal.
     assert res.is_error
-    assert "private" not in res.content.lower()
     assert "refusing to fetch" not in res.content.lower()
+    assert "fetch error" in res.content.lower()
+
+
+def test_web_fetch_blocks_metadata_even_in_on_my_machine(tmp_path: Path, monkeypatch):
+    """Cloud instance metadata stays blocked in on-my-machine mode.
+
+    Lifting the private-IP gate so an agent can hit a local dev server is
+    fine; lifting it so it can read IAM creds from 169.254.169.254 on an
+    EC2 dev box is a credential-exfil pathway. Verify the metadata gate
+    is independent and stays on by default in trust mode."""
+    import httpx
+
+    from agency.tools import ToolContext, _web_fetch
+
+    monkeypatch.setenv("AGENCY_TRUST_MODE", "on-my-machine")
+    ctx = ToolContext.from_env(workdir=tmp_path)
+
+    # Belt-and-braces: also stub the transport so a misconfigured CI
+    # box doesn't accidentally hit the real metadata endpoint if our
+    # gate ever regressed. The assertion below catches the regression
+    # via the ToolResult message; this stub keeps the test hermetic.
+    def fake_send(self, request, **kwargs):
+        raise AssertionError(
+            "metadata gate failed to short-circuit — request reached the network",
+        )
+
+    monkeypatch.setattr(httpx.Client, "send", fake_send)
+
+    res = _web_fetch({"url": "http://169.254.169.254/latest/meta-data/"}, ctx)
+    assert res.is_error
+    assert "metadata" in res.content.lower()
+
+
+def test_web_fetch_allows_metadata_in_yolo(tmp_path: Path, monkeypatch):
+    """YOLO is the documented escape hatch — no guardrails. Verify the
+    metadata gate is the only thing standing between trust mode and the
+    metadata endpoint, and that yolo lifts it."""
+    import httpx
+
+    from agency.tools import ToolContext, _web_fetch
+
+    monkeypatch.setenv("AGENCY_TRUST_MODE", "yolo")
+    ctx = ToolContext.from_env(workdir=tmp_path)
+
+    def fake_send(self, request, **kwargs):
+        raise httpx.ConnectError("stubbed: no connection")
+
+    monkeypatch.setattr(httpx.Client, "send", fake_send)
+
+    res = _web_fetch({"url": "http://169.254.169.254/latest/meta-data/"}, ctx)
+    # Reaches the network (stubbed ConnectError), not refused by the gate.
+    assert res.is_error
+    assert "refusing to fetch" not in res.content.lower()
+    assert "fetch error" in res.content.lower()
 
 
 # ----- _write_file / _edit_file display path -----------------------------

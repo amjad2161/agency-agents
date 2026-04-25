@@ -391,8 +391,10 @@ try:
     from .amjad_jarvis_cli import amjad_group as _amjad_group
     main.add_command(_amjad_group, name="amjad")
 except ImportError:
-    # The amjad_jarvis module is optional — if it fails to import for any
-    # reason we don't want to break the rest of the CLI.
+    # The amjad_jarvis module is optional — if it (or one of its
+    # dependencies) isn't installed, skip wiring the subcommand. Other
+    # import-time errors (SyntaxError, attribute lookups, etc.) are
+    # bugs and should still surface instead of being silently swallowed.
     pass
 
 

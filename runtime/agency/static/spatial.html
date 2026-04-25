@@ -622,24 +622,28 @@ function drawSkeleton(poseLandmarks) {
 
   const W = overlayEl.width, H = overlayEl.height;
 
-  // Draw connections
+  // Draw connections.
+  // The overlay canvas already has CSS `transform: scaleX(-1)` (matching
+  // the mirrored #cam video), so we draw at the raw landmark x and let
+  // the CSS handle the selfie-view flip. Flipping in JS too would
+  // double-mirror and the skeleton would appear on the opposite side
+  // of the body from the video.
   overlayCtx.strokeStyle = "rgba(80,180,255,0.65)";
   overlayCtx.lineWidth   = 1.5;
   for (const [a, b] of POSE_CONNECTIONS) {
     const la = poseLandmarks[a], lb = poseLandmarks[b];
     if (!la || !lb) continue;
-    // landmarks are in 0..1 normalized coords; mirror X for the CSS-mirrored video
     overlayCtx.beginPath();
-    overlayCtx.moveTo((1 - la.x) * W, la.y * H);
-    overlayCtx.lineTo((1 - lb.x) * W, lb.y * H);
+    overlayCtx.moveTo(la.x * W, la.y * H);
+    overlayCtx.lineTo(lb.x * W, lb.y * H);
     overlayCtx.stroke();
   }
 
-  // Draw joints
+  // Draw joints (same single-mirror reasoning as above).
   for (const lm of poseLandmarks) {
     if (!lm) continue;
     overlayCtx.beginPath();
-    overlayCtx.arc((1 - lm.x) * W, lm.y * H, 2.5, 0, Math.PI * 2);
+    overlayCtx.arc(lm.x * W, lm.y * H, 2.5, 0, Math.PI * 2);
     overlayCtx.fillStyle = "rgba(120,210,255,0.8)";
     overlayCtx.fill();
   }

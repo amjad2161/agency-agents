@@ -76,6 +76,13 @@ class TrustGate:
     enforce_shell_denylist: bool    # if True, run unless command matches denylist
     sandbox_paths_to_workdir: bool  # if False, paths anywhere are allowed
     block_private_ip_fetches: bool  # if False, web_fetch can hit loopback / RFC1918
+    # Cloud metadata endpoints (169.254.169.254, fd00:ec2::254, GCE/Azure
+    # variants) leak instance credentials. We block them even in
+    # `on-my-machine` because there's almost no legitimate reason for an
+    # agent to read your IAM creds — and on a dev box that *is* an EC2
+    # instance, lifting this would be a credential-exfil pathway. Only
+    # `yolo` lifts it.
+    block_metadata_fetches: bool
 
     @classmethod
     def for_mode(cls, mode: TrustMode) -> "TrustGate":
@@ -87,6 +94,7 @@ class TrustGate:
                 enforce_shell_denylist=False,
                 sandbox_paths_to_workdir=True,
                 block_private_ip_fetches=True,
+                block_metadata_fetches=True,
             )
         if mode is TrustMode.ON_MY_MACHINE:
             return cls(
@@ -96,6 +104,7 @@ class TrustGate:
                 enforce_shell_denylist=True,  # tiny catastrophic-typo denylist
                 sandbox_paths_to_workdir=False,
                 block_private_ip_fetches=False,
+                block_metadata_fetches=True,  # see field comment above
             )
         # YOLO
         return cls(
@@ -105,6 +114,7 @@ class TrustGate:
             enforce_shell_denylist=False,
             sandbox_paths_to_workdir=False,
             block_private_ip_fetches=False,
+            block_metadata_fetches=False,
         )
 
 
