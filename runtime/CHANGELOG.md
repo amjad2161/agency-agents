@@ -26,6 +26,17 @@ All notable changes to the agency runtime, newest first.
   cached system block before every persona's body. Subagents launched
   via `delegate_to_skill` inherit the same profile. New `agency profile`
   CLI subgroup: `show` / `path` / `edit` / `clear`.
+- **Spatial HUD.** `GET /spatial` serves a self-contained page that runs
+  MediaPipe Hands in the browser, classifies pinch / open-palm / fist /
+  point / swipe gestures, and routes them over a `WS /ws/spatial`
+  WebSocket into the same Executor the chat UI uses. A Three.js scene
+  renders an over-the-camera HUD with a cursor sphere on the index
+  fingertip. The WebSocket protocol accepts only a closed set of
+  events (`hello`, `gesture`, `run`, `ping`); arbitrary "action"
+  strings are rejected. Backend handler in `agency/spatial.py`,
+  frontend in `agency/static/spatial.html`. The spatial UI doesn't
+  add authority — it produces the same `run` events the chat UI does
+  and passes through the existing per-skill tool policy.
 - **Structured logging.** A single `agency` named logger (`runtime/agency/logging.py`).
   Off by default; enable with `AGENCY_LOG=info` / `debug` or CLI `-v` / `-vv`.
   Emits records for every routing decision, LLM call (with timings + token

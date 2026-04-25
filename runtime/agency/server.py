@@ -7,7 +7,7 @@ from typing import Any
 
 import json
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -18,6 +18,7 @@ from .llm import AnthropicLLM, LLMConfig, LLMError
 from .memory import MemoryStore, Session
 from .planner import Planner
 from .skills import SkillRegistry, discover_repo_root
+from .spatial import spatial_ws_handler
 
 
 class RunRequest(BaseModel):
@@ -97,6 +98,23 @@ def build_app(repo: Path | None = None) -> FastAPI:
                     "error": f"{type(e).__name__}: {e}",
                     "version": __version__,
                 }
+
+    @app.get("/spatial", response_class=HTMLResponse)
+    def spatial_index() -> str:
+        """Serve the webcam-driven 3D HUD."""
+        path = Path(__file__).parent / "static" / "spatial.html"
+        return path.read_text(encoding="utf-8")
+
+    @app.websocket("/ws/spatial")
+    async def spatial_ws(ws: WebSocket) -> None:
+        """Bidirectional WebSocket for the spatial HUD.
+
+        Accepts a closed set of typed events (hello / gesture / run / ping).
+        Anything else is rejected. See `agency.spatial` for the protocol.
+        """
+        await spatial_ws_handler(
+            ws, registry=registry, memory=memory, llm_factory=_require_llm,
+        )
 
     @app.get("/api/skills")
     def list_skills() -> dict[str, Any]:
