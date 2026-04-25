@@ -17,6 +17,7 @@ AGENT_DIRS=(
   engineering
   finance
   game-development
+  jarvis
   marketing
   paid-media
   product
