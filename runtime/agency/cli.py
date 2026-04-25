@@ -12,6 +12,11 @@ from .llm import AnthropicLLM, LLMConfig, LLMError
 from .logging import configure as configure_logging
 from .memory import MemoryStore, Session
 from .planner import Planner
+from .profile import (
+    ensure_default_profile,
+    load_profile_text,
+    profile_path,
+)
 from .skills import SkillRegistry, discover_repo_root
 
 
@@ -268,6 +273,69 @@ def doctor_cmd(ctx: click.Context) -> None:
     )
 
     click.echo("\nDone.")
+
+
+@main.group("profile", invoke_without_command=True)
+@click.pass_context
+def profile_cmd(ctx: click.Context) -> None:
+    """Manage the always-on user profile (~/.agency/profile.md by default).
+
+    Anything in this file is sent to every agent as background context.
+    Run `agency profile show` (or just `agency profile`) to view it,
+    `agency profile path` to print where it lives, `agency profile edit`
+    to open it in $EDITOR, and `agency profile clear` to delete it.
+    """
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(profile_show_cmd)
+
+
+@profile_cmd.command("show")
+def profile_show_cmd() -> None:
+    """Print the current profile, or report why nothing is loaded."""
+    p = profile_path()
+    text = load_profile_text(p)
+    if text is None:
+        # Distinguish "no file at all" from "exists but empty/unreadable" so the
+        # user knows whether to create or fix.
+        if not p.exists():
+            click.echo(f"No profile file at {p}.")
+            click.echo("Create one with `agency profile edit`.")
+        else:
+            click.echo(f"Profile at {p} is empty or unreadable.")
+            click.echo("Open it with `agency profile edit` to add content.")
+        return
+    click.echo(text)
+
+
+@profile_cmd.command("path")
+def profile_path_cmd() -> None:
+    """Print the path the runtime would read."""
+    click.echo(str(profile_path()))
+
+
+@profile_cmd.command("edit")
+def profile_edit_cmd() -> None:
+    """Open the profile in $EDITOR (creating a starter template if needed)."""
+    p = ensure_default_profile()
+    click.edit(filename=str(p))
+
+
+@profile_cmd.command("clear")
+def profile_clear_cmd() -> None:
+    """Delete the profile file (the runtime will then send no profile context)."""
+    p = profile_path()
+    if not p.exists():
+        click.echo(f"No profile at {p}; nothing to remove.")
+        return
+    if not p.is_file():
+        raise click.ClickException(
+            f"Profile path is not a regular file and cannot be removed: {p}"
+        )
+    try:
+        p.unlink()
+    except OSError as e:
+        raise click.ClickException(f"Could not remove profile {p}: {e}") from e
+    click.echo(f"Removed {p}.")
 
 
 @main.command("serve")

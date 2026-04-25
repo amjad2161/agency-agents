@@ -15,9 +15,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from agency.executor import Executor
 from agency.memory import MemoryStore, Session
 from agency.skills import SkillRegistry, discover_repo_root
+
+
+@pytest.fixture(autouse=True)
+def _no_user_profile(monkeypatch, tmp_path):
+    """Isolate every test in this file from the developer's ~/.agency/profile.md.
+
+    Without this the executor's lazy profile load could pick up a real file
+    on a dev machine and add an unexpected second system block, breaking
+    assertions that count blocks.
+    """
+    monkeypatch.setenv("AGENCY_PROFILE", str(tmp_path / "no-such-profile.md"))
 
 
 @dataclass

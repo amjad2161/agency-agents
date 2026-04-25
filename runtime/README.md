@@ -38,6 +38,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `AGENCY_NO_NETWORK=1` | Disable `web_fetch`. |
 | `AGENCY_TOOL_TIMEOUT` | Per-tool wall-clock seconds (default 30). |
 | `AGENCY_DISABLE_HEALTH=1` | Don't register `/api/health`. Set this if you bind 0.0.0.0 on an untrusted network and don't want the diagnostic snapshot exposed. |
+| `AGENCY_PROFILE` | Override the profile file path (default `~/.agency/profile.md`). |
 
 Example MCP config:
 
@@ -203,6 +204,25 @@ tools_allowed: [read_file, list_dir, web_fetch, list_skills]
 The filter is applied at the request level — the disallowed tools
 are never declared to the API for that skill, so the model can't
 call them.
+
+## User profile (always-on context)
+
+`~/.agency/profile.md` — if it exists — is sent to every agent as
+background context (a separate cached system block, prepended before
+the persona body). It's the difference between an agent that has to
+re-learn who you are every session and one that already knows your
+name, role, and preferences.
+
+```bash
+agency profile          # show current
+agency profile path     # print where it lives
+agency profile edit     # open in $EDITOR (creates a starter template if missing)
+agency profile clear    # delete it
+```
+
+Set `AGENCY_PROFILE` to override the path. Subagents (via
+`delegate_to_skill`) inherit the same profile so the context stays
+consistent across hops.
 
 ## Delegation
 

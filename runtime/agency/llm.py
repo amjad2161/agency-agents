@@ -201,16 +201,27 @@ class AnthropicLLM:
         return kwargs, use_beta
 
     @staticmethod
-    def cached_system(text: str) -> list[dict[str, Any]]:
+    def cached_system(text: str, profile: str | None = None) -> list[dict[str, Any]]:
         """Build a system prompt list with a cache_control breakpoint at the end.
 
-        The persona body is reused on every turn, so caching it pays for itself
-        after the second request.
+        If `profile` is provided, it's prepended as a separate text block
+        (no breakpoint of its own — the breakpoint stays on the persona
+        block, and Anthropic caches every system block before it as part
+        of the same prefix). Skipping `profile` produces the original
+        single-block shape.
         """
-        return [
-            {
+        blocks: list[dict[str, Any]] = []
+        if profile:
+            blocks.append({
                 "type": "text",
-                "text": text,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ]
+                "text": (
+                    "Always-on user profile (background context, not a request):\n\n"
+                    + profile
+                ),
+            })
+        blocks.append({
+            "type": "text",
+            "text": text,
+            "cache_control": {"type": "ephemeral"},
+        })
+        return blocks
