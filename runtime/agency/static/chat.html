@@ -418,7 +418,11 @@ const greetingSkills = $('greeting-skills');
 
 const state = {
   skills: [],
-  selectedSkill: null,
+  // Default to jarvis-brainiac so meta-questions ("what are you", "tell
+  // me about yourself") don't get auto-routed to a domain specialist
+  // (e.g. Anthropologist) which would describe ITS scope, not the
+  // system's. The user can clear this by clicking the active card again.
+  selectedSkill: localStorage.getItem('jarvis_skill') || 'jarvis-brainiac',
   sessionId: localStorage.getItem('jarvis_session') || null,
   history: [],
 };
@@ -499,6 +503,8 @@ function renderSkills(filter = '') {
         <span class="skill-cat">${s.slug.split('-')[0]}</span>`;
       card.addEventListener('click', () => {
         state.selectedSkill = state.selectedSkill === s.slug ? null : s.slug;
+        if (state.selectedSkill) localStorage.setItem('jarvis_skill', state.selectedSkill);
+        else localStorage.removeItem('jarvis_skill');
         renderSkills(filter);
         setStatus(state.selectedSkill ? `Routing to: ${s.slug}` : 'Auto-route');
       });
