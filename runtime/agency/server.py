@@ -151,7 +151,13 @@ def build_app(repo: Path | None = None) -> FastAPI:
         except LLMError as e:
             raise HTTPException(503, str(e))
         planner = Planner(registry, llm=llm)
-        plan = planner.plan(body.message, hint_slug=body.skill)
+        try:
+            # Planner.plan raises ValueError for an unknown hint slug.
+            # Surface as 400 (bad input from the client) instead of letting
+            # FastAPI render the default 500.
+            plan = planner.plan(body.message, hint_slug=body.skill)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
         session: Session | None = None
         if body.session_id:
@@ -182,7 +188,10 @@ def build_app(repo: Path | None = None) -> FastAPI:
         except LLMError as e:
             raise HTTPException(503, str(e))
         planner = Planner(registry, llm=llm)
-        plan = planner.plan(body.message, hint_slug=body.skill)
+        try:
+            plan = planner.plan(body.message, hint_slug=body.skill)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
         session: Session | None = None
         if body.session_id:
