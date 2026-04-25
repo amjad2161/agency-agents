@@ -17,33 +17,43 @@ sandboxed shell, and web fetch.
 
 ### Windows: one-shot installer
 
-If you're on Windows and want zero ceremony, paste this into a
-PowerShell window:
+**Easiest path — download a single `.bat`, double-click it.**
+
+1. Right-click this link → **Save Link As** → save to your Desktop:
+   [https://raw.githubusercontent.com/amjad2161/agency-agents/main/scripts/install.bat](https://raw.githubusercontent.com/amjad2161/agency-agents/main/scripts/install.bat)
+2. Double-click `install.bat` on your Desktop.
+3. Wait 5–10 minutes the first time.
+
+The `.bat` is tiny and self-bootstrapping — it always pulls the
+latest `install.ps1` from GitHub at run time (with a cache-bust query
+string so you never hit a stale CDN copy) and runs it. Re-running
+the same file later updates your install.
+
+**Alternative — one PowerShell line if you prefer:**
 
 ```powershell
-iwr -UseBasicParsing https://raw.githubusercontent.com/amjad2161/agency-agents/main/scripts/install.ps1 | iex
+iwr -UseBasicParsing https://raw.githubusercontent.com/amjad2161/agency-agents/main/scripts/install.bat -OutFile $env:USERPROFILE\Desktop\agency-install.bat; & $env:USERPROFILE\Desktop\agency-install.bat
 ```
 
-The script handles everything end-to-end: removes the broken
-Microsoft-Store Python aliases, installs Python 3.13 via winget if
-no real interpreter is on PATH, clones the repo to
-`%USERPROFILE%\agency`, builds a venv, installs the runtime + extras,
-prompts for your `ANTHROPIC_API_KEY` (hidden input), persists it as a
-User env var, sets `AGENCY_TRUST_MODE=yolo` via `~/.agency/trust.conf`,
-enables `AGENCY_ENABLE_COMPUTER_USE`, lays down a starter
-`profile.md` and `lessons.md`, runs `agency doctor`, and finally
-launches `agency serve` on `http://127.0.0.1:8765`.
+Either path runs the same installer. It:
 
-It's idempotent — re-run after a partial-failure run, or to update
-to latest `main`.
+- Removes the Microsoft-Store Python execution aliases (they break pip)
+- Installs Python 3.13 via winget if no real interpreter is on PATH
+- Clones the repo to `%USERPROFILE%\agency` (or pulls latest `main`)
+- Builds a venv, installs the runtime + `[docs]` + `[computer]` extras
+- Prompts (hidden) for `ANTHROPIC_API_KEY` and saves it to User env
+- Enables `AGENCY_ENABLE_COMPUTER_USE`
+- Sets `AGENCY_TRUST_MODE=yolo` (persistent `~/.agency/trust.conf`)
+- Lays down starter `profile.md` and `lessons.md`
+- Runs `agency doctor`
+- Launches `agency serve` on `http://127.0.0.1:8765`
 
-If you've already cloned the repo, the equivalent local invocations:
+Idempotent — re-run after any failure to retry / update.
+
+**For a full unattended install (e.g. fleet rollout):**
 
 ```powershell
-.\scripts\install.ps1                                   # full setup
-.\scripts\install.ps1 -ApiKey "sk-ant-..." -NoLaunch    # unattended
-
-# Or double-click scripts\install.bat (wraps the .ps1 for non-technical users).
+.\scripts\install.ps1 -ApiKey "sk-ant-..." -NoLaunch
 ```
 
 ### Manual (Mac / Linux / WSL / Windows-power-user)
