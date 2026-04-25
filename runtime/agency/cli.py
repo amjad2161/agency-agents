@@ -13,6 +13,11 @@ from .llm import AnthropicLLM, LLMConfig, LLMError
 from .logging import configure as configure_logging
 from .memory import MemoryStore, Session
 from .planner import Planner
+from .lessons import (
+    ensure_default_lessons,
+    lessons_path,
+    load_lessons_text,
+)
 from .profile import (
     ensure_default_profile,
     load_profile_text,
@@ -432,6 +437,90 @@ def profile_clear_cmd() -> None:
         p.unlink()
     except OSError as e:
         raise click.ClickException(f"Could not remove profile {p}: {e}") from e
+    click.echo(f"Removed {p}.")
+
+
+@main.group("lessons", invoke_without_command=True)
+@click.pass_context
+def lessons_cmd(ctx: click.Context) -> None:
+    """Manage the cross-session lessons journal (~/.agency/lessons.md).
+
+    The lessons file is read at the start of every agent run — it's the
+    durable cross-session memory that lets the agent carry context
+    forward without re-training. Subcommands:
+      show / (bare)   — print current lessons
+      path            — print the resolved file path
+      edit            — open in $EDITOR (creates a starter if missing)
+      add <line>      — append a one-liner with a timestamp
+      clear           — delete the file
+    """
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(lessons_show_cmd)
+
+
+@lessons_cmd.command("show")
+def lessons_show_cmd() -> None:
+    """Print the current lessons journal."""
+    p = lessons_path()
+    text = load_lessons_text(p)
+    if text is None:
+        if not p.exists():
+            click.echo(f"No lessons file at {p}.")
+            click.echo("Create one with `agency lessons edit` or `agency lessons add ...`.")
+        else:
+            click.echo(f"Lessons at {p} is empty or unreadable.")
+        return
+    click.echo(text)
+
+
+@lessons_cmd.command("path")
+def lessons_path_cmd() -> None:
+    """Print the path the runtime would read."""
+    click.echo(str(lessons_path()))
+
+
+@lessons_cmd.command("edit")
+def lessons_edit_cmd() -> None:
+    """Open the lessons journal in $EDITOR (creating a starter if needed)."""
+    p = ensure_default_lessons()
+    click.edit(filename=str(p))
+
+
+@lessons_cmd.command("add")
+@click.argument("text", nargs=-1, required=True)
+def lessons_add_cmd(text: tuple[str, ...]) -> None:
+    """Append a one-liner lesson with a timestamp.
+
+    Quote multi-word lessons or pass them as separate args; the runtime
+    joins them with a single space.
+    """
+    from datetime import datetime, timezone
+
+    p = ensure_default_lessons()
+    line = " ".join(text).strip()
+    if not line:
+        raise click.ClickException("Lesson text cannot be empty.")
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    with p.open("a", encoding="utf-8") as f:
+        f.write(f"\n## {stamp} · quick note\n\n{line}\n")
+    click.echo(f"Appended to {p}.")
+
+
+@lessons_cmd.command("clear")
+def lessons_clear_cmd() -> None:
+    """Delete the lessons file (the runtime will then send no lessons context)."""
+    p = lessons_path()
+    if not p.exists():
+        click.echo(f"No lessons at {p}; nothing to remove.")
+        return
+    if not p.is_file():
+        raise click.ClickException(
+            f"Lessons path is not a regular file and cannot be removed: {p}"
+        )
+    try:
+        p.unlink()
+    except OSError as e:
+        raise click.ClickException(f"Could not remove lessons {p}: {e}") from e
     click.echo(f"Removed {p}.")
 
 
