@@ -5,6 +5,14 @@ All notable changes to the agency runtime, newest first.
 ## Unreleased
 
 ### Added
+- **Persistent trust mode.** `agency trust set <off|on-my-machine|yolo>`
+  writes `~/.agency/trust.conf` so a personal machine can be marked
+  once and runs in the chosen mode on every subsequent invocation —
+  no env var, no shell-rc edit. `agency trust clear` removes it. The
+  env var (`AGENCY_TRUST_MODE`) still wins when set so per-shell
+  overrides keep working. Default mode stays `off` so fresh clones in
+  CI / Docker / shared hosts don't silently grant the agent
+  everything.
 - **Per-skill tool policy.** A persona's YAML frontmatter can declare
   `tools_allowed: [...]` and/or `tools_denied: [...]`. When set, the
   executor filters its tool list per skill before each API call, so

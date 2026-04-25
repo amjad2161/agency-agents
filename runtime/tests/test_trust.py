@@ -17,7 +17,19 @@ from agency.trust import (
     current,
     gate,
     shell_command_is_denied,
+    trust_conf_path,
 )
+
+
+# ----- env isolation -------------------------------------------------------
+# Trust resolution now also reads `~/.agency/trust.conf`. Point every test
+# at an isolated path so a developer who has set yolo persistently on
+# their own machine doesn't have these tests fail under their feet.
+
+
+@pytest.fixture(autouse=True)
+def _isolate_trust_conf(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AGENCY_TRUST_CONF", str(tmp_path / "trust.conf"))
 
 
 # ----- mode resolution ----------------------------------------------------
@@ -42,6 +54,54 @@ def test_yolo_mode_recognized(monkeypatch):
 
 def test_unknown_value_falls_back_to_off(monkeypatch):
     monkeypatch.setenv("AGENCY_TRUST_MODE", "ultra-mega-supreme")
+    assert current() is TrustMode.OFF
+
+
+# ----- persistent config (~/.agency/trust.conf) ----------------------------
+
+
+def test_persistent_conf_picks_up_yolo(monkeypatch):
+    monkeypatch.delenv("AGENCY_TRUST_MODE", raising=False)
+    trust_conf_path().write_text("yolo\n", encoding="utf-8")
+    assert current() is TrustMode.YOLO
+
+
+def test_persistent_conf_picks_up_on_my_machine(monkeypatch):
+    monkeypatch.delenv("AGENCY_TRUST_MODE", raising=False)
+    trust_conf_path().write_text("on-my-machine\n", encoding="utf-8")
+    assert current() is TrustMode.ON_MY_MACHINE
+
+
+def test_persistent_conf_ignores_blank_and_comment_lines(monkeypatch):
+    monkeypatch.delenv("AGENCY_TRUST_MODE", raising=False)
+    trust_conf_path().write_text(
+        "# this is a comment\n"
+        "\n"
+        "   # leading-whitespace comment\n"
+        "yolo\n",
+        encoding="utf-8",
+    )
+    assert current() is TrustMode.YOLO
+
+
+def test_env_var_overrides_persistent_conf(monkeypatch):
+    """Env var wins so a one-off shell can downgrade or upgrade per session."""
+    trust_conf_path().write_text("yolo\n", encoding="utf-8")
+    monkeypatch.setenv("AGENCY_TRUST_MODE", "off")
+    assert current() is TrustMode.OFF
+
+
+def test_persistent_conf_unreadable_does_not_raise(monkeypatch):
+    """A directory at the conf path is unreadable; we silently fall back."""
+    monkeypatch.delenv("AGENCY_TRUST_MODE", raising=False)
+    p = trust_conf_path()
+    p.mkdir(parents=True)  # path is a dir, not a file
+    assert current() is TrustMode.OFF
+
+
+def test_persistent_conf_unrecognized_value_falls_back(monkeypatch):
+    monkeypatch.delenv("AGENCY_TRUST_MODE", raising=False)
+    trust_conf_path().write_text("not-a-mode\n", encoding="utf-8")
     assert current() is TrustMode.OFF
 
 
