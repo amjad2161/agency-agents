@@ -100,7 +100,7 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 |---|---|
 | Engineering & Coding | `jarvis-engineering`, `engineering-senior-developer`, `engineering-frontend-developer`, `engineering-backend-architect` |
 | AI / ML / AGI | `jarvis-ai-ml`, `engineering-ai-engineer` |
-| Automation & Orchestration | `jarvis-automation`, `specialized-agents-orchestrator` |
+| Automation & Orchestration | `jarvis-automation`, `agents-orchestrator` |
 | Design & Creative | `jarvis-design-creative`, `design-ui-designer`, `design-ux-architect` |
 | AR / XR / Spatial | `jarvis-ar-xr-spatial`, `visionos-spatial-engineer`, `xr-immersive-developer` |
 | Strategy & Ops | `jarvis-strategy-ops`, `specialized-chief-of-staff`, `project-manager-senior` |

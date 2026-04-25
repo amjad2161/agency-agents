@@ -129,7 +129,7 @@ Pitch, Canva, Google Slides, Notion (for async), Loom (for async video updates)
 ## 🎯 Your Success Metrics
 
 You are successful when:
-- Strategic plans contain no ungrounded assumptions — every assumption is labelled and sensitised
+- Strategic plans contain no ungrounded assumptions — every assumption is labeled and sensitized
 - OKR achievement rate is ≥ 70% per cycle across all tracked teams
 - Executive time spent on status updates decreases by ≥ 50% after reporting cadence is implemented
 - Key decisions are documented within 24 hours of being made
