@@ -4,6 +4,32 @@ All notable changes to the agency runtime, newest first.
 
 ## Unreleased
 
+### Fixed
+- **Installer hardening (Windows).** Multiple real bugs that could
+  silently break the install flow:
+  - `scripts/install.bat` and `scripts/install.ps1` are now stored
+    with CRLF line endings (Windows cmd.exe is finicky with LF-only
+    .bat files); `.gitattributes` enforces CRLF for `*.bat`,
+    `*.cmd`, `*.ps1`, `*.psm1` so this can't regress.
+  - Removed `--quiet` from every `pip install` call — a silent dep
+    failure looked like the script hung; user now sees pip's
+    progress and any real error is surfaced with `$LASTEXITCODE`
+    checks.
+  - Auto-install of Git via `winget install Git.Git` if it's
+    missing, mirroring the existing Python.Python.3.13 path.
+    Falls back to a manual-install message only if winget itself
+    is unavailable.
+  - `Get-RealPythonExe` now also scans canonical install paths
+    (`%LOCALAPPDATA%\Programs\Python\Python313\python.exe`,
+    `%ProgramFiles%\Python313\python.exe`, x86 variant) — `winget`
+    can complete a Python install before the in-session PATH
+    refresh sees the new directory.
+  - Browser launch no longer races the server: a background job
+    polls TCP 127.0.0.1:8765 and only opens the browser once the
+    server is actually listening, replacing the previous
+    `Start-Sleep 1; Start-Process` which sometimes loaded the
+    page before `agency serve` bound the port.
+
 ### Added
 - **One-shot Windows installer.** `scripts/install.ps1` (PowerShell)
   + `scripts/install.bat` (double-click wrapper) bootstrap the

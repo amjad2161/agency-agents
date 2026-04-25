@@ -3,3 +3,16 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.sh text eol=lf
+
+# Windows-only scripts must ship with CRLF or cmd.exe and Notepad
+# behave erratically. We mark them `-text` so git treats the bytes
+# as opaque — no LF normalization on commit, no CRLF conversion on
+# checkout. Whatever CRLF/LF mix we commit is what raw URL downloads
+# (which serve the index blob directly) deliver. Without this, files
+# checked into the repo with CRLF would be silently normalized to
+# LF in the index and the raw URL would serve LF — defeating the
+# whole point on Windows.
+*.bat   -text
+*.cmd   -text
+*.ps1   -text
+*.psm1  -text

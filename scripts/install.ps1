@@ -71,11 +71,26 @@ function Get-RealPythonExe {
     # or $null if none can be found. The Store stub lives under
     # %LOCALAPPDATA%\Microsoft\WindowsApps and silently redirects to the Store
     # on first invocation, breaking pip + venv. We filter it out explicitly.
+    # We also fall back to scanning the canonical winget / python.org install
+    # locations directly — winget can complete a Python install before the
+    # PATH refresh in this session picks the new directory up.
     $candidates = @()
     foreach ($name in 'python', 'python3', 'py') {
         $cmd = Get-Command $name -ErrorAction SilentlyContinue
         if ($null -ne $cmd) {
             $candidates += $cmd.Source
+        }
+    }
+    # Direct path scan, last-ditch. Walk python313 down to python310.
+    foreach ($ver in '313', '312', '311', '310') {
+        foreach ($base in @(
+            (Join-Path $env:LOCALAPPDATA "Programs\Python\Python$ver"),
+            (Join-Path $env:ProgramFiles    "Python$ver"),
+            (Join-Path ${env:ProgramFiles(x86)} "Python$ver")
+        )) {
+            if ([string]::IsNullOrEmpty($base)) { continue }
+            $exe = Join-Path $base 'python.exe'
+            if (Test-Path $exe) { $candidates += $exe }
         }
     }
     foreach ($p in $candidates) {
@@ -155,9 +170,31 @@ if ($null -eq $py) {
 
 Write-Step "Fetching the repo into $InstallDir"
 if (-not (Test-Command 'git')) {
-    Write-Host "git is not installed. Install via winget:" -ForegroundColor Red
-    Write-Host "  winget install --id Git.Git -e" -ForegroundColor Red
-    exit 1
+    if (Test-Command 'winget') {
+        Write-Note "git is not installed; installing Git.Git via winget..."
+        & winget install --id Git.Git -e --silent --accept-source-agreements --accept-package-agreements
+        if ($LASTEXITCODE -ne 0) {
+            throw "winget install of Git.Git failed (exit $LASTEXITCODE)."
+        }
+        # Refresh PATH so the new git.exe is reachable in this session.
+        $env:PATH = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                    [System.Environment]::GetEnvironmentVariable('Path', 'User')
+        if (-not (Test-Command 'git')) {
+            # winget installs Git to %ProgramFiles%\Git\cmd by default; add it
+            # explicitly in case the PATH refresh missed it.
+            $gitCmd = Join-Path $env:ProgramFiles 'Git\cmd'
+            if (Test-Path $gitCmd) { $env:PATH = "$gitCmd;$env:PATH" }
+        }
+        if (-not (Test-Command 'git')) {
+            throw "Git installed but not on PATH. Restart PowerShell and re-run."
+        }
+        Write-Ok "Installed git: $((Get-Command git).Source)"
+    } else {
+        Write-Host "git is not installed and winget isn't available." -ForegroundColor Red
+        Write-Host "Install Git for Windows manually: https://git-scm.com/download/win" -ForegroundColor Red
+        Write-Host "Then re-run this script." -ForegroundColor Red
+        exit 1
+    }
 }
 if (Test-Path (Join-Path $InstallDir '.git')) {
     Push-Location $InstallDir
@@ -197,10 +234,16 @@ try {
     }
     $venvPy  = Join-Path $venvPath 'Scripts\python.exe'
     $venvPip = Join-Path $venvPath 'Scripts\pip.exe'
-    & $venvPy -m pip install --upgrade pip --quiet
-    & $venvPip install -e runtime --quiet
-    & $venvPip install -e "runtime[docs]" --quiet
-    & $venvPip install -e "runtime[computer]" --quiet
+    # Don't pass --quiet on pip: a silent failure here looks like the
+    # whole installer hung. Better to show progress + surface real errors.
+    & $venvPy -m pip install --upgrade pip
+    if ($LASTEXITCODE -ne 0) { throw "pip self-upgrade failed (exit $LASTEXITCODE)." }
+    & $venvPip install -e runtime
+    if ($LASTEXITCODE -ne 0) { throw "pip install runtime failed (exit $LASTEXITCODE)." }
+    & $venvPip install -e "runtime[docs]"
+    if ($LASTEXITCODE -ne 0) { throw "pip install runtime[docs] failed (exit $LASTEXITCODE)." }
+    & $venvPip install -e "runtime[computer]"
+    if ($LASTEXITCODE -ne 0) { throw "pip install runtime[computer] failed (exit $LASTEXITCODE)." }
     Write-Ok "Runtime + [docs] + [computer] installed in .venv"
 } finally {
     Pop-Location
@@ -328,7 +371,27 @@ if ($NoLaunch) {
 } else {
     Write-Step "Launching 'agency serve' on http://127.0.0.1:8765"
     Write-Note "Ctrl+C to stop the server. Re-launch later with: cd $InstallDir; .\.venv\Scripts\Activate.ps1; agency serve"
-    Start-Sleep -Seconds 1
-    Start-Process "http://127.0.0.1:8765"
+
+    # Open the browser AFTER the port is actually listening — opening it
+    # immediately gave 'site can't be reached' until the server bound.
+    # Background job polls the port, then opens the browser; the main
+    # script execs `agency serve` so the user sees server logs in this
+    # window and can Ctrl+C to stop.
+    Start-Job -ScriptBlock {
+        param($url)
+        for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Milliseconds 500
+            try {
+                $tcp = New-Object Net.Sockets.TcpClient
+                $tcp.Connect('127.0.0.1', 8765)
+                $tcp.Close()
+                Start-Process $url
+                return
+            } catch {
+                continue
+            }
+        }
+    } -ArgumentList 'http://127.0.0.1:8765' | Out-Null
+
     & $agencyExe serve --port 8765
 }
