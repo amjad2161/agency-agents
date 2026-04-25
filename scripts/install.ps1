@@ -12,13 +12,13 @@
       6. Sets trust mode to yolo (persistent ~/.agency/trust.conf)
       7. Enables AGENCY_ENABLE_COMPUTER_USE for browser/desktop automation
       8. Initializes a starter profile and lessons file
-      9. Runs `agency doctor` to verify
+      9. Runs 'agency doctor' to verify
 
     Idempotent: re-running updates the repo, refreshes deps, and skips
     anything already in place. Safe to run after a partial-failure run.
 
 .PARAMETER NoLaunch
-    Skip launching `agency serve` at the end. Default behaviour starts the
+    Skip launching 'agency serve' at the end. Default behaviour starts the
     web UI on http://127.0.0.1:8765 once setup completes.
 
 .PARAMETER InstallDir
@@ -310,7 +310,7 @@ NEXT-TIME: Edit ~/.agency/profile.md before the first real run.
 
 # ----- 9. doctor --------------------------------------------------------
 
-Write-Step "Verifying with `agency doctor`"
+Write-Step "Verifying with 'agency doctor'"
 & $agencyExe doctor
 
 # ----- 10. launch --------------------------------------------------------
@@ -326,7 +326,7 @@ if ($NoLaunch) {
     Write-Host "  agency run `"...`"               # CLI" -ForegroundColor Green
     Write-Host "  agency run `"...`" --skill jarvis-brainiac" -ForegroundColor Green
 } else {
-    Write-Step "Launching `agency serve` on http://127.0.0.1:8765"
+    Write-Step "Launching 'agency serve' on http://127.0.0.1:8765"
     Write-Note "Ctrl+C to stop the server. Re-launch later with: cd $InstallDir; .\.venv\Scripts\Activate.ps1; agency serve"
     Start-Sleep -Seconds 1
     Start-Process "http://127.0.0.1:8765"
