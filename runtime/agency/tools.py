@@ -4,10 +4,11 @@ Each tool has:
  - a JSON-schema definition (fed to Claude)
  - a Python implementation that returns a string result
 
-Shell access is gated by AGENCY_ALLOW_SHELL (default off). When enabled, only
-commands whose first token is in SHELL_ALLOWLIST run. Network fetch is a
-read-only GET over http/https with private-range hosts blocked (see
-`_is_private_host`).
+Default behavior: shell needs `AGENCY_ALLOW_SHELL=1` and uses an allowlist;
+file IO is sandboxed under workdir; web_fetch refuses private/loopback hosts.
+
+`AGENCY_TRUST_MODE=on-my-machine` (or `yolo`) lifts these to the level of
+"act like the user is running this on their own machine" — see `trust.py`.
 """
 
 from __future__ import annotations
@@ -21,6 +22,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 import httpx
+
+from .trust import gate as trust_gate, shell_command_is_denied
 
 DEFAULT_SHELL_ALLOWLIST = (
     "ls", "cat", "head", "tail", "wc", "find", "grep", "rg",
@@ -70,9 +73,14 @@ class ToolContext:
             timeout_s = int(os.environ.get("AGENCY_TOOL_TIMEOUT", "30"))
         except ValueError:
             timeout_s = 30
+        gate = trust_gate()
+        # `allow_shell` defaults to whatever the trust mode says, but
+        # AGENCY_ALLOW_SHELL=1 still works as a per-session opt-in when
+        # trust mode is off.
+        allow_shell = gate.allow_shell or _truthy(os.environ.get("AGENCY_ALLOW_SHELL"))
         return cls(
             workdir=(workdir or Path.cwd()).resolve(),
-            allow_shell=_truthy(os.environ.get("AGENCY_ALLOW_SHELL")),
+            allow_shell=allow_shell,
             allow_network=not _truthy(os.environ.get("AGENCY_NO_NETWORK")),
             allow_computer_use=_truthy(os.environ.get("AGENCY_ENABLE_COMPUTER_USE")),
             timeout_s=timeout_s,
@@ -83,9 +91,31 @@ def _truthy(v: str | None) -> bool:
     return (v or "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def _display_path(path: Path, workdir: Path) -> str:
+    """Render `path` relative to `workdir` if possible, else the absolute form.
+
+    In trust modes that lift the workdir sandbox, tools can land outside
+    `workdir`, so `path.relative_to(workdir)` would raise `ValueError`. The
+    caller wants a human-readable string for a success message — falling
+    back to the absolute path is the right answer there.
+    """
+    try:
+        return str(path.relative_to(workdir))
+    except ValueError:
+        return str(path)
+
+
 def _safe_path(ctx: ToolContext, raw: str) -> Path:
-    """Resolve `raw` against the workdir and reject anything escaping it."""
+    """Resolve `raw` against the workdir.
+
+    In trust modes that don't sandbox paths (`on-my-machine`, `yolo`), absolute
+    paths and paths that escape the workdir are allowed — the agent sees the
+    filesystem the user sees. The path is still resolved (symlinks followed)
+    so the model can't surprise itself with relative-path arithmetic.
+    """
     candidate = (ctx.workdir / raw).resolve() if not os.path.isabs(raw) else Path(raw).resolve()
+    if not trust_gate().sandbox_paths_to_workdir:
+        return candidate
     try:
         candidate.relative_to(ctx.workdir)
     except ValueError as e:
@@ -119,30 +149,87 @@ def _truncate(text: str) -> str:
     return best + best_suffix
 
 
-def _is_private_host(host: str) -> bool:
-    """Reject hosts that resolve to loopback, link-local, private, or metadata ranges.
+# Hostnames that resolve to (or are aliases for) cloud instance metadata.
+# Kept separate from the broader private-host literal list so trust modes
+# can lift loopback/RFC1918 without lifting metadata.
+_METADATA_HOSTNAMES = frozenset({
+    "metadata",                    # AWS shorthand
+    "metadata.google.internal",    # GCP
+    "instance-data",               # AWS shorthand
+    "metadata.internal",           # GCP shorthand
+    "metadata.azure.com",          # Azure
+})
 
-    Uses `socket.getaddrinfo` to cover every resolved IP; any private or
-    otherwise-unsafe target disqualifies the host.
-    """
-    import ipaddress
+# Literal IPs used by cloud metadata services. 169.254.169.254 is also
+# link-local (caught by ip.is_link_local) and fd00:ec2::254 is also
+# in fc00::/7 (caught by ip.is_private), but we match them explicitly so
+# the metadata-only gate works even when the broader private check is off.
+_METADATA_IPS = frozenset({
+    "169.254.169.254",   # AWS / Azure / Alibaba
+    "fd00:ec2::254",     # AWS IPv6
+})
+
+
+def _resolve_ips(host: str) -> list[str] | None:
+    """Resolve `host` to its set of IP literals. Returns None on DNS failure."""
     import socket
-
-    # Quick literal checks on the host string.
-    lowered = host.lower().strip()
-    if lowered in ("localhost", "metadata", "metadata.google.internal",
-                   "instance-data", "metadata.internal"):
-        return True
-
     try:
         infos = socket.getaddrinfo(host, None)
     except (socket.gaierror, UnicodeError):
+        return None
+    return [info[4][0].split("%")[0] for info in infos]
+
+
+def _is_metadata_host(host: str) -> bool:
+    """True if `host` is a cloud-instance metadata endpoint.
+
+    Checked separately from the broader private-host check so trust modes
+    can allow loopback / RFC1918 traffic without exposing IAM credentials
+    on dev boxes that happen to be EC2 / GCE / Azure instances.
+    """
+    lowered = host.lower().strip()
+    if lowered in _METADATA_HOSTNAMES:
+        return True
+    if lowered in _METADATA_IPS:  # IP literal in URL bypasses DNS
+        return True
+    ips = _resolve_ips(host)
+    if ips is None:
+        # DNS failure. Don't blanket-reject as metadata — in `on-my-machine`
+        # the private-IP gate is intentionally lifted, and a flaky local
+        # hostname (`my-dev.local`, mDNS down) would otherwise be reported
+        # as "cloud instance metadata" instead of surfacing a real
+        # connection error. Only the literal metadata names/IPs above
+        # are treated as metadata when DNS is unavailable; everything
+        # else falls through to httpx.
+        return False
+    for ip_str in ips:
+        if ip_str in _METADATA_IPS:
+            return True
+    return False
+
+
+def _is_private_host(host: str) -> bool:
+    """Reject hosts that resolve to loopback, link-local, or private ranges.
+
+    Uses `socket.getaddrinfo` to cover every resolved IP; any private or
+    otherwise-unsafe target disqualifies the host. Metadata endpoints are
+    handled by `_is_metadata_host`; this function returns True for them
+    too (they're a strict subset of private), so callers that want to gate
+    metadata separately should consult `_is_metadata_host` directly.
+    """
+    import ipaddress
+
+    # Quick literal checks on the host string.
+    lowered = host.lower().strip()
+    if lowered in ("localhost",) or lowered in _METADATA_HOSTNAMES:
+        return True
+
+    ips = _resolve_ips(host)
+    if ips is None:
         # DNS failure: treat as private — safer to reject than leak.
         return True
 
-    for info in infos:
-        sockaddr = info[4]
-        ip_str = sockaddr[0].split("%")[0]  # strip zone id if present
+    for ip_str in ips:
         try:
             ip = ipaddress.ip_address(ip_str)
         except ValueError:
@@ -151,9 +238,7 @@ def _is_private_host(host: str) -> bool:
                 or ip.is_multicast or ip.is_reserved
                 or ip.is_unspecified):
             return True
-        # AWS / GCP metadata endpoints use 169.254.169.254 (caught by link_local
-        # above) and fd00:ec2::254 (caught by is_private). Extra safety belt:
-        if ip_str == "169.254.169.254":
+        if ip_str in _METADATA_IPS:
             return True
     return False
 
@@ -193,7 +278,7 @@ def _write_file(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
         path.write_text(content, encoding="utf-8")
     except OSError as e:
         return ToolResult(f"Write error: {e}", is_error=True)
-    return ToolResult(f"Wrote {len(content)} chars to {path.relative_to(ctx.workdir)}")
+    return ToolResult(f"Wrote {len(content)} chars to {_display_path(path, ctx.workdir)}")
 
 
 def _edit_file(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
@@ -225,8 +310,7 @@ def _edit_file(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
         path.write_text(text.replace(old, new, 1), encoding="utf-8")
     except OSError as e:
         return ToolResult(f"Write error: {e}", is_error=True)
-    rel = path.relative_to(ctx.workdir)
-    return ToolResult(f"Replaced 1 occurrence in {rel}.")
+    return ToolResult(f"Replaced 1 occurrence in {_display_path(path, ctx.workdir)}.")
 
 
 def _extract_doc(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
@@ -307,8 +391,8 @@ def _extract_xlsx(path: Path) -> str:
 def _run_shell(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
     if not ctx.allow_shell:
         return ToolResult(
-            "Shell access is disabled. Set AGENCY_ALLOW_SHELL=1 to enable "
-            "(commands are still gated by an allowlist).",
+            "Shell access is disabled. Set AGENCY_ALLOW_SHELL=1 (allowlisted "
+            "commands) or AGENCY_TRUST_MODE=on-my-machine (denylist) to enable.",
             is_error=True,
         )
     command = args["command"].strip()
@@ -319,11 +403,26 @@ def _run_shell(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
     except ValueError as e:
         return ToolResult(f"Could not parse command: {e}", is_error=True)
     head = tokens[0]
-    if head not in ctx.shell_allowlist:
-        return ToolResult(
-            f"Command not in allowlist: {head}. Allowed: {', '.join(sorted(ctx.shell_allowlist))}",
-            is_error=True,
-        )
+
+    gate = trust_gate()
+    if gate.enforce_shell_allowlist:
+        if head not in ctx.shell_allowlist:
+            return ToolResult(
+                f"Command not in allowlist: {head}. Allowed: "
+                f"{', '.join(sorted(ctx.shell_allowlist))}",
+                is_error=True,
+            )
+    elif gate.enforce_shell_denylist:
+        denied, pat = shell_command_is_denied(command)
+        if denied:
+            return ToolResult(
+                f"Refusing to run command — matches catastrophic-typo denylist "
+                f"({pat!r}). Run it yourself if that's really what you want, "
+                f"or set AGENCY_TRUST_MODE=yolo to disable the denylist.",
+                is_error=True,
+            )
+    # else: yolo — anything goes.
+
     if shutil.which(head) is None:
         return ToolResult(f"Executable not found: {head}", is_error=True)
     try:
@@ -364,14 +463,25 @@ def _web_fetch(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
             follow_redirects=False, timeout=ctx.timeout_s,
             headers={"User-Agent": "agency-runtime/0.1"},
         ) as client:
+            tgate = trust_gate()
+            block_private = tgate.block_private_ip_fetches
+            block_metadata = tgate.block_metadata_fetches
             for hop in range(6):
                 parsed = httpx.URL(url)
                 host = parsed.host
                 if not host:
                     return ToolResult("URL has no host.", is_error=True)
-                if _is_private_host(host):
+                # Metadata gate runs even when the private-IP gate is off:
+                # in `on-my-machine` we let the agent reach loopback/RFC1918
+                # but keep instance-credential endpoints blocked.
+                if block_metadata and _is_metadata_host(host):
                     return ToolResult(
-                        f"Refusing to fetch {host}: private / loopback / metadata address.",
+                        f"Refusing to fetch {host}: cloud instance metadata address.",
+                        is_error=True,
+                    )
+                if block_private and _is_private_host(host):
+                    return ToolResult(
+                        f"Refusing to fetch {host}: private / loopback address.",
                         is_error=True,
                     )
                 req = client.build_request("GET", url)

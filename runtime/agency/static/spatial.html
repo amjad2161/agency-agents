@@ -8,65 +8,135 @@
     :root { color-scheme: dark; }
     html, body { margin: 0; padding: 0; height: 100%; background: #000;
                  font: 14px/1.4 system-ui, sans-serif; color: #ddd; overflow: hidden; }
+
+    /* Three.js full-page canvas */
     #stage { position: fixed; inset: 0; }
+
+    /* Webcam feed — bottom-left, mirrored */
     #cam { position: fixed; left: 16px; bottom: 16px; width: 240px; height: 180px;
-           border: 1px solid #333; border-radius: 8px; opacity: 0.85; transform: scaleX(-1); }
-    #hud { position: fixed; right: 16px; top: 16px; max-width: 360px;
-           background: rgba(10,10,16,0.7); border: 1px solid #333; border-radius: 8px;
-           padding: 12px 14px; backdrop-filter: blur(8px); }
-    #hud h1 { font-size: 14px; margin: 0 0 6px; letter-spacing: 0.06em; opacity: 0.7; }
-    #log { position: fixed; left: 16px; right: 280px; bottom: 16px; max-height: 38vh;
-           overflow-y: auto; background: rgba(10,10,16,0.6); border: 1px solid #333;
-           border-radius: 8px; padding: 10px 14px; font-family: ui-monospace, monospace;
-           font-size: 12px; white-space: pre-wrap; line-height: 1.45; }
-    #status { font-size: 11px; opacity: 0.6; }
-    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px;
-            background: #20203a; margin-right: 6px; font-size: 11px; }
-    .pill.ok { background: #103f1e; color: #b6f0c5; }
-    .pill.err { background: #3f1010; color: #f0b6b6; }
+           border: 1px solid #223; border-radius: 8px; opacity: 0.9;
+           transform: scaleX(-1); z-index: 10; }
+
+    /* 2D canvas overlay for pose skeleton — exact same bounds as #cam */
+    #overlay { position: fixed; left: 16px; bottom: 16px; width: 240px; height: 180px;
+               border-radius: 8px; z-index: 11; pointer-events: none;
+               transform: scaleX(-1); }
+
+    /* Controls + status panel — top-right */
+    #hud { position: fixed; right: 16px; top: 16px; width: 340px;
+           background: rgba(8,10,24,0.80); border: 1px solid #2a3a6a;
+           border-radius: 10px; padding: 14px 16px;
+           backdrop-filter: blur(10px); z-index: 20; }
+    #hud h1 { font-size: 13px; margin: 0 0 8px; letter-spacing: 0.1em;
+              color: #6ae0ff; opacity: 0.9; }
+
+    .pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 999px;
+            background: #18183a; font-size: 11px; border: 1px solid #334; }
+    .pill.ok  { background: #0d2d1a; color: #7af0a8; border-color: #2a6a40; }
+    .pill.err { background: #2d0d0d; color: #f07a7a; border-color: #6a2a2a; }
+    .pill.act { background: #0d1e3a; color: #7ab8f0; border-color: #2a4a8a; }
+
     input, textarea, select, button {
-      font: inherit; padding: 6px 10px; margin: 2px 0; border-radius: 6px;
-      border: 1px solid #444; background: rgba(10,10,16,0.6); color: inherit; }
-    textarea { width: 100%; min-height: 50px; }
-    button { cursor: pointer; }
+      font: inherit; padding: 6px 10px; margin: 3px 0; border-radius: 6px;
+      border: 1px solid #334; background: rgba(8,10,24,0.7); color: inherit;
+      width: 100%; box-sizing: border-box; }
+    textarea { min-height: 52px; resize: vertical; }
+    button { cursor: pointer; background: #0d1e3a; border-color: #2a4a8a;
+             color: #7ab8f0; }
+    button:hover { background: #132a52; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .hint { font-size: 10px; opacity: 0.55; margin: 6px 0 0; line-height: 1.5; }
+
+    /* Agent output log — bottom strip */
+    #log { position: fixed; left: 272px; right: 372px; bottom: 16px;
+           max-height: 36vh; overflow-y: auto;
+           background: rgba(8,10,24,0.75); border: 1px solid #2a3a6a;
+           border-radius: 8px; padding: 10px 14px; font-family: ui-monospace, monospace;
+           font-size: 11px; white-space: pre-wrap; line-height: 1.5;
+           backdrop-filter: blur(8px); z-index: 20; }
   </style>
 </head>
 <body>
-  <canvas id="stage"></canvas>
-  <video id="cam" autoplay playsinline muted></video>
 
-  <div id="hud">
-    <h1>AGENCY · SPATIAL HUD</h1>
-    <div id="status"><span class="pill" id="ws-pill">ws: …</span><span class="pill" id="cam-pill">cam: …</span><span class="pill" id="gesture-pill">gesture: —</span></div>
-    <div style="margin-top:10px">
-      <select id="skill"><option value="">(auto-route)</option></select>
-      <input id="session" placeholder="session id (optional)" style="width:100%" />
-      <textarea id="msg" placeholder="What do you want done? (Open palm = send)"></textarea>
-      <button id="send">Send</button>
-    </div>
-    <p style="font-size:11px;opacity:0.6;margin:8px 0 0">
-      Gestures: <b>pinch</b> on a skill chip to pick · <b>open palm</b> to send ·
-      <b>fist</b> to clear log.
-    </p>
+<!-- Three.js full-page canvas -->
+<canvas id="stage"></canvas>
+
+<!-- Webcam feed + 2D skeleton overlay -->
+<video  id="cam"     autoplay playsinline muted></video>
+<canvas id="overlay"></canvas>
+
+<!-- HUD panel -->
+<div id="hud">
+  <h1>⬡ AGENCY · SPATIAL HUD</h1>
+  <div class="pills">
+    <span class="pill" id="ws-pill">ws: …</span>
+    <span class="pill" id="cam-pill">cam: …</span>
+    <span class="pill" id="gest-pill">gesture: —</span>
+    <span class="pill" id="body-pill">body: —</span>
   </div>
+  <select  id="skill"><option value="">(auto-route)</option></select>
+  <input   id="session" placeholder="session id (optional)" />
+  <textarea id="msg"   placeholder="Type request · open palm = send · victory = hologram menu"></textarea>
+  <button  id="send">Send</button>
+  <div class="hint">
+    <b>pinch</b> — select node&nbsp;&nbsp;
+    <b>open palm</b> — send&nbsp;&nbsp;
+    <b>fist</b> — clear&nbsp;&nbsp;
+    <b>victory / two-fingers</b> — spawn hologram menu&nbsp;&nbsp;
+    <b>thumbs-up</b> — confirm
+  </div>
+</div>
 
-  <div id="log"></div>
+<!-- Output log -->
+<div id="log"></div>
 
 <!--
-  CDN dependencies. Pinned to known-good versions because MediaPipe
-  releases regularly break solution APIs.
+  CDN — versions pinned to known-good releases.
+  MediaPipe Holistic gives us body-pose (33 pts) + face (468 pts) + both hands (21 pts each).
 -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466124/camera_utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/holistic.js"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466124/camera_utils.js"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"
+        crossorigin="anonymous"></script>
 
 <script>
 "use strict";
 
-/* ----- DOM helpers ------------------------------------------------------ */
+/* =========================================================================
+   CONSTANTS
+   ========================================================================= */
+const GESTURE_DEBOUNCE_MS  = 700;
+const HOLOGRAM_HOLD_MS     = 900;   // hold victory/two_fingers → spawn menu
+const HOLOGRAM_NODE_RADIUS = 0.18;  // world-unit proximity → node is "hovered"
+const MAX_HOLOGRAM_NODES   = 8;
+const RESULT_PANEL_TTL_MS  = 28000; // floating result panels auto-despawn
+
+/* pose connections from MediaPipe Pose topology */
+const POSE_CONNECTIONS = [
+  [11,12],[11,13],[13,15],[12,14],[14,16],
+  [11,23],[12,24],[23,24],
+  [23,25],[25,27],[24,26],[26,28],
+  [27,29],[28,30],[29,31],[30,32],
+];
+
+/* =========================================================================
+   DOM HELPERS
+   ========================================================================= */
 const $ = (id) => document.getElementById(id);
-const wsPill = $("ws-pill"), camPill = $("cam-pill"), gPill = $("gesture-pill");
-const logEl = $("log"), skillSel = $("skill"), msgEl = $("msg");
+const wsPill  = $("ws-pill");
+const camPill = $("cam-pill");
+const gPill   = $("gest-pill");
+const bodyPill= $("body-pill");
+const logEl   = $("log");
+const skillSel= $("skill");
+const msgEl   = $("msg");
+const camEl   = $("cam");
+const overlayEl=$("overlay");
+
 function appendLog(s) {
   logEl.textContent += s;
   logEl.scrollTop = logEl.scrollHeight;
@@ -76,18 +146,24 @@ function setPill(el, text, cls) {
   el.className = "pill" + (cls ? " " + cls : "");
 }
 
-/* ----- WebSocket --------------------------------------------------------- */
+/* =========================================================================
+   WEBSOCKET
+   ========================================================================= */
 const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
 const ws = new WebSocket(`${wsProto}//${location.host}/ws/spatial`);
+
 ws.addEventListener("open", () => {
   setPill(wsPill, "ws: connected", "ok");
   ws.send(JSON.stringify({ type: "hello" }));
 });
 ws.addEventListener("close", () => setPill(wsPill, "ws: closed", "err"));
 ws.addEventListener("error", () => setPill(wsPill, "ws: error", "err"));
+
+let _currentResult = "";
 ws.addEventListener("message", (ev) => {
   let m;
   try { m = JSON.parse(ev.data); } catch { return; }
+
   if (m.type === "hello") {
     skillSel.innerHTML = '<option value="">(auto-route)</option>';
     for (const s of m.skills) {
@@ -96,35 +172,45 @@ ws.addEventListener("message", (ev) => {
       opt.textContent = `${s.emoji} ${s.name} (${s.category})`;
       skillSel.appendChild(opt);
     }
+    appendLog(`[skills] ${m.skills.length} skills loaded\n`);
+
   } else if (m.type === "plan") {
+    _currentResult = "";
     appendLog(`\n→ ${m.skill.emoji} ${m.skill.name} (${m.skill.slug})\n  ${m.rationale}\n\n`);
+
   } else if (m.type === "stream") {
-    // text_delta = streaming token; text = whole-block fallback (non-streaming
-    // executor path or stubbed LLM in tests).
-    if (m.kind === "text_delta" || m.kind === "text") appendLog(m.payload);
-    else if (m.kind === "tool_use") appendLog(`\n[tool] ${m.payload.name}(${JSON.stringify(m.payload.input)})\n`);
-    else if (m.kind === "tool_result") {
+    if (m.kind === "text_delta" || m.kind === "text") {
+      appendLog(m.payload);
+      _currentResult += m.payload;
+    } else if (m.kind === "tool_use") {
+      appendLog(`\n[tool] ${m.payload.name}(${JSON.stringify(m.payload.input)})\n`);
+    } else if (m.kind === "tool_result") {
       const tag = m.payload.is_error ? "tool_error" : "tool_result";
       appendLog(`[${tag}] ${String(m.payload.content).slice(0, 200)}\n`);
-    } else if (m.kind === "stop") appendLog(`\n[stop: ${m.payload}]\n`);
-    else if (m.kind === "usage") appendLog(`[usage] ${JSON.stringify(m.payload)}\n`);
+    } else if (m.kind === "stop") {
+      appendLog(`\n[stop: ${m.payload}]\n`);
+    }
+
+  } else if (m.type === "done") {
+    // Spawn a floating result panel in 3D space near the last known hand position.
+    if (_currentResult.trim()) {
+      spawnResultPanel(_currentResult.trim().slice(0, 320), _lastHandPos.clone());
+    }
+
   } else if (m.type === "error") {
     appendLog(`\n[error] ${m.message}\n`);
-  } else if (m.type === "done") {
-    /* no-op; visible via [stop:] */
   }
 });
 
-function send(payload) {
+function sendWs(payload) {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
 }
 
-$("send").addEventListener("click", () => sendCurrent());
-function sendCurrent() {
-  const message = msgEl.value.trim();
+function sendCurrent(overrideMessage) {
+  const message = (overrideMessage || msgEl.value).trim();
   if (!message) return;
   appendLog("\n");
-  send({
+  sendWs({
     type: "run",
     message,
     skill: skillSel.value || null,
@@ -132,131 +218,533 @@ function sendCurrent() {
   });
 }
 
-/* ----- Three.js HUD ------------------------------------------------------ */
-const stage = $("stage");
-const renderer = new THREE.WebGLRenderer({ canvas: stage, alpha: true, antialias: true });
-// Cap the pixel ratio at 2 — devicePixelRatio can be 3 or 4 on phones / Retina
-// laptops, which doubles or quadruples the GPU fill rate for an imperceptible
-// quality gain over 2. Keeps the HUD responsive on high-DPI displays.
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-function fitRenderer() { renderer.setSize(window.innerWidth, window.innerHeight); }
-fitRenderer();
-window.addEventListener("resize", fitRenderer);
+$("send").addEventListener("click", () => sendCurrent());
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
-camera.position.set(0, 0, 4);
-function fitCamera() {
+/* =========================================================================
+   THREE.JS SCENE
+   ========================================================================= */
+const stage    = $("stage");
+const renderer = new THREE.WebGLRenderer({ canvas: stage, alpha: true, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+function fitRenderer() {
+  renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 }
-fitCamera();
-window.addEventListener("resize", fitCamera);
+window.addEventListener("resize", fitRenderer);
 
-scene.add(new THREE.AmbientLight(0x99aaff, 0.6));
-const dl = new THREE.DirectionalLight(0xffffff, 0.7); dl.position.set(2, 3, 4); scene.add(dl);
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+camera.position.set(0, 0, 4);
 
-// A simple ring + cursor sphere that we'll move to the user's index fingertip.
-const cursorGeom = new THREE.SphereGeometry(0.05, 24, 24);
-const cursorMat = new THREE.MeshStandardMaterial({ color: 0x66ccff, emissive: 0x113355 });
-const cursor = new THREE.Mesh(cursorGeom, cursorMat);
-scene.add(cursor);
+scene.add(new THREE.AmbientLight(0x99aabb, 0.55));
+const sunLight = new THREE.DirectionalLight(0xffffff, 0.75);
+sunLight.position.set(2, 4, 5);
+scene.add(sunLight);
 
-const ringGeom = new THREE.TorusGeometry(0.4, 0.02, 16, 64);
-const ringMat = new THREE.MeshStandardMaterial({ color: 0x335599, emissive: 0x101a33 });
-const ring = new THREE.Mesh(ringGeom, ringMat); ring.rotation.x = Math.PI / 2;
-scene.add(ring);
+// Soft rim light from below for that sci-fi glow
+const rimLight = new THREE.PointLight(0x2255ff, 1.2, 12);
+rimLight.position.set(-2, -2, 2);
+scene.add(rimLight);
 
-function animate() {
-  ring.rotation.z += 0.005;
-  renderer.render(scene, camera);
-  requestAnimationFrame(animate);
+// --- Finger cursor sphere ---
+const cursorMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(0.055, 24, 24),
+  new THREE.MeshStandardMaterial({ color: 0x44ccff, emissive: 0x0d2244, roughness: 0.3 })
+);
+scene.add(cursorMesh);
+
+// --- Animated focus ring around cursor ---
+const ringMesh = new THREE.Mesh(
+  new THREE.TorusGeometry(0.38, 0.018, 16, 64),
+  new THREE.MeshStandardMaterial({ color: 0x224488, emissive: 0x0a1833, roughness: 0.4 })
+);
+ringMesh.rotation.x = Math.PI / 2;
+scene.add(ringMesh);
+
+// Raycaster (origin = fingertip, direction = toward camera)
+const raycaster = new THREE.Raycaster();
+
+// Track last known hand 3D position (for result panel spawning)
+const _lastHandPos = new THREE.Vector3(0, 0, 0);
+
+fitRenderer();
+
+/* =========================================================================
+   HOLOGRAPHIC NODE SYSTEM
+   ========================================================================= */
+
+/**
+ * Creates a glowing rectangular sprite with a text label using a 2D canvas
+ * texture. Returns a THREE.Sprite. The `userData` carries { slug, label }.
+ */
+function makeSkillChip(slug, label, emoji) {
+  const W = 300, H = 72;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+
+  // Background panel
+  ctx.fillStyle = "rgba(6,12,36,0.90)";
+  if (ctx.roundRect) {
+    ctx.roundRect(0, 0, W, H, 14);
+  } else {
+    ctx.rect(0, 0, W, H);
+  }
+  ctx.fill();
+
+  // Border glow
+  ctx.strokeStyle = "#2a5aaa";
+  ctx.lineWidth = 2;
+  if (ctx.roundRect) {
+    ctx.roundRect(1, 1, W - 2, H - 2, 13);
+  } else {
+    ctx.rect(1, 1, W - 2, H - 2);
+  }
+  ctx.stroke();
+
+  // Emoji
+  ctx.font = "28px system-ui";
+  ctx.textBaseline = "middle";
+  ctx.fillText(emoji || "⬡", 18, H / 2);
+
+  // Label
+  ctx.fillStyle = "#c8deff";
+  ctx.font = "bold 16px system-ui";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, 58, H / 2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(1.4, 0.34, 1);
+  sprite.userData = { slug, label, type: "skill_chip", hovered: false };
+  return sprite;
 }
-animate();
 
-/* ----- Webcam + MediaPipe Hands ----------------------------------------- */
-const camEl = $("cam");
-let lastGesture = null, lastGestureAt = 0;
-const GESTURE_DEBOUNCE_MS = 700;
+/** Small "close" button chip */
+function makeCloseChip() {
+  const W = 120, H = 56;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "rgba(40,8,8,0.90)";
+  ctx.rect(0, 0, W, H);
+  ctx.fill();
+  ctx.strokeStyle = "#8a2a2a";
+  ctx.lineWidth = 2;
+  ctx.rect(1, 1, W - 2, H - 2);
+  ctx.stroke();
+  ctx.fillStyle = "#f07a7a";
+  ctx.font = "bold 18px system-ui";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("✕  Close", W / 2, H / 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(0.7, 0.25, 1);
+  sprite.userData = { slug: "__close__", label: "Close", type: "close_chip" };
+  return sprite;
+}
 
-function emitGesture(name, hand, at) {
+// All active holographic objects (chips, panels)
+const holoObjects = [];
+
+/** Despawn and remove a single holographic chip/panel. */
+function removeHoloObject(obj) {
+  scene.remove(obj);
+  const idx = holoObjects.indexOf(obj);
+  if (idx !== -1) holoObjects.splice(idx, 1);
+  if (obj.material && obj.material.map) obj.material.map.dispose();
+  if (obj.material) obj.material.dispose();
+}
+
+/** Clear all holographic nodes and panels. */
+function clearAllHologram() {
+  while (holoObjects.length) removeHoloObject(holoObjects[0]);
+}
+
+/**
+ * Spawn a ring of skill-chip nodes around `center` (THREE.Vector3).
+ * Picks up to MAX_HOLOGRAM_NODES skills from the current dropdown options.
+ */
+function spawnSkillMenu(center) {
+  clearAllHologram();
+
+  const options = Array.from(skillSel.options).filter((o) => o.value);
+  const count = Math.min(options.length, MAX_HOLOGRAM_NODES);
+  if (count === 0) return;
+
+  const radius = 1.1;
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2;
+    const x = center.x + Math.cos(angle) * radius;
+    const y = center.y + Math.sin(angle) * radius * 0.65;
+    const z = center.z - 0.5;
+
+    // Extract emoji from the option text (first grapheme cluster)
+    const optText = options[i].textContent;
+    const emoji = [...optText][0] || "⬡";
+    // Strip emoji + space, keep name up to "("
+    const namePart = optText.replace(/^.\s*/, "").split("(")[0].trim();
+
+    const chip = makeSkillChip(options[i].value, namePart, emoji);
+    chip.position.set(x, y, z);
+    scene.add(chip);
+    holoObjects.push(chip);
+  }
+
+  // Close button below the ring
+  const close = makeCloseChip();
+  close.position.set(center.x, center.y - 1.05, center.z - 0.5);
+  scene.add(close);
+  holoObjects.push(close);
+}
+
+/**
+ * Create a floating text panel with agent result text.
+ * Spawns near `position` and auto-removes after RESULT_PANEL_TTL_MS.
+ */
+function spawnResultPanel(text, position) {
+  const W = 640, H = 200;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "rgba(4,10,28,0.92)";
+  ctx.rect(0, 0, W, H);
+  ctx.fill();
+
+  ctx.strokeStyle = "#1a3a7a";
+  ctx.lineWidth = 2;
+  ctx.rect(1, 1, W - 2, H - 2);
+  ctx.stroke();
+
+  // Title bar
+  ctx.fillStyle = "#0a1e4a";
+  ctx.fillRect(0, 0, W, 32);
+  ctx.fillStyle = "#6aa8ff";
+  ctx.font = "bold 14px system-ui";
+  ctx.textBaseline = "middle";
+  ctx.fillText("⬡ AGENCY · RESULT", 14, 16);
+
+  // Body text — wrap at ~72 chars
+  ctx.fillStyle = "#c8deff";
+  ctx.font = "13px ui-monospace, monospace";
+  ctx.textBaseline = "top";
+  // Pre-split on explicit newlines so they produce hard line breaks in the panel.
+  const rawLines = text.split("\n");
+  let lineY = 42;
+  outer: for (const rawLine of rawLines) {
+    const words = rawLine.split(" ");
+    let line = "";
+    for (const word of words) {
+      const testLine = line ? line + " " + word : word;
+      if (ctx.measureText(testLine).width > W - 28) {
+        ctx.fillText(line, 14, lineY);
+        line = word;
+        lineY += 18;
+        if (lineY > H - 20) break outer;
+      } else {
+        line = testLine;
+      }
+    }
+    if (line) { ctx.fillText(line, 14, lineY); lineY += 18; }
+    if (lineY > H - 20) break;
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const panel = new THREE.Sprite(mat);
+  panel.scale.set(3.2, 1.0, 1);
+  panel.position.set(
+    position.x + (Math.random() - 0.5) * 0.4,
+    position.y + 1.2,
+    position.z - 0.3
+  );
+  panel.userData = { type: "result_panel", spawnedAt: performance.now() };
+  scene.add(panel);
+  holoObjects.push(panel);
+
+  setTimeout(() => removeHoloObject(panel), RESULT_PANEL_TTL_MS);
+}
+
+/* =========================================================================
+   GESTURE STATE MACHINE
+   ========================================================================= */
+let _lastGesture    = null;
+let _lastGestureAt  = 0;
+
+// Hologram spawn tracking: hold victory/two_fingers for HOLOGRAM_HOLD_MS
+let _holdGesture    = null;
+let _holdStartAt    = 0;
+let _hologramActive = false;
+
+function handleGesture(name, hand, at3D) {
   const now = performance.now();
-  if (name === lastGesture && (now - lastGestureAt) < GESTURE_DEBOUNCE_MS) return;
-  lastGesture = name;
-  lastGestureAt = now;
+
+  // Update hold-gesture timer
+  if (name === _holdGesture) {
+    if (!_hologramActive && (now - _holdStartAt) >= HOLOGRAM_HOLD_MS) {
+      _hologramActive = true;
+      spawnSkillMenu(_lastHandPos.clone());
+      appendLog(`\n[hologram] skill menu spawned\n`);
+    }
+  } else {
+    _holdGesture = (name === "victory" || name === "two_fingers") ? name : null;
+    if (_holdGesture) _holdStartAt = now;
+  }
+
+  // Debounce repeated gesture events
+  if (name === _lastGesture && (now - _lastGestureAt) < GESTURE_DEBOUNCE_MS) return;
+  _lastGesture   = name;
+  _lastGestureAt = now;
+
   setPill(gPill, `gesture: ${name}`, "ok");
-  send({ type: "gesture", name, hand, at, ts: Date.now() / 1000 });
+  sendWs({ type: "gesture", name, hand, at: at3D, ts: Date.now() / 1000 });
 
-  // Local UI side-effects (these don't touch the agent unless run is sent)
-  if (name === "open_palm") sendCurrent();
-  if (name === "fist") logEl.textContent = "";
+  // Local side-effects
+  if (name === "open_palm")  sendCurrent();
+  if (name === "thumbs_up")  sendCurrent();   // also confirms
+  if (name === "fist") {
+    logEl.textContent = "";
+    clearAllHologram();
+    _hologramActive = false;
+    _holdGesture    = null;
+  }
+
+  // Check if fingertip (cursor) is hovering over a holographic node
+  if ((name === "pinch") && holoObjects.length > 0) {
+    const hovered = findHoveredNode();
+    if (hovered) selectHologramNode(hovered);
+  }
 }
 
-function dist(a, b) {
-  const dx = a.x - b.x, dy = a.y - b.y, dz = (a.z || 0) - (b.z || 0);
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+/** Find the hologram chip closest to the cursor (within HOLOGRAM_NODE_RADIUS). */
+function findHoveredNode() {
+  let best = null, bestDist = HOLOGRAM_NODE_RADIUS;
+  for (const obj of holoObjects) {
+    if (obj.userData.type !== "skill_chip" && obj.userData.type !== "close_chip") continue;
+    const d = cursorMesh.position.distanceTo(obj.position);
+    if (d < bestDist) { bestDist = d; best = obj; }
+  }
+  return best;
 }
 
-// Classify a single hand's 21 landmarks into one of our gesture vocabulary.
-function classifyGesture(landmarks) {
-  const wrist = landmarks[0];
-  const tips = [4, 8, 12, 16, 20].map((i) => landmarks[i]);
-  const bases = [2, 5, 9, 13, 17].map((i) => landmarks[i]);
+/** Handle user selecting a holographic node via pinch. */
+function selectHologramNode(node) {
+  if (node.userData.slug === "__close__") {
+    clearAllHologram();
+    _hologramActive = false;
+    return;
+  }
+  const slug  = node.userData.slug;
+  const label = node.userData.label;
+  appendLog(`\n[hologram] selected: ${label}\n`);
+  skillSel.value = slug;
 
-  // pinch: thumb tip + index tip distance small
-  if (dist(landmarks[4], landmarks[8]) < 0.05) return "pinch";
+  // Dispatch a hologram_action run with the current message.
+  const message = msgEl.value.trim() || `Run ${label}`;
+  sendWs({
+    type: "hologram_action",
+    node_id: `chip_${slug}`,
+    message,
+    skill: slug,
+    session_id: $("session").value || null,
+  });
 
-  // fist: every fingertip y > its base y (lower in image = larger y in MP coords)
-  const isFist = tips.every((t, i) => t.y > bases[i].y);
-  if (isFist) return "fist";
+  clearAllHologram();
+  _hologramActive = false;
+}
 
-  // open_palm: every fingertip is meaningfully above the wrist (smaller y)
-  const isOpenPalm = tips.every((t) => (wrist.y - t.y) > 0.15);
-  if (isOpenPalm) return "open_palm";
+/* =========================================================================
+   GESTURE CLASSIFIER (applied to a single hand's 21 landmarks)
+   ========================================================================= */
+function dist2(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
-  // point: index extended, others curled
-  const indexExtended = (wrist.y - tips[1].y) > 0.15;
-  const othersCurled = [tips[2], tips[3], tips[4]].every((t, i) => t.y > bases[i + 2].y);
-  if (indexExtended && othersCurled) return "point";
+function classifyHand(lm) {
+  const wrist = lm[0];
+  const thumbTip = lm[4], indexTip = lm[8], middleTip = lm[12],
+        ringTip  = lm[16], pinkyTip = lm[20];
+  const tips  = [thumbTip, indexTip, middleTip, ringTip, pinkyTip];
+  const bases = [lm[2], lm[5], lm[9], lm[13], lm[17]];
+
+  // pinch: thumb + index close
+  if (dist2(thumbTip, indexTip) < 0.055) return "pinch";
+
+  const fingerExtended = (tip, base) => wrist.y - tip.y > 0.1 || tip.y < base.y;
+  const fingerCurled   = (tip, base) => tip.y >= base.y * 0.95;
+
+  const idxExt = fingerExtended(indexTip,  bases[1]);
+  const midExt = fingerExtended(middleTip, bases[2]);
+  const rngCrl = fingerCurled(ringTip,  bases[3]);
+  const pnkCrl = fingerCurled(pinkyTip, bases[4]);
+
+  // thumbs_up: thumb pointing up, others curled
+  const thumbUp = thumbTip.y < lm[3].y && thumbTip.y < wrist.y - 0.12;
+  const fingersCurled = [indexTip, middleTip, ringTip, pinkyTip].every(
+    (t, i) => t.y > bases[i + 1].y
+  );
+  if (thumbUp && fingersCurled) return "thumbs_up";
+
+  // victory / two_fingers: index + middle extended, ring + pinky curled
+  if (idxExt && midExt && rngCrl && pnkCrl) {
+    // victory = fingers spread wide; two_fingers = close together
+    const spread = dist2(indexTip, middleTip);
+    return spread > 0.06 ? "victory" : "two_fingers";
+  }
+
+  // point: only index extended
+  if (idxExt && fingerCurled(middleTip, bases[2]) && rngCrl && pnkCrl) return "point";
+
+  // fist: every fingertip below its MCP base
+  if (tips.every((t, i) => t.y > bases[i].y)) return "fist";
+
+  // open_palm: every tip meaningfully above wrist
+  if (tips.every((t) => wrist.y - t.y > 0.13)) return "open_palm";
 
   return null;
 }
 
-const hands = new Hands({
-  locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`,
-});
-hands.setOptions({
-  maxNumHands: 2,
-  modelComplexity: 1,
-  minDetectionConfidence: 0.6,
-  minTrackingConfidence: 0.6,
-});
-hands.onResults((results) => {
-  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+/* =========================================================================
+   2D SKELETON OVERLAY (drawn on #overlay canvas)
+   ========================================================================= */
+const overlayCtx = overlayEl.getContext("2d");
+
+function drawSkeleton(poseLandmarks) {
+  overlayCtx.clearRect(0, 0, overlayEl.width, overlayEl.height);
+  if (!poseLandmarks || poseLandmarks.length === 0) return;
+
+  const W = overlayEl.width, H = overlayEl.height;
+
+  // Draw connections.
+  // The overlay canvas already has CSS `transform: scaleX(-1)` (matching
+  // the mirrored #cam video), so we draw at the raw landmark x and let
+  // the CSS handle the selfie-view flip. Flipping in JS too would
+  // double-mirror and the skeleton would appear on the opposite side
+  // of the body from the video.
+  overlayCtx.strokeStyle = "rgba(80,180,255,0.65)";
+  overlayCtx.lineWidth   = 1.5;
+  for (const [a, b] of POSE_CONNECTIONS) {
+    const la = poseLandmarks[a], lb = poseLandmarks[b];
+    if (!la || !lb) continue;
+    overlayCtx.beginPath();
+    overlayCtx.moveTo(la.x * W, la.y * H);
+    overlayCtx.lineTo(lb.x * W, lb.y * H);
+    overlayCtx.stroke();
+  }
+
+  // Draw joints (same single-mirror reasoning as above).
+  for (const lm of poseLandmarks) {
+    if (!lm) continue;
+    overlayCtx.beginPath();
+    overlayCtx.arc(lm.x * W, lm.y * H, 2.5, 0, Math.PI * 2);
+    overlayCtx.fillStyle = "rgba(120,210,255,0.8)";
+    overlayCtx.fill();
+  }
+}
+
+/* =========================================================================
+   MEDIAPIPE HOLISTIC
+   ========================================================================= */
+function onHolisticResults(results) {
+  // --- Pose skeleton overlay ---
+  drawSkeleton(results.poseLandmarks);
+
+  // Update body-pill
+  if (results.poseLandmarks && results.poseLandmarks.length > 0) {
+    const nose = results.poseLandmarks[0];
+    setPill(bodyPill, `body: ${(nose.visibility || 0).toFixed(2)}`, "ok");
+  } else {
+    setPill(bodyPill, "body: —");
+  }
+
+  // --- Hand tracking (prefer right, fall back to left) ---
+  const handLm    = results.rightHandLandmarks || results.leftHandLandmarks;
+  const handLabel = results.rightHandLandmarks ? "right" : "left";
+
+  if (!handLm) {
     setPill(gPill, "gesture: —");
-    // Reset the debounce window so a re-entered gesture isn't suppressed.
-    lastGesture = null;
-    lastGestureAt = 0;
+    // Slowly drift cursor back to center
+    cursorMesh.position.lerp(new THREE.Vector3(0, 0, 0), 0.05);
     return;
   }
-  // Use the first detected hand for cursor tracking + gesture classification.
-  const lm = results.multiHandLandmarks[0];
-  const handedness = results.multiHandedness?.[0]?.label || "unknown";
-  const tip = lm[8];
-  // Map normalized coords (0..1) to a -2..2 range in 3D space, mirrored on X.
-  cursor.position.set((0.5 - tip.x) * 4, (0.5 - tip.y) * 3, -tip.z * 4);
 
-  const g = classifyGesture(lm);
-  if (g) emitGesture(g, handedness, [tip.x, tip.y, tip.z || 0]);
+  const indexTip = handLm[8];
+
+  // Map normalized [0,1] coords → world space  (mirror X so it matches the
+  // mirrored video; depth from z gives slight parallax feeling)
+  const wx = (0.5 - indexTip.x) * 4.2;
+  const wy = (0.5 - indexTip.y) * 3.2;
+  const wz = -(indexTip.z || 0) * 3.5;
+
+  cursorMesh.position.lerp(new THREE.Vector3(wx, wy, wz), 0.35);
+  _lastHandPos.copy(cursorMesh.position);
+
+  // Pulse ring to follow cursor
+  ringMesh.position.copy(cursorMesh.position);
+
+  // Highlight any hovered hologram node
+  for (const obj of holoObjects) {
+    if (!obj.material) continue;
+    const dist = cursorMesh.position.distanceTo(obj.position);
+    const isHovered = dist < HOLOGRAM_NODE_RADIUS;
+    if (isHovered !== obj.userData.hovered) {
+      obj.userData.hovered = isHovered;
+      obj.material.opacity = isHovered ? 1.0 : 0.85;
+    }
+  }
+
+  // Classify gesture and dispatch
+  const gesture = classifyHand(handLm);
+  if (gesture) {
+    handleGesture(gesture, handLabel, [indexTip.x, indexTip.y, indexTip.z || 0]);
+  } else {
+    setPill(gPill, "gesture: —");
+  }
+}
+
+// Initialise Holistic
+const holistic = new Holistic({
+  locateFile: (f) =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${f}`,
 });
+holistic.setOptions({
+  modelComplexity: 1,
+  smoothLandmarks: true,
+  enableSegmentation: false,
+  smoothSegmentation: false,
+  refineFaceLandmarks: false,
+  minDetectionConfidence: 0.55,
+  minTrackingConfidence: 0.55,
+});
+holistic.onResults(onHolisticResults);
 
-navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+/* =========================================================================
+   WEBCAM CAPTURE
+   ========================================================================= */
+navigator.mediaDevices
+  .getUserMedia({ video: { width: 320, height: 240, facingMode: "user" }, audio: false })
   .then((stream) => {
     camEl.srcObject = stream;
     setPill(camPill, "cam: live", "ok");
+
+    // Sync overlay canvas size to the actual rendered cam element
+    const ro = new ResizeObserver(() => {
+      overlayEl.width  = camEl.offsetWidth;
+      overlayEl.height = camEl.offsetHeight;
+    });
+    ro.observe(camEl);
+
     const cam = new Camera(camEl, {
-      onFrame: async () => { await hands.send({ image: camEl }); },
-      width: 320, height: 240,
+      onFrame: async () => { await holistic.send({ image: camEl }); },
+      width: 320,
+      height: 240,
     });
     cam.start();
   })
@@ -265,8 +753,28 @@ navigator.mediaDevices.getUserMedia({ video: true, audio: false })
     appendLog(`\n[camera] ${err.message}\n`);
   });
 
+/* =========================================================================
+   RENDER LOOP
+   ========================================================================= */
+(function animate() {
+  requestAnimationFrame(animate);
+
+  // Rotate the focus ring slowly
+  ringMesh.rotation.z += 0.006;
+
+  // Pulse hovered nodes
+  const t = performance.now() / 1000;
+  for (const obj of holoObjects) {
+    if (obj.userData.hovered && obj.material) {
+      obj.material.rotation = Math.sin(t * 4) * 0.04;
+    }
+  }
+
+  renderer.render(scene, camera);
+})();
+
 /* heartbeat */
-setInterval(() => send({ type: "ping" }), 15000);
+setInterval(() => sendWs({ type: "ping" }), 15000);
 </script>
 </body>
 </html>

@@ -1,14 +1,18 @@
 """Spatial-computing bridge: webcam-driven 3D HUD over WebSocket.
 
-The frontend (runtime/agency/static/spatial.html) runs MediaPipe Hands in
-the browser, detects a small allowlist of gestures, and pushes events to the
-WebSocket exposed here. The backend translates those events into the same
-runtime actions the SSE chat already supports — *no new authority*. A pinch
-on the holographic skill picker is exactly equivalent to clicking a skill in
-the regular UI; an open-palm activation is equivalent to pressing "Send".
+The frontend (runtime/agency/static/spatial.html) runs MediaPipe Holistic in
+the browser — tracking 33 body-pose landmarks, 468 face landmarks and 21-point
+per-hand tracking — and pushes events here. The backend translates those
+events into the same runtime actions the SSE chat already supports.
 
-This module deliberately doesn't accept arbitrary "action" strings from the
-client. It accepts a closed set of typed events; anything else is rejected.
+No new authority is granted: a pinch on a holographic skill chip is exactly
+equivalent to selecting a skill in the regular UI; an open-palm activation is
+equivalent to pressing "Send". The `hologram_action` event lets the frontend
+dispatch a run request that was triggered by physical interaction with a
+spawned 3D node, not new authority — just a richer input surface.
+
+This module deliberately accepts a closed set of typed events; anything else
+is rejected and the socket stays open.
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
-from typing import Any, Awaitable, Callable
+from typing import Any, Callable
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -28,20 +32,24 @@ from .skills import SkillRegistry
 
 # Closed set of events the client may send.
 _CLIENT_EVENTS = frozenset({
-    "hello",        # initial handshake; client requests skill list
-    "gesture",      # detected gesture (informational; logged, not executed)
-    "run",          # explicit user action: run a skill against a request
-    "ping",         # heartbeat
+    "hello",           # initial handshake; client requests skill list
+    "gesture",         # detected gesture (informational; logged, not executed)
+    "run",             # explicit user action: run a skill against a request
+    "hologram_action", # user interacted with a spawned holographic node
+    "ping",            # heartbeat
 })
 
-# Gesture vocabulary the client is expected to emit. Anything outside this set
-# gets a typed `error` reply (the socket stays open). Keep this list aligned
+# Gesture vocabulary the client is expected to emit.  Anything outside this set
+# gets a typed `error` reply (the socket stays open).  Keep this list aligned
 # with the classifier in static/spatial.html.
 KNOWN_GESTURES = frozenset({
-    "pinch",        # thumb tip + index tip < threshold
-    "open_palm",    # all 5 fingertips above wrist y
-    "fist",         # all fingertips below midpoint of palm
-    "point",        # only index extended
+    "pinch",        # thumb tip + index tip close → select / confirm
+    "open_palm",    # all 5 fingertips above wrist y → send / activate
+    "fist",         # all fingertips below palm midpoint → clear
+    "point",        # only index extended → navigate / highlight
+    "thumbs_up",    # thumb extended up, others curled → approve / confirm
+    "two_fingers",  # index + middle extended, others curled → expand / menu
+    "victory",      # index + middle extended and spread wide → spawn hologram
 })
 
 
@@ -61,6 +69,8 @@ async def spatial_ws_handler(
         {"type": "gesture", "name": "pinch", "hand": "right",
          "at": [x, y, z], "ts": 1700000000.0}
         {"type": "run", "message": "...", "skill": <slug?>, "session_id": <str?>}
+        {"type": "hologram_action", "node_id": "...", "message": "...",
+         "skill": <slug?>, "session_id": <str?>}
         {"type": "ping"}
 
     Server → Client:
@@ -81,18 +91,12 @@ async def spatial_ws_handler(
             except json.JSONDecodeError:
                 await _send(ws, {"type": "error", "message": "invalid JSON"})
                 continue
-            # Defensive: `type` can be any JSON value (list, dict, number, …).
-            # `set` membership of an unhashable type would raise TypeError and
-            # drop the socket. Coerce non-strings to None so the unsupported
-            # branch fires cleanly.
-            raw_t = msg.get("type") if isinstance(msg, dict) else None
-            t = raw_t if isinstance(raw_t, str) else None
+            t = msg.get("type") if isinstance(msg, dict) else None
             if t not in _CLIENT_EVENTS:
                 await _send(ws, {"type": "error",
-                                 "message": f"unsupported event: {raw_t!r}"})
+                                 "message": f"unsupported event: {t!r}"})
                 continue
 
-            # `t` is already validated as one of _CLIENT_EVENTS above.
             if t == "hello":
                 await _send(ws, {
                     "type": "hello",
@@ -105,20 +109,16 @@ async def spatial_ws_handler(
             elif t == "ping":
                 await _send(ws, {"type": "pong"})
             elif t == "gesture":
-                # Same defensive coerce: `name` could be any JSON value, and
-                # an unhashable type would crash the membership check.
-                raw_name = msg.get("name")
-                name = raw_name if isinstance(raw_name, str) else None
-                if name is not None and name in KNOWN_GESTURES:
+                name = msg.get("name")
+                if name in KNOWN_GESTURES:
                     await _send(ws, {"type": "gesture_ack", "name": name})
                 else:
                     await _send(ws, {"type": "error",
-                                     "message": f"unknown gesture: {raw_name!r}"})
-            elif t == "run":
-                # Surface ALL exceptions to the client, not just LLMError. The
-                # most concrete way to hit this is `skill: "nonexistent"`,
-                # which raises ValueError out of Planner.plan() — without this
-                # wrapper that would silently kill the WebSocket.
+                                     "message": f"unknown gesture: {name!r}"})
+            elif t in ("run", "hologram_action"):
+                # `hologram_action` carries the same required fields as `run`
+                # plus an optional `node_id` (informational, ignored by the
+                # backend but preserved so front-end logs are coherent).
                 try:
                     await _handle_run(
                         ws, msg, registry=registry, memory=memory,
@@ -158,10 +158,8 @@ async def _handle_run(
 
     loop = asyncio.get_running_loop()
 
-    # Planner.plan() makes a synchronous HTTP call to Anthropic when it has to
-    # disambiguate among multiple candidate skills (the common case). Running
-    # it inline would freeze the asyncio loop — and every other open WebSocket
-    # — for the duration of that ~1s request. Offload to a thread.
+    # Planner.plan() may make a synchronous HTTP call to Anthropic; offload to
+    # a thread so the asyncio loop stays responsive for other open sockets.
     plan = await loop.run_in_executor(
         None, lambda: Planner(registry, llm=llm).plan(
             user_message, hint_slug=skill_hint,
@@ -176,7 +174,6 @@ async def _handle_run(
 
     session: Session | None = None
     if session_id:
-        # memory.load() does disk IO; offload alongside the planner call.
         loaded = await loop.run_in_executor(None, memory.load, session_id)
         session = loaded or Session(
             session_id=session_id, skill_slug=plan.skill.slug,
@@ -184,11 +181,6 @@ async def _handle_run(
 
     executor = Executor(registry, llm, memory=memory)
 
-    # The executor's stream() is sync; run it in a worker thread so the
-    # WebSocket loop stays responsive (heartbeats, gesture events, etc.).
-    # `cancel_event` lets us tell the worker to stop after the current
-    # in-flight LLM turn if the WebSocket client disconnects — without it,
-    # a closed socket still pays for up to MAX_TURNS Anthropic calls.
     queue: asyncio.Queue = asyncio.Queue()
     cancel_event = threading.Event()
 
@@ -196,7 +188,7 @@ async def _handle_run(
         try:
             for ev in executor.stream(plan.skill, user_message, session=session):
                 if cancel_event.is_set():
-                    return  # finally below still enqueues "done"
+                    return
                 loop.call_soon_threadsafe(
                     queue.put_nowait,
                     {"type": "stream", "kind": ev.kind, "payload": ev.payload},
@@ -208,58 +200,16 @@ async def _handle_run(
         finally:
             loop.call_soon_threadsafe(queue.put_nowait, {"type": "done"})
 
-    fut: Awaitable = loop.run_in_executor(None, _drain)
-    # `_drain` always enqueues a final {"type": "done"} via its `finally`,
-    # even on error — so we only break on "done" to guarantee the client
-    # sees the protocol's terminal sentinel after any error envelope.
+    fut: asyncio.Future = loop.run_in_executor(None, _drain)
     try:
         while True:
-            # Bounded wait so a stalled executor (e.g. first LLM call hung
-            # on the network) doesn't keep us parked forever after the client
-            # disconnects. We poll the WebSocket state on each tick and bail
-            # out if it has gone away.
-            try:
-                item = await asyncio.wait_for(queue.get(), timeout=0.5)
-            except asyncio.TimeoutError:
-                if _is_websocket_disconnected(ws):
-                    break
-                continue
+            item = await queue.get()
             await _send(ws, item)
             if item["type"] == "done":
                 break
     finally:
-        # Set the cancel flag on EVERY exit path — disconnect, asyncio
-        # CancelledError (a BaseException, doesn't catch as Exception),
-        # any other unexpected error, and even the normal "done" path
-        # (no-op because _drain has already returned). This guarantees
-        # the worker thread can never burn LLM turns on a dead socket.
         cancel_event.set()
-        # Don't tie up the WS handler waiting for the worker to exit — a
-        # blocking LLM call inside the SDK can't be interrupted from another
-        # thread. Wait briefly so the cancel can land and the worker can
-        # close out cleanly; otherwise let it finish in the background.
-        try:
-            await asyncio.wait_for(asyncio.shield(fut), timeout=1.0)
-        except asyncio.TimeoutError:
-            pass
-
-
-def _is_websocket_disconnected(ws: WebSocket) -> bool:
-    """Best-effort 'is the WS gone' check that doesn't depend on a send.
-
-    Starlette tracks both `client_state` and `application_state`; when the
-    client closes the TCP connection, `client_state` flips to DISCONNECTED.
-    Falls back to False if either attribute is missing on a future
-    framework version — better to keep the loop alive than to spuriously
-    abort.
-    """
-    state = getattr(ws, "client_state", None)
-    if state is None:
-        return False
-    name = getattr(state, "name", None)
-    if name is not None:
-        return name == "DISCONNECTED"
-    return str(state).endswith("DISCONNECTED")
+        await fut
 
 
 async def _send(ws: WebSocket, payload: dict[str, Any]) -> None:

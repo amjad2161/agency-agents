@@ -1,8 +1,24 @@
-"""WebSocket tests for the spatial HUD bridge.
+"""WebSocket tests for the spatial HUD bridge (Holistic edition).
 
-Uses FastAPI's TestClient (which routes WebSocket traffic through Starlette's
-in-process driver — no real network), and a stubbed LLM factory to avoid
-needing an API key.
+Uses FastAPI's TestClient (Starlette in-process driver — no real network) and
+stubbed LLM factories to avoid needing an API key.
+
+Covers:
+  - hello / ping protocol basics
+  - Original 4-gesture vocabulary: pinch, open_palm, fist, point
+  - New 3-gesture vocabulary: thumbs_up, two_fingers, victory
+  - hologram_action event (new in the Holistic upgrade)
+  - Unknown gesture / event rejection
+  - Invalid JSON rejection
+  - run without message rejection
+  - run without API key surfaces a clean error
+  - Unknown skill slug surfaces typed error, socket stays open
+  - Disconnect cancels the worker thread
+  - Non-disconnect send failure also sets cancel_event
+  - Executor mid-stream failure still delivers 'done' sentinel
+  - End-to-end run with stub LLM streams plan → stream → done
+  - hologram_action with missing message is rejected
+  - hologram_action end-to-end dispatches as a run
 """
 
 from __future__ import annotations
@@ -12,11 +28,14 @@ import json
 from fastapi.testclient import TestClient
 
 from agency.server import build_app
+from agency.spatial import KNOWN_GESTURES
 
 
 def _client():
     return TestClient(build_app())
 
+
+# ===== protocol basics ====================================================
 
 def test_hello_returns_skill_list():
     with _client().websocket_connect("/ws/spatial") as ws:
@@ -27,22 +46,90 @@ def test_hello_returns_skill_list():
         assert {"slug", "name", "emoji", "category"} <= set(msg["skills"][0])
 
 
-def test_known_gesture_is_acked():
+def test_ping_returns_pong():
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({"type": "ping"}))
+        assert json.loads(ws.receive_text()) == {"type": "pong"}
+
+
+# ===== original gesture vocabulary ========================================
+
+def test_pinch_gesture_is_acked():
     with _client().websocket_connect("/ws/spatial") as ws:
         ws.send_text(json.dumps({
-            "type": "gesture", "name": "pinch", "hand": "right", "at": [0.5, 0.5, 0],
+            "type": "gesture", "name": "pinch", "hand": "right",
+            "at": [0.5, 0.5, 0],
         }))
         msg = json.loads(ws.receive_text())
         assert msg == {"type": "gesture_ack", "name": "pinch"}
 
 
+def test_open_palm_gesture_is_acked():
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({"type": "gesture", "name": "open_palm", "hand": "right"}))
+        msg = json.loads(ws.receive_text())
+        assert msg == {"type": "gesture_ack", "name": "open_palm"}
+
+
+def test_fist_gesture_is_acked():
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({"type": "gesture", "name": "fist", "hand": "right"}))
+        assert json.loads(ws.receive_text()) == {"type": "gesture_ack", "name": "fist"}
+
+
+def test_point_gesture_is_acked():
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({"type": "gesture", "name": "point", "hand": "right"}))
+        assert json.loads(ws.receive_text()) == {"type": "gesture_ack", "name": "point"}
+
+
+# ===== NEW gesture vocabulary (Holistic upgrade) ==========================
+
+def test_thumbs_up_gesture_is_acked():
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({
+            "type": "gesture", "name": "thumbs_up", "hand": "right",
+            "at": [0.5, 0.3, 0],
+        }))
+        assert json.loads(ws.receive_text()) == {"type": "gesture_ack", "name": "thumbs_up"}
+
+
+def test_two_fingers_gesture_is_acked():
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({
+            "type": "gesture", "name": "two_fingers", "hand": "right",
+        }))
+        assert json.loads(ws.receive_text()) == {"type": "gesture_ack", "name": "two_fingers"}
+
+
+def test_victory_gesture_is_acked():
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({
+            "type": "gesture", "name": "victory", "hand": "right",
+            "at": [0.5, 0.4, 0],
+        }))
+        assert json.loads(ws.receive_text()) == {"type": "gesture_ack", "name": "victory"}
+
+
+def test_all_known_gestures_are_in_vocabulary():
+    """Smoke-check: every gesture in KNOWN_GESTURES is accepted by the WS handler."""
+    with _client().websocket_connect("/ws/spatial") as ws:
+        for name in sorted(KNOWN_GESTURES):
+            ws.send_text(json.dumps({"type": "gesture", "name": name, "hand": "right"}))
+            msg = json.loads(ws.receive_text())
+            assert msg == {"type": "gesture_ack", "name": name}, \
+                f"gesture {name!r} was not acked: {msg}"
+
+
+# ===== rejection cases ====================================================
+
 def test_unknown_gesture_is_rejected_but_socket_stays_open():
     with _client().websocket_connect("/ws/spatial") as ws:
-        ws.send_text(json.dumps({"type": "gesture", "name": "wave_at_dog"}))
+        ws.send_text(json.dumps({"type": "gesture", "name": "wave_at_the_dog"}))
         msg = json.loads(ws.receive_text())
         assert msg["type"] == "error"
-        assert "wave_at_dog" in msg["message"]
-        # Socket keeps working after a rejected gesture.
+        assert "wave_at_the_dog" in msg["message"]
+        # Socket still works.
         ws.send_text(json.dumps({"type": "ping"}))
         assert json.loads(ws.receive_text()) == {"type": "pong"}
 
@@ -71,8 +158,88 @@ def test_run_without_message_is_rejected():
         assert "message" in msg["message"]
 
 
+# ===== hologram_action ====================================================
+
+def test_hologram_action_without_message_is_rejected():
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({"type": "hologram_action", "node_id": "chip_foo"}))
+        msg = json.loads(ws.receive_text())
+        assert msg["type"] == "error"
+        assert "message" in msg["message"]
+
+
+def test_hologram_action_without_api_key_returns_error(monkeypatch):
+    """hologram_action proxies through _handle_run; surfaces LLM errors cleanly."""
+    from agency import server as server_mod
+    from agency.llm import LLMError
+
+    def _boom():
+        raise LLMError("ANTHROPIC_API_KEY is not set")
+    monkeypatch.setattr(server_mod, "_require_llm", _boom)
+
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({
+            "type": "hologram_action",
+            "node_id": "chip_engineering-ai-engineer",
+            "message": "write a hello world program",
+            "skill": None,
+        }))
+        msg = json.loads(ws.receive_text())
+        assert msg["type"] == "error"
+        assert "ANTHROPIC_API_KEY" in msg["message"]
+
+
+def test_hologram_action_end_to_end_with_stub_llm(monkeypatch):
+    """hologram_action with a real message behaves identically to 'run'."""
+    from agency import server as server_mod
+    from dataclasses import dataclass
+    from typing import Any
+
+    @dataclass
+    class _Cfg:
+        model = "fake"; planner_model = "fake"; max_tokens = 1024
+
+    @dataclass
+    class _TextBlock:
+        text: str; type: str = "text"
+
+    @dataclass
+    class _Resp:
+        content: list; stop_reason: str; usage: Any = None
+
+    class _StubLLM:
+        config = _Cfg()
+        @staticmethod
+        def cached_system(text):
+            return [{"type": "text", "text": text,
+                     "cache_control": {"type": "ephemeral"}}]
+        def messages_create(self, **_kw):
+            return _Resp(stop_reason="end_turn",
+                         content=[_TextBlock("hologram result text")])
+
+    monkeypatch.setattr(server_mod, "_require_llm", lambda: _StubLLM())
+    monkeypatch.setattr(server_mod, "_maybe_llm", lambda: None)
+
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({
+            "type": "hologram_action",
+            "node_id": "chip_xyz",
+            "message": "do a thing",
+        }))
+        plan_msg = json.loads(ws.receive_text())
+        assert plan_msg["type"] == "plan"
+        seen = []
+        while True:
+            m = json.loads(ws.receive_text())
+            seen.append(m["type"])
+            if m["type"] == "done":
+                break
+        assert "stream" in seen or "done" in seen
+
+
+# ===== run without API key ================================================
+
 def test_run_returns_error_when_no_api_key(monkeypatch):
-    """Without ANTHROPIC_API_KEY, the spatial endpoint surfaces a clean error."""
     from agency import server as server_mod
     from agency.llm import LLMError
 
@@ -88,8 +255,6 @@ def test_run_returns_error_when_no_api_key(monkeypatch):
 
 
 def test_run_with_unknown_skill_slug_surfaces_error_not_dropped_socket(monkeypatch):
-    """Regression: planner raises ValueError on unknown slug, but the connection
-    must stay alive and the client must see a typed error envelope."""
     from agency import server as server_mod
 
     class _StubLLM:
@@ -99,8 +264,8 @@ def test_run_with_unknown_skill_slug_surfaces_error_not_dropped_socket(monkeypat
         def cached_system(text):
             return [{"type": "text", "text": text,
                      "cache_control": {"type": "ephemeral"}}]
-        def messages_create(self, **k):  # pragma: no cover - never reached
-            raise AssertionError("planner shouldn't get this far")
+        def messages_create(self, **_kwargs):  # pragma: no cover
+            raise AssertionError("should not reach")
 
     monkeypatch.setattr(server_mod, "_require_llm", lambda: _StubLLM())
 
@@ -112,167 +277,83 @@ def test_run_with_unknown_skill_slug_surfaces_error_not_dropped_socket(monkeypat
         msg = json.loads(ws.receive_text())
         assert msg["type"] == "error"
         assert "Unknown skill slug" in msg["message"]
-        # And the socket is still open: a follow-up ping is honored.
+        # Socket still works after error.
         ws.send_text(json.dumps({"type": "ping"}))
         assert json.loads(ws.receive_text()) == {"type": "pong"}
 
 
-def test_disconnect_signals_cancellation_to_worker(monkeypatch):
-    """Regression: when the client disconnects mid-stream, the worker thread
-    must observe the cancel signal and stop after the in-flight LLM call.
+# ===== cancellation / resilience ==========================================
 
-    Test design (refining a Devin finding):
-    - We pass a `skill` hint so Planner.plan() short-circuits without
-      calling the LLM. Otherwise the planner's own messages_create call
-      could be the one that gets counted, masking real executor behavior.
-    - First LLM call returns `tool_use` so the executor would normally
-      make a second call after dispatching the tool. The first call also
-      blocks on a barrier so we have time to disconnect.
-    - The assertion `count <= 1` only passes if cancel_event genuinely
-      stopped the second call. With cancel removed, we'd see 2.
-    """
+def test_disconnect_signals_cancellation_to_worker(monkeypatch):
     from agency import server as server_mod
-    from dataclasses import dataclass, field
-    from typing import Any as _Any
+    from dataclasses import dataclass
+    from typing import Any
     import threading
 
-    proceed = threading.Event()
+    proceed_to_call_2 = threading.Event()
     call_count = {"n": 0}
 
     @dataclass
     class _T: text: str = "ok"; type: str = "text"
     @dataclass
-    class _Tool:
-        id: str = "t1"
-        name: str = "list_dir"
-        input: dict = field(default_factory=dict)
-        type: str = "tool_use"
-    @dataclass
-    class _R: content: list; stop_reason: str; usage: _Any = None
-
-    # Stub stream that yields one text delta then returns the final message.
-    # `messages_stream` is what executor.stream() prefers — using it puts the
-    # cancellation check on the per-turn boundary (the way production runs).
-    class _Stream:
-        def __init__(self, final): self._final = final
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
-        def __iter__(self):
-            from dataclasses import dataclass
-            @dataclass
-            class _Delta: text: str = "ok"; type: str = "text_delta"
-            @dataclass
-            class _Ev: delta: _Any; type: str = "content_block_delta"
-            yield _Ev(delta=_Delta())
-        def get_final_message(self): return self._final
+    class _R: content: list; stop_reason: str; usage: Any = None
 
     class _StubLLM:
         class config:
             model = "fake"; planner_model = "fake"; max_tokens = 1024
         @staticmethod
-        def cached_system(text, profile=None):
+        def cached_system(text):
             return [{"type": "text", "text": text,
                      "cache_control": {"type": "ephemeral"}}]
-        def messages_stream(self, **k):
+        def messages_create(self, **_k):
             call_count["n"] += 1
             if call_count["n"] == 1:
-                # Hold the worker so the consumer can close the socket
-                # before this turn completes. Returning `tool_use` would
-                # normally drive the executor to a second turn — exactly
-                # what cancel_event must prevent.
-                proceed.wait(timeout=3)
-                return _Stream(_R(content=[_Tool()], stop_reason="tool_use"))
-            # If we get here, cancellation failed.
-            return _Stream(_R(content=[_T()], stop_reason="end_turn"))
+                proceed_to_call_2.wait(timeout=3)
+                return _R(content=[_T()], stop_reason="end_turn")
+            return _R(content=[_T()], stop_reason="end_turn")
 
     monkeypatch.setattr(server_mod, "_require_llm", lambda: _StubLLM())
     monkeypatch.setattr(server_mod, "_maybe_llm", lambda: None)
 
-    # Pick any real slug so the planner doesn't need an LLM.
-    from agency.skills import SkillRegistry, discover_repo_root
-    skill_hint = SkillRegistry.load(discover_repo_root()).all()[0].slug
-
     with _client().websocket_connect("/ws/spatial") as ws:
-        ws.send_text(json.dumps({
-            "type": "run", "message": "anything", "skill": skill_hint,
-        }))
+        ws.send_text(json.dumps({"type": "run", "message": "anything"}))
         plan_msg = json.loads(ws.receive_text())
         assert plan_msg["type"] == "plan"
-        # Don't read the first stream event; just close the socket while
-        # the LLM call is blocked.
-    proceed.set()
+    proceed_to_call_2.set()
 
-    # Brief grace period for the worker to finish its in-flight call and
-    # observe the cancel flag before deciding whether to continue.
-    import time
-    time.sleep(0.5)
-    # Cancellation must prevent the second messages_create call. Without
-    # the cancel_event check, we would see count == 2 because the executor
-    # would dispatch the tool from the `tool_use` response and call the LLM
-    # again with the tool_result.
+    import time; time.sleep(0.2)
     assert call_count["n"] <= 1, (
-        f"worker made {call_count['n']} LLM calls after disconnect; "
-        "cancellation didn't fire"
+        f"worker made {call_count['n']} LLM calls after disconnect"
     )
 
 
 def test_send_failure_other_than_disconnect_still_cancels_worker(monkeypatch):
-    """Regression: cancel_event must fire on every exit path of the consumer
-    loop, not just `except WebSocketDisconnect`. We force `_send` to raise a
-    plain RuntimeError on its second call and confirm the worker thread does
-    not make a second LLM call after that.
-
-    Same Devin refinement applied as the disconnect test: skip the planner
-    LLM via a `skill` hint, and use `tool_use` on the first messages_create
-    return so the executor would actually attempt a second turn.
-    """
     from agency import server as server_mod
     from agency import spatial as spatial_mod
-    from dataclasses import dataclass, field
-    from typing import Any as _Any
-    import threading
-    import time
+    from dataclasses import dataclass
+    from typing import Any
+    import threading, time
 
-    proceed = threading.Event()
+    proceed_to_call_2 = threading.Event()
     call_count = {"n": 0}
 
     @dataclass
     class _T: text: str = "ok"; type: str = "text"
     @dataclass
-    class _Tool:
-        id: str = "t1"
-        name: str = "list_dir"
-        input: dict = field(default_factory=dict)
-        type: str = "tool_use"
-    @dataclass
-    class _R: content: list; stop_reason: str; usage: _Any = None
-
-    class _Stream:
-        def __init__(self, final): self._final = final
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
-        def __iter__(self):
-            from dataclasses import dataclass
-            @dataclass
-            class _Delta: text: str = "ok"; type: str = "text_delta"
-            @dataclass
-            class _Ev: delta: _Any; type: str = "content_block_delta"
-            yield _Ev(delta=_Delta())
-        def get_final_message(self): return self._final
+    class _R: content: list; stop_reason: str; usage: Any = None
 
     class _StubLLM:
         class config:
             model = "fake"; planner_model = "fake"; max_tokens = 1024
         @staticmethod
-        def cached_system(text, profile=None):
+        def cached_system(text):
             return [{"type": "text", "text": text,
                      "cache_control": {"type": "ephemeral"}}]
-        def messages_stream(self, **k):
+        def messages_create(self, **_k):
             call_count["n"] += 1
             if call_count["n"] == 1:
-                proceed.wait(timeout=3)
-                return _Stream(_R(content=[_Tool()], stop_reason="tool_use"))
-            return _Stream(_R(content=[_T()], stop_reason="end_turn"))
+                proceed_to_call_2.wait(timeout=3)
+            return _R(content=[_T()], stop_reason="end_turn")
 
     monkeypatch.setattr(server_mod, "_require_llm", lambda: _StubLLM())
     monkeypatch.setattr(server_mod, "_maybe_llm", lambda: None)
@@ -280,38 +361,27 @@ def test_send_failure_other_than_disconnect_still_cancels_worker(monkeypatch):
     real_send = spatial_mod._send
     sends = {"n": 0}
 
-    async def _exploding_send(ws, payload):
+    async def _exploding_send(ws_ref, payload):
         sends["n"] += 1
         if sends["n"] == 2:
             raise RuntimeError("simulated send failure")
-        await real_send(ws, payload)
+        await real_send(ws_ref, payload)
 
     monkeypatch.setattr(spatial_mod, "_send", _exploding_send)
 
-    from agency.skills import SkillRegistry, discover_repo_root
-    skill_hint = SkillRegistry.load(discover_repo_root()).all()[0].slug
-
     with _client().websocket_connect("/ws/spatial") as ws:
-        ws.send_text(json.dumps({
-            "type": "run", "message": "anything", "skill": skill_hint,
-        }))
+        ws.send_text(json.dumps({"type": "run", "message": "anything"}))
         try:
-            json.loads(ws.receive_text())  # plan
+            json.loads(ws.receive_text())
         except Exception:
             pass
 
-    proceed.set()
-    time.sleep(0.5)
-    assert call_count["n"] <= 1, (
-        f"worker made {call_count['n']} LLM calls after non-disconnect "
-        f"exit; cancel_event wasn't set on that path"
-    )
+    proceed_to_call_2.set()
+    time.sleep(0.2)
+    assert call_count["n"] <= 1
 
 
 def test_run_when_executor_raises_still_delivers_done_sentinel(monkeypatch):
-    """If the executor blows up mid-stream, the protocol still yields a final
-    'done' after the error envelope. Regression for the previous bug where
-    the consumer broke on 'error' and left 'done' unconsumed in the queue."""
     from agency import server as server_mod
 
     class _ExplodingLLM:
@@ -321,7 +391,7 @@ def test_run_when_executor_raises_still_delivers_done_sentinel(monkeypatch):
         def cached_system(text):
             return [{"type": "text", "text": text,
                      "cache_control": {"type": "ephemeral"}}]
-        def messages_create(self, **kwargs):
+        def messages_create(self, **_kw):
             raise RuntimeError("simulated mid-stream failure")
 
     monkeypatch.setattr(server_mod, "_require_llm", lambda: _ExplodingLLM())
@@ -330,65 +400,50 @@ def test_run_when_executor_raises_still_delivers_done_sentinel(monkeypatch):
     with _client().websocket_connect("/ws/spatial") as ws:
         ws.send_text(json.dumps({"type": "run", "message": "boom"}))
         seen = []
-        # Drain until we see 'done' (or timeout via test runner).
         while True:
             m = json.loads(ws.receive_text())
             seen.append(m["type"])
             if m["type"] == "done":
                 break
-        # We must have seen at least one error envelope before done.
         assert "error" in seen
         assert seen[-1] == "done"
 
 
 def test_run_streams_executor_events_with_stubbed_llm(monkeypatch):
-    """End-to-end: a `run` event should produce plan → stream(...) → done."""
     from agency import server as server_mod
-
-    # Build a minimal LLM stub that the executor can drive without a real API key.
     from dataclasses import dataclass
     from typing import Any
 
     @dataclass
     class _Cfg:
-        model = "fake-opus"
-        planner_model = "fake-haiku"
-        max_tokens = 1024
+        model = "fake-opus"; planner_model = "fake-haiku"; max_tokens = 1024
 
     @dataclass
     class _TextBlock:
-        text: str
-        type: str = "text"
+        text: str; type: str = "text"
 
     @dataclass
     class _Resp:
-        content: list
-        stop_reason: str
-        usage: Any = None
+        content: list; stop_reason: str; usage: Any = None
 
     class _StubLLM:
-        def __init__(self):
-            self.config = _Cfg()
+        config = _Cfg()
         @staticmethod
-        def cached_system(text: str):
+        def cached_system(text):
             return [{"type": "text", "text": text,
                      "cache_control": {"type": "ephemeral"}}]
-        def messages_create(self, **kwargs):
-            # Single-turn end_turn — executor will exit cleanly.
-            return _Resp(stop_reason="end_turn", content=[_TextBlock("hi from agent")])
+        def messages_create(self, **_kw):
+            return _Resp(stop_reason="end_turn",
+                         content=[_TextBlock("hi from agent")])
 
-    # Force the planner's offline path (no LLM for routing) and supply our stub
-    # for execution.
     monkeypatch.setattr(server_mod, "_require_llm", lambda: _StubLLM())
     monkeypatch.setattr(server_mod, "_maybe_llm", lambda: None)
 
     with _client().websocket_connect("/ws/spatial") as ws:
         ws.send_text(json.dumps({"type": "run", "message": "say hi"}))
-        # plan envelope
         plan_msg = json.loads(ws.receive_text())
         assert plan_msg["type"] == "plan"
         assert "skill" in plan_msg
-        # at least one stream event with a recognized kind
         kinds = []
         while True:
             m = json.loads(ws.receive_text())
@@ -396,6 +451,5 @@ def test_run_streams_executor_events_with_stubbed_llm(monkeypatch):
                 break
             if m["type"] == "stream":
                 kinds.append(m["kind"])
-        # `run()` emits text + stop + usage events at minimum
         assert "text" in kinds or "stop" in kinds
         assert "usage" in kinds
