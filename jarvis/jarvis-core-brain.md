@@ -104,6 +104,14 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 | Design & Creative | `jarvis-design-creative`, `design-ui-designer`, `design-ux-architect` |
 | AR / XR / Spatial | `jarvis-ar-xr-spatial`, `visionos-spatial-engineer`, `xr-immersive-developer` |
 | Strategy & Ops | `jarvis-strategy-ops`, `specialized-chief-of-staff`, `project-manager-senior` |
+| Voice & Speech | `jarvis-voice-speech` |
+| Security & Cyber | `jarvis-security-cyber`, `engineering-security-engineer`, `blockchain-security-auditor` |
+| Data Intelligence | `jarvis-data-intelligence`, `engineering-data-engineer`, `engineering-database-optimizer` |
+| Knowledge & Research | `jarvis-knowledge-research` |
+| Human Interface & Emotion AI | `jarvis-human-interface` |
+| Content & Media | `jarvis-content-media`, `marketing-content-creator` |
+| IoT & Robotics | `jarvis-iot-robotics`, `engineering-embedded-firmware-engineer` |
+| Health & Biometrics | `jarvis-health-biometrics` |
 | Quality Assurance | `testing-reality-checker`, `testing-evidence-collector` |
 | Marketing | `marketing-growth-hacker`, `marketing-content-creator` |
 
