@@ -101,6 +101,7 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 | Engineering & Coding | `jarvis-engineering`, `engineering-senior-developer`, `engineering-frontend-developer`, `engineering-backend-architect` |
 | AI / ML / AGI | `jarvis-ai-ml`, `engineering-ai-engineer` |
 | Automation & Orchestration | `jarvis-automation`, `agents-orchestrator` |
+| Computer Use & Tool Mastery | `jarvis-computer-use` |
 | Design & Creative | `jarvis-design-creative`, `design-ui-designer`, `design-ux-architect` |
 | AR / XR / Spatial | `jarvis-ar-xr-spatial`, `visionos-spatial-engineer`, `xr-immersive-developer` |
 | Strategy & Ops | `jarvis-strategy-ops`, `specialized-chief-of-staff`, `project-manager-senior` |
@@ -120,7 +121,28 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 | Product Management | `jarvis-product-management`, `product-manager`, `product-sprint-prioritizer` |
 | Academic & Science | `jarvis-academic-science`, `academic-psychologist`, `academic-historian` |
 | Ops & Support | `jarvis-ops-support`, `engineering-sre`, `engineering-devops-automator` |
-| Quality Assurance | `testing-reality-checker`, `testing-evidence-collector`, `testing-accessibility-auditor` |
+| Quality Assurance & Testing | `jarvis-testing-qa`, `testing-reality-checker`, `testing-evidence-collector`, `testing-accessibility-auditor` |
+| Project & Program Management | `jarvis-project-management`, `project-manager-senior`, `project-management-project-shepherd` |
+| Paid Media & Performance | `jarvis-paid-media`, `paid-media-ppc-strategist`, `paid-media-programmatic-buyer` |
+| HR & People Operations | `jarvis-hr-people-ops`, `hr-onboarding`, `recruitment-specialist` |
+| Customer Experience & Success | `jarvis-customer-experience`, `customer-service`, `healthcare-customer-service` |
+| Web3 & Blockchain | `jarvis-web3-blockchain`, `blockchain-security-auditor`, `engineering-solidity-smart-contract-engineer` |
+| Climate & Sustainability | `jarvis-climate-sustainability` |
+| Education & Learning | `jarvis-education-learning`, `corporate-training-designer` |
+| Biotech & Medicine | `jarvis-biotech-medicine`, `healthcare-marketing-compliance` |
+| Media & Entertainment | `jarvis-media-entertainment` |
+| Supply Chain & Logistics | `jarvis-supply-chain-logistics`, `supply-chain-strategist` |
+| Real Estate & PropTech | `jarvis-real-estate-proptech`, `real-estate-buyer-seller` |
+| Space & Aerospace | `jarvis-space-aerospace` |
+| Creative Writing & Narrative | `jarvis-creative-writing`, `academic-narratologist` |
+| Policy & Governance | `jarvis-policy-governance`, `government-digital-presales-consultant`, `compliance-auditor` |
+| Future Tech & Deep Science | `jarvis-future-tech`, `jarvis-knowledge-research` |
+| Neuroscience & Brain-Computer Interface | `jarvis-neuroscience-bci` |
+| Quantitative Finance & Trading | `jarvis-quant-finance` |
+| Sports & Performance Science | `jarvis-sports-performance` |
+| Food, Nutrition & AgriTech | `jarvis-food-agritech` |
+| Linguistics & Language Intelligence | `jarvis-linguistics-nlp` |
+| Philosophy & Applied Ethics | `jarvis-philosophy-ethics` |
 
 ## 💭 Your Communication Style
 
