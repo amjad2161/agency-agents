@@ -35,6 +35,16 @@ def _client():
     return TestClient(build_app())
 
 
+def _any_skill_slug() -> str:
+    """Pick any registered skill slug — used to short-circuit the planner
+    in cancellation tests so call_count counts only executor calls."""
+    from agency.skills import SkillRegistry, discover_repo_root
+    return SkillRegistry.load(discover_repo_root()).all()[0].slug
+
+
+_ANY_SKILL_SLUG = _any_skill_slug()
+
+
 # ===== protocol basics ====================================================
 
 def test_hello_returns_skill_list():
@@ -316,7 +326,14 @@ def test_disconnect_signals_cancellation_to_worker(monkeypatch):
     monkeypatch.setattr(server_mod, "_maybe_llm", lambda: None)
 
     with _client().websocket_connect("/ws/spatial") as ws:
-        ws.send_text(json.dumps({"type": "run", "message": "anything"}))
+        # Pass a `skill` hint so the planner doesn't call the LLM —
+        # otherwise the planner's disambiguation call would increment
+        # call_count before the executor even starts, depending on how
+        # many skills are loaded (JARVIS waves change that count, which
+        # made this test fragile).
+        ws.send_text(json.dumps({
+            "type": "run", "message": "anything", "skill": _ANY_SKILL_SLUG,
+        }))
         plan_msg = json.loads(ws.receive_text())
         assert plan_msg["type"] == "plan"
     proceed_to_call_2.set()
@@ -370,7 +387,9 @@ def test_send_failure_other_than_disconnect_still_cancels_worker(monkeypatch):
     monkeypatch.setattr(spatial_mod, "_send", _exploding_send)
 
     with _client().websocket_connect("/ws/spatial") as ws:
-        ws.send_text(json.dumps({"type": "run", "message": "anything"}))
+        ws.send_text(json.dumps({
+            "type": "run", "message": "anything", "skill": _ANY_SKILL_SLUG,
+        }))
         try:
             json.loads(ws.receive_text())
         except Exception:
