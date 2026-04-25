@@ -182,6 +182,74 @@ def test_disconnect_signals_cancellation_to_worker(monkeypatch):
     )
 
 
+def test_send_failure_other_than_disconnect_still_cancels_worker(monkeypatch):
+    """Regression: previously cancel_event was only set in the
+    `except WebSocketDisconnect` branch. If `_send` raised any other
+    exception (or asyncio.CancelledError, which is a BaseException and
+    doesn't match `except Exception`), the worker thread kept running.
+
+    Strategy: stub `_send` to raise a RuntimeError on the second call.
+    Confirm the LLM stub is not called a second time after that point.
+    """
+    from agency import server as server_mod
+    from agency import spatial as spatial_mod
+    from dataclasses import dataclass
+    from typing import Any as _Any
+    import threading
+    import time
+
+    proceed_to_call_2 = threading.Event()
+    call_count = {"n": 0}
+
+    @dataclass
+    class _T: text: str = "ok"; type: str = "text"
+    @dataclass
+    class _R: content: list; stop_reason: str; usage: _Any = None
+
+    class _StubLLM:
+        class config:
+            model = "fake"; planner_model = "fake"; max_tokens = 1024
+        @staticmethod
+        def cached_system(text):
+            return [{"type": "text", "text": text,
+                     "cache_control": {"type": "ephemeral"}}]
+        def messages_create(self, **k):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                proceed_to_call_2.wait(timeout=3)
+            return _R(content=[_T()], stop_reason="end_turn")
+
+    monkeypatch.setattr(server_mod, "_require_llm", lambda: _StubLLM())
+    monkeypatch.setattr(server_mod, "_maybe_llm", lambda: None)
+
+    real_send = spatial_mod._send
+    sends = {"n": 0}
+
+    async def _exploding_send(ws, payload):
+        sends["n"] += 1
+        if sends["n"] == 2:
+            # Not WebSocketDisconnect — simulate an unexpected send failure.
+            raise RuntimeError("simulated send failure")
+        await real_send(ws, payload)
+
+    monkeypatch.setattr(spatial_mod, "_send", _exploding_send)
+
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({"type": "run", "message": "anything"}))
+        # Read the first frame (plan); the second send will explode.
+        try:
+            json.loads(ws.receive_text())
+        except Exception:
+            pass
+
+    proceed_to_call_2.set()
+    time.sleep(0.2)
+    assert call_count["n"] <= 1, (
+        f"worker made {call_count['n']} LLM calls after non-disconnect "
+        f"exit; cancel_event wasn't set on that path"
+    )
+
+
 def test_run_when_executor_raises_still_delivers_done_sentinel(monkeypatch):
     """If the executor blows up mid-stream, the protocol still yields a final
     'done' after the error envelope. Regression for the previous bug where

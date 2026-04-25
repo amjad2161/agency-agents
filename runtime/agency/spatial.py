@@ -210,12 +210,13 @@ async def _handle_run(
             await _send(ws, item)
             if item["type"] == "done":
                 break
-    except WebSocketDisconnect:
-        # Client gave up. Tell the worker to stop after the current LLM call
-        # so we don't burn additional turns on a closed socket.
-        cancel_event.set()
-        raise
     finally:
+        # Set the cancel flag on EVERY exit path — disconnect, asyncio
+        # CancelledError (a BaseException, doesn't catch as Exception),
+        # any other unexpected error, and even the normal "done" path
+        # (no-op because _drain has already returned). This guarantees
+        # the worker thread can never burn LLM turns on a dead socket.
+        cancel_event.set()
         await fut  # let the worker finish (or short-circuit on cancel)
 
 
