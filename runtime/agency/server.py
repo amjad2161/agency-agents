@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
+from . import __version__
 from .executor import Executor
 from .llm import AnthropicLLM, LLMConfig, LLMError
 from .memory import MemoryStore, Session
@@ -38,6 +39,61 @@ def build_app(repo: Path | None = None) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         return _CHAT_HTML
+
+    @app.get("/api/version")
+    def version_endpoint() -> dict[str, str]:
+        return {"name": "agency-runtime", "version": __version__}
+
+    @app.get("/api/health")
+    def health_endpoint() -> dict[str, Any]:
+        """Liveness + diagnostic snapshot.
+
+        Always returns 200 — k8s readiness probes can key on `status="ok"`.
+        Body includes enough to debug "why isn't it working" without shelling
+        in: skills loaded, API key present, optional-deps install status,
+        and which feature flags are on.
+        """
+        import importlib
+        import os
+
+        cfg = LLMConfig.from_env()
+        deps = {}
+        for group, mods in {
+            "docs": ["pypdf", "docx", "openpyxl"],
+            "computer": ["pyautogui", "PIL"],
+        }.items():
+            missing = []
+            for m in mods:
+                try:
+                    importlib.import_module(m)
+                except ImportError:
+                    missing.append(m)
+            deps[group] = {"installed": not missing, "missing": missing}
+
+        return {
+            "status": "ok",
+            "version": __version__,
+            "skills": {
+                "count": len(registry),
+                "categories": registry.categories(),
+            },
+            "models": {
+                "execution": cfg.model,
+                "planner": cfg.planner_model,
+            },
+            "api_key_set": bool(os.environ.get("ANTHROPIC_API_KEY")),
+            "features": {
+                "web_search": cfg.enable_web_search,
+                "code_execution": cfg.enable_code_execution,
+                "computer_use": (os.environ.get("AGENCY_ENABLE_COMPUTER_USE", "")
+                                 .strip().lower() in ("1", "true", "yes", "on")),
+                "task_budget_tokens": cfg.task_budget_tokens,
+                "mcp_servers": len(cfg.mcp_servers),
+                "shell_allowed": (os.environ.get("AGENCY_ALLOW_SHELL", "")
+                                  .strip().lower() in ("1", "true", "yes", "on")),
+            },
+            "optional_deps": deps,
+        }
 
     @app.get("/api/skills")
     def list_skills() -> dict[str, Any]:

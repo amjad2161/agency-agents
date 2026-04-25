@@ -5,6 +5,13 @@ All notable changes to the agency runtime, newest first.
 ## Unreleased
 
 ### Added (post-merge)
+- **`GET /api/health`** — diagnostic snapshot returning 200 with
+  status, runtime version, skills count + categories, model defaults,
+  API-key presence, feature-flag state, MCP server count, and which
+  optional-deps groups (`docs`, `computer`) are installed. Suitable
+  for k8s readiness probes and "why isn't it working" debugging
+  without shelling into the container.
+- **`GET /api/version`** — minimal `{"name", "version"}` response.
 - **Structured logging.** A single `agency` named logger (`runtime/agency/logging.py`).
   Off by default; enable with `AGENCY_LOG=info` / `debug` or CLI `-v` / `-vv`.
   Emits records for every routing decision, LLM call (with timings + token

@@ -68,3 +68,65 @@ def test_index_serves_html():
     assert resp.status_code == 200
     assert "Agency" in resp.text
     assert "/api/run/stream" in resp.text  # UI talks to the streaming endpoint
+
+
+def test_version_endpoint():
+    from agency import __version__
+    app = build_app()
+    client = TestClient(app)
+    resp = client.get("/api/version")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "agency-runtime"
+    assert data["version"] == __version__
+
+
+def test_health_endpoint_status_ok_with_skills_and_features(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("AGENCY_ENABLE_WEB_SEARCH", raising=False)
+    monkeypatch.delenv("AGENCY_ENABLE_CODE_EXECUTION", raising=False)
+    monkeypatch.delenv("AGENCY_ENABLE_COMPUTER_USE", raising=False)
+    monkeypatch.delenv("AGENCY_ALLOW_SHELL", raising=False)
+    monkeypatch.delenv("AGENCY_MCP_SERVERS", raising=False)
+
+    app = build_app()
+    client = TestClient(app)
+    resp = client.get("/api/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["skills"]["count"] > 0
+    assert "engineering" in data["skills"]["categories"]
+    assert data["api_key_set"] is False
+    assert data["features"]["web_search"] is False
+    assert data["features"]["code_execution"] is False
+    assert data["features"]["computer_use"] is False
+    assert data["features"]["shell_allowed"] is False
+    assert data["features"]["mcp_servers"] == 0
+    assert data["features"]["task_budget_tokens"] is None
+    # optional_deps shape
+    assert "docs" in data["optional_deps"]
+    assert "computer" in data["optional_deps"]
+    assert "installed" in data["optional_deps"]["docs"]
+    assert "missing" in data["optional_deps"]["docs"]
+
+
+def test_health_endpoint_reflects_feature_flags(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fake")
+    monkeypatch.setenv("AGENCY_ENABLE_WEB_SEARCH", "1")
+    monkeypatch.setenv("AGENCY_ENABLE_CODE_EXECUTION", "yes")
+    monkeypatch.setenv("AGENCY_ENABLE_COMPUTER_USE", "true")
+    monkeypatch.setenv("AGENCY_ALLOW_SHELL", "1")
+    monkeypatch.setenv("AGENCY_TASK_BUDGET", "50000")
+    monkeypatch.setenv("AGENCY_MCP_SERVERS", '[{"type":"url","name":"a","url":"https://x"}]')
+
+    app = build_app()
+    client = TestClient(app)
+    data = client.get("/api/health").json()
+    assert data["api_key_set"] is True
+    assert data["features"]["web_search"] is True
+    assert data["features"]["code_execution"] is True
+    assert data["features"]["computer_use"] is True
+    assert data["features"]["shell_allowed"] is True
+    assert data["features"]["task_budget_tokens"] == 50000
+    assert data["features"]["mcp_servers"] == 1

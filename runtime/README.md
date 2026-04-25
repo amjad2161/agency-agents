@@ -124,6 +124,9 @@ agency serve --port 8765
 ```
 
 API endpoints:
+- `GET /api/health` — diagnostic snapshot: skills count, model defaults,
+  API-key presence, feature-flag state, optional-deps install status
+- `GET /api/version` — runtime name + version
 - `GET /api/skills` — list loaded skills
 - `POST /api/plan` — `{"message": "..."}` → which skill the planner picks
 - `POST /api/run` — `{"message": "...", "skill"?: "...", "session_id"?: "..."}` → final text
