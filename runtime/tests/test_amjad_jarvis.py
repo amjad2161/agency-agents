@@ -34,6 +34,41 @@ from agency.skills import Skill, SkillRegistry, discover_repo_root
 
 
 # ---------------------------------------------------------------------------
+# Env isolation
+# ---------------------------------------------------------------------------
+# The orchestrator's permission helpers (`set_trust_mode`, `enable_shell`,
+# `enable_web_search`, ...) write directly to `os.environ`. `monkeypatch`
+# only tracks values it set itself, so without this fixture those writes
+# leak into other test modules — `test_tools.py::test_web_fetch_*` would
+# then see `AGENCY_TRUST_MODE=...` from a previous run and refuse the
+# wrong way. Snapshot every key the orchestrator might touch and restore
+# at teardown.
+
+_AGENCY_ENV_KEYS = (
+    "AGENCY_TRUST_MODE",
+    "AGENCY_ALLOW_SHELL",
+    "AGENCY_ENABLE_WEB_SEARCH",
+    "AGENCY_ENABLE_CODE_EXECUTION",
+    "AGENCY_ENABLE_COMPUTER_USE",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_agency_env():
+    snapshot = {k: os.environ.get(k) for k in _AGENCY_ENV_KEYS}
+    for k in _AGENCY_ENV_KEYS:
+        os.environ.pop(k, None)
+    try:
+        yield
+    finally:
+        for k, v in snapshot.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
