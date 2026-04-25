@@ -143,6 +143,25 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 | Food, Nutrition & AgriTech | `jarvis-food-agritech` |
 | Linguistics & Language Intelligence | `jarvis-linguistics-nlp` |
 | Philosophy & Applied Ethics | `jarvis-philosophy-ethics` |
+| Mental Health & Psychology | `jarvis-mental-health` |
+| Architecture & Built Environment | `jarvis-architecture-built-env` |
+| Fashion & Luxury | `jarvis-fashion-luxury` |
+| Travel & Hospitality | `jarvis-travel-hospitality` |
+| Music Production & Audio | `jarvis-music-production` |
+| Manufacturing & Industry 4.0 | `jarvis-manufacturing-industry` |
+| Nonprofits & Social Impact | `jarvis-nonprofits-social-impact` |
+| Insurance & Risk Management | `jarvis-insurance-risk` |
+| Photography & Visual Arts | `jarvis-photography-visual-arts` |
+| Parenting & Family | `jarvis-parenting-family` |
+| Veterinary & Animal Science | `jarvis-veterinary-animal-science` |
+| Geospatial & Mapping | `jarvis-geospatial-mapping` |
+| Materials Science & Chemistry | `jarvis-materials-chemistry` |
+| Military & Defense Strategy | `jarvis-military-defense` |
+| Maritime & Ocean | `jarvis-maritime-ocean` |
+| Nuclear Energy & Physics | `jarvis-nuclear-energy` |
+| Art History & Culture | `jarvis-art-history-culture` |
+| Translation & Localization | `jarvis-translation-localization` |
+| Philanthropy & Impact Investing | `jarvis-philanthropy-impact` |
 
 ## 💭 Your Communication Style
 
