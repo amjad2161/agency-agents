@@ -21,6 +21,7 @@ DEFAULT_CATEGORIES: tuple[str, ...] = (
     "product",
     "project-management",
     "sales",
+    "science",
     "spatial-computing",
     "specialized",
     "strategy",

@@ -23,7 +23,7 @@ Instead of routing to individual agents, Jarvis understands Amjad completely—h
     v        v        v
 ┌────────┐ ┌──────┐ ┌───────────┐
 │Executor│ │LLM   │ │SkillReg   │
-│(Runtime)│ │(API) │ │(144+ Agents)
+│(Runtime)│ │(API) │ │(155+ Agents)
 └────────┘ └──────┘ └───────────┘
     │
     v
