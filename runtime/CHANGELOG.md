@@ -21,6 +21,11 @@ All notable changes to the agency runtime, newest first.
   for k8s readiness probes and "why isn't it working" debugging
   without shelling into the container.
 - **`GET /api/version`** — minimal `{"name", "version"}` response.
+- **User profile (always-on context).** `~/.agency/profile.md` (or
+  `AGENCY_PROFILE`-pointed path) is loaded and prepended as a separate
+  cached system block before every persona's body. Subagents launched
+  via `delegate_to_skill` inherit the same profile. New `agency profile`
+  CLI subgroup: `show` / `path` / `edit` / `clear`.
 - **Structured logging.** A single `agency` named logger (`runtime/agency/logging.py`).
   Off by default; enable with `AGENCY_LOG=info` / `debug` or CLI `-v` / `-vv`.
   Emits records for every routing decision, LLM call (with timings + token

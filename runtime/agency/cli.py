@@ -12,6 +12,11 @@ from .llm import AnthropicLLM, LLMConfig, LLMError
 from .logging import configure as configure_logging
 from .memory import MemoryStore, Session
 from .planner import Planner
+from .profile import (
+    ensure_default_profile,
+    load_profile_text,
+    profile_path,
+)
 from .skills import SkillRegistry, discover_repo_root
 
 
@@ -268,6 +273,55 @@ def doctor_cmd(ctx: click.Context) -> None:
     )
 
     click.echo("\nDone.")
+
+
+@main.group("profile", invoke_without_command=True)
+@click.pass_context
+def profile_cmd(ctx: click.Context) -> None:
+    """Manage the always-on user profile (~/.agency/profile.md by default).
+
+    Anything in this file is sent to every agent as background context.
+    Run `agency profile show` (or just `agency profile`) to view it,
+    `agency profile path` to print where it lives, `agency profile edit`
+    to open it in $EDITOR, and `agency profile clear` to delete it.
+    """
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(profile_show_cmd)
+
+
+@profile_cmd.command("show")
+def profile_show_cmd() -> None:
+    """Print the current profile, or note that no file is set."""
+    text = load_profile_text()
+    if text is None:
+        click.echo(f"No profile file at {profile_path()}.")
+        click.echo("Create one with `agency profile edit`.")
+        return
+    click.echo(text)
+
+
+@profile_cmd.command("path")
+def profile_path_cmd() -> None:
+    """Print the path the runtime would read."""
+    click.echo(str(profile_path()))
+
+
+@profile_cmd.command("edit")
+def profile_edit_cmd() -> None:
+    """Open the profile in $EDITOR (creating a starter template if needed)."""
+    p = ensure_default_profile()
+    click.edit(filename=str(p))
+
+
+@profile_cmd.command("clear")
+def profile_clear_cmd() -> None:
+    """Delete the profile file (the runtime will then send no profile context)."""
+    p = profile_path()
+    if p.exists():
+        p.unlink()
+        click.echo(f"Removed {p}.")
+    else:
+        click.echo(f"No profile at {p}; nothing to remove.")
 
 
 @main.command("serve")

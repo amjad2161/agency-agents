@@ -10,6 +10,7 @@ from typing import Any, Iterator
 from .llm import AnthropicLLM
 from .logging import get_logger, timed
 from .memory import MemoryStore, Session
+from .profile import load_profile_text
 from .skills import Skill, SkillRegistry
 from .tools import Tool, ToolContext, builtin_tools, tools_by_name
 
@@ -96,6 +97,7 @@ class Executor:
         tools: list[Tool] | None = None,
         workdir: Path | None = None,
         delegation_depth: int = 0,
+        profile: str | None | object = ...,  # sentinel: load by default
     ):
         self.registry = registry
         self.llm = llm
@@ -104,6 +106,12 @@ class Executor:
         self._tool_index = tools_by_name(self.tools)
         self.ctx = ToolContext.from_env(workdir=workdir)
         self._delegation_depth = delegation_depth
+        # Profile resolution: pass `profile=None` to opt out explicitly.
+        # Default (`...`) loads from disk lazily on first call.
+        if profile is ...:
+            self._profile: str | None = load_profile_text()
+        else:
+            self._profile = profile  # type: ignore[assignment]
         # Inject sibling-skill summary so the `list_skills` tool can describe them.
         summary_lines = [
             f"- {s.slug}: {s.name} ({s.category}) — {s.description}"
@@ -132,6 +140,7 @@ class Executor:
         sub = Executor(
             self.registry, self.llm, memory=None, tools=self.tools,
             workdir=self.ctx.workdir, delegation_depth=self._delegation_depth + 1,
+            profile=self._profile,  # subagent gets the same user context
         )
         return sub.run(sub_skill, request).text
 
@@ -142,7 +151,7 @@ class Executor:
 
         self._bind_session_to_ctx(session)
         messages = self._initial_messages(session, user_message)
-        system = AnthropicLLM.cached_system(skill.system_prompt)
+        system = AnthropicLLM.cached_system(skill.system_prompt, profile=self._profile)
         tool_defs = self._tool_defs_for(skill)
 
         turns = 0
@@ -228,7 +237,7 @@ class Executor:
         text_parts: list[str] = []
         usage = Usage()
         messages = self._initial_messages(session, user_message)
-        system = AnthropicLLM.cached_system(skill.system_prompt)
+        system = AnthropicLLM.cached_system(skill.system_prompt, profile=self._profile)
         tool_defs = self._tool_defs_for(skill)
 
         # `try/finally` guarantees memory persistence even if an SDK error or
