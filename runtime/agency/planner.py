@@ -98,17 +98,37 @@ def _first_text(resp) -> str:
     return ""
 
 
-_JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
+# Non-greedy match — if the LLM wraps its JSON in commentary that itself
+# contains `{...}` (e.g. an example), a greedy `\{.*\}` would span the
+# whole region and fail to parse. Non-greedy stops at the first `}`,
+# and we fall back to scanning all candidates if the first doesn't
+# decode cleanly.
+_JSON_RE = re.compile(r"\{.*?\}", re.DOTALL)
 
 
 def _parse_choice(text: str) -> tuple[int, str]:
     """Parse the planner's JSON. Tolerant of stray prose around the JSON."""
-    match = _JSON_RE.search(text)
-    if not match:
+    candidates = _JSON_RE.findall(text)
+    if not candidates:
         return 0, "could not parse planner response"
-    try:
-        data = json.loads(match.group(0))
-    except json.JSONDecodeError:
+    data = None
+    for blob in candidates:
+        try:
+            parsed = json.loads(blob)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict) and "choice" in parsed:
+            data = parsed
+            break
+    if data is None:
+        # No candidate had `choice`; fall back to the first that decoded.
+        for blob in candidates:
+            try:
+                data = json.loads(blob)
+                break
+            except json.JSONDecodeError:
+                continue
+    if data is None:
         return 0, "could not decode planner JSON"
     choice = data.get("choice", 1)
     try:
