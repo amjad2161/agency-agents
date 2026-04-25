@@ -63,7 +63,7 @@ Found a way to make an agent better? Contributions welcome:
 
 Used these agents successfully? Share your story:
 
-- Post in [GitHub Discussions](https://github.com/msitarzewski/agency-agents/discussions)
+- Post in [GitHub Discussions](https://github.com/amjad2161/agency-agents/discussions)
 - Add a case study to the README
 - Write a blog post and link it
 - Create a video tutorial
@@ -259,7 +259,7 @@ For anything beyond that, here's how we keep things smooth:
 - Changes that touch many files across the repo
 - New integration formats or platforms
 
-We love ambitious ideas — a [Discussion](https://github.com/msitarzewski/agency-agents/discussions) just gives the community a chance to align on approach before code gets written. It saves everyone time, especially yours.
+We love ambitious ideas — a [Discussion](https://github.com/amjad2161/agency-agents/discussions) just gives the community a chance to align on approach before code gets written. It saves everyone time, especially yours.
 
 #### Things we'll always close
 - **Committed build output**: Generated files (`_site/`, compiled assets, converted agent files) should never be checked in. Users run `convert.sh` locally; all output is gitignored.
@@ -378,10 +378,10 @@ Contributors who make significant contributions will be:
 
 ## 🤔 Questions?
 
-- **General Questions**: [GitHub Discussions](https://github.com/msitarzewski/agency-agents/discussions)
-- **Bug Reports**: [GitHub Issues](https://github.com/msitarzewski/agency-agents/issues)
-- **Feature Requests**: [GitHub Issues](https://github.com/msitarzewski/agency-agents/issues)
-- **Community Chat**: [Join our discussions](https://github.com/msitarzewski/agency-agents/discussions)
+- **General Questions**: [GitHub Discussions](https://github.com/amjad2161/agency-agents/discussions)
+- **Bug Reports**: [GitHub Issues](https://github.com/amjad2161/agency-agents/issues)
+- **Feature Requests**: [GitHub Issues](https://github.com/amjad2161/agency-agents/issues)
+- **Community Chat**: [Join our discussions](https://github.com/amjad2161/agency-agents/discussions)
 
 ---
 
@@ -421,7 +421,7 @@ Your contributions make The Agency better for everyone. Whether you're:
 
 **Questions? Ideas? Feedback?**
 
-[Open an Issue](https://github.com/msitarzewski/agency-agents/issues) • [Start a Discussion](https://github.com/msitarzewski/agency-agents/discussions) • [Submit a PR](https://github.com/msitarzewski/agency-agents/pulls)
+[Open an Issue](https://github.com/amjad2161/agency-agents/issues) • [Start a Discussion](https://github.com/amjad2161/agency-agents/discussions) • [Submit a PR](https://github.com/amjad2161/agency-agents/pulls)
 
 Made with ❤️ by the community
 

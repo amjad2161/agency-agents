@@ -51,7 +51,7 @@
 
 ### 3. 分享成功案例
 如果你成功使用了这些智能体：
-- 在 [GitHub Discussions](https://github.com/msitarzewski/agency-agents/discussions) 发布心得
+- 在 [GitHub Discussions](https://github.com/amjad2161/agency-agents/discussions) 发布心得
 - 在 README 中补充案例研究
 - 撰写博客文章并附上链接
 - 制作视频教程
@@ -284,20 +284,20 @@ interface AgentExample {
 ---
 
 ## 🤔 有疑问？
-- 常规问题：[GitHub Discussions](https://github.com/msitarzewski/agency-agents/discussions)
-- Bug 反馈：[GitHub Issues](https://github.com/msitarzewski/agency-agents/issues)
-- 功能需求：[GitHub Issues](https://github.com/msitarzewski/agency-agents/issues)
-- 社区交流：参与 [Discussions](https://github.com/msitarzewski/agency-agents/discussions)
+- 常规问题：[GitHub Discussions](https://github.com/amjad2161/agency-agents/discussions)
+- Bug 反馈：[GitHub Issues](https://github.com/amjad2161/agency-agents/issues)
+- 功能需求：[GitHub Issues](https://github.com/amjad2161/agency-agents/issues)
+- 社区交流：参与 [Discussions](https://github.com/amjad2161/agency-agents/discussions)
 
 ---
 
 ## 📚 资源
 
 ### 新贡献者指南
-- [README.md](https://github.com/msitarzewski/agency-agents/blob/main/README.md) —— 项目概览与智能体目录
-- [示例：前端开发者](https://github.com/msitarzewski/agency-agents/blob/main/engineering/engineering-frontend-developer.md ) —— 结构规范的智能体示例
-- [示例：Reddit 社区运营者](https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-reddit-community-builder.md) —— 性格塑造优秀示例
-- [示例：趣味注入器](https://github.com/msitarzewski/agency-agents/blob/main/design/design-whimsy-injector.md) —— 创意型专家示例
+- [README.md](https://github.com/amjad2161/agency-agents/blob/main/README.md) —— 项目概览与智能体目录
+- [示例：前端开发者](https://github.com/amjad2161/agency-agents/blob/main/engineering/engineering-frontend-developer.md ) —— 结构规范的智能体示例
+- [示例：Reddit 社区运营者](https://github.com/amjad2161/agency-agents/blob/main/marketing/marketing-reddit-community-builder.md) —— 性格塑造优秀示例
+- [示例：趣味注入器](https://github.com/amjad2161/agency-agents/blob/main/design/design-whimsy-injector.md) —— 创意型专家示例
 
 ### 智能体设计参考
 - 阅读现有智能体获取灵感
