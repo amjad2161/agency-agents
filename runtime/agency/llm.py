@@ -19,7 +19,6 @@ class LLMError(RuntimeError):
 
 
 def _truthy_env(name: str) -> bool:
-    import os
     return (os.environ.get(name, "") or "").strip().lower() in ("1", "true", "yes", "on")
 
 

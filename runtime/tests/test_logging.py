@@ -100,7 +100,7 @@ def test_executor_logs_tool_run(tmp_path):
     out = sink.getvalue()
     assert "tool.run" in out
     assert "name=read_file" in out
-    assert "is_error=False" in out  # Copilot review: tool.run carries the outcome
+    assert "is_error=False" in out
 
 
 def test_tool_run_log_records_error_outcome(tmp_path):
