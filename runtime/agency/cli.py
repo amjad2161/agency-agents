@@ -202,18 +202,27 @@ def init_cmd(ctx: click.Context, slug: str, name: str | None, category: str,
     click.echo(f"Created {path.relative_to(root)}")
 
 
-@main.command("trust")
-def trust_cmd() -> None:
-    """Print the active trust mode and what it allows.
+@main.group("trust", invoke_without_command=True)
+@click.pass_context
+def trust_cmd(ctx: click.Context) -> None:
+    """Show or persist the active trust mode.
 
-    Trust mode is read from `AGENCY_TRUST_MODE`. Values:
-      off            (default) — current sandboxes, allowlists, opt-ins.
-      on-my-machine  — agent gets your reach. Shell on (denylist instead of
-                       allowlist), workdir sandbox lifted, web_fetch can hit
-                       loopback / private IPs.
-      yolo           — same as on-my-machine, plus an empty shell denylist.
+    Bare `agency trust` prints the active gate. Subcommands:
+      set <mode>   — write `~/.agency/trust.conf` so this machine
+                     uses <mode> on every run, no env var needed.
+                     Values: off | on-my-machine | yolo.
+      clear        — delete `~/.agency/trust.conf` (back to env-var
+                     resolution + `off` default).
+      path         — print the config file path.
+
+    Resolution order: AGENCY_TRUST_MODE env var → `~/.agency/trust.conf`
+    → `off`. The default stays conservative so a fresh clone in CI or a
+    shared environment doesn't silently grant the agent everything.
+    Personal machines opt in.
     """
-    from .trust import current, gate
+    if ctx.invoked_subcommand is not None:
+        return
+    from .trust import current, gate, trust_conf_path
 
     mode = current()
     g = gate()
@@ -225,6 +234,61 @@ def trust_cmd() -> None:
     click.echo(f"  workdir sandbox enforced  : {g.sandbox_paths_to_workdir}")
     click.echo(f"  block private/loopback IPs: {g.block_private_ip_fetches}")
     click.echo(f"  block metadata endpoints  : {g.block_metadata_fetches}")
+    conf = trust_conf_path()
+    click.echo()
+    click.echo(f"  persistent config         : {conf} {'(present)' if conf.exists() else '(none)'}")
+
+
+@trust_cmd.command("set")
+@click.argument("mode", type=click.Choice(["off", "on-my-machine", "yolo"]))
+def trust_set_cmd(mode: str) -> None:
+    """Persist the trust mode in `~/.agency/trust.conf`.
+
+    After `agency trust set yolo`, every subsequent run on this machine
+    uses YOLO without any env var. Override per-shell with
+    `AGENCY_TRUST_MODE=...`.
+    """
+    from .trust import trust_conf_path
+
+    path = trust_conf_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = (
+        f"# Agency trust mode for this machine.\n"
+        f"# Values: off | on-my-machine | yolo. Lines starting with # are\n"
+        f"# ignored; the first non-blank, non-comment line wins.\n"
+        f"{mode}\n"
+    )
+    path.write_text(body, encoding="utf-8")
+    click.echo(f"Wrote {path} ({mode})")
+    if mode == "yolo":
+        click.echo(
+            "  YOLO is on for this machine. The agent now runs with no shell denylist,\n"
+            "  no workdir sandbox, no SSRF block, and no metadata-IP block.\n"
+            "  This is the right setting for a laptop you trust; it's the wrong setting\n"
+            "  for a shared or production host.",
+            err=True,
+        )
+
+
+@trust_cmd.command("clear")
+def trust_clear_cmd() -> None:
+    """Delete `~/.agency/trust.conf` so resolution falls back to env var + `off`."""
+    from .trust import trust_conf_path
+
+    path = trust_conf_path()
+    if not path.exists():
+        click.echo(f"{path} does not exist; nothing to clear.")
+        return
+    path.unlink()
+    click.echo(f"Deleted {path}")
+
+
+@trust_cmd.command("path")
+def trust_path_cmd() -> None:
+    """Print the resolved config path."""
+    from .trust import trust_conf_path
+
+    click.echo(str(trust_conf_path()))
 
 
 @main.command("doctor")

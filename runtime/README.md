@@ -268,11 +268,31 @@ myself"*, set `AGENCY_TRUST_MODE`:
 | `web_fetch` to cloud metadata IP (169.254.169.254) | refused | refused (credential exfil block) | allowed |
 | Catastrophic-typo denylist (`rm -rf /`, fork bombs, `mkfs /dev/...`, `dd of=/dev/...`, `chmod 000 /`) | n/a | enforced | empty |
 
+### Per-shell (one-off)
+
 ```bash
-export AGENCY_TRUST_MODE=on-my-machine
+export AGENCY_TRUST_MODE=on-my-machine     # or: yolo, off
 agency trust    # show the active gate
-agency doctor   # also includes the trust mode in its output
 ```
+
+### Persistent (your laptop, set once)
+
+```bash
+agency trust set yolo            # writes ~/.agency/trust.conf
+agency trust                     # confirms the new mode
+agency trust path                # prints the file location
+agency trust clear               # removes the file (back to off)
+```
+
+After `agency trust set yolo` the runtime reads that file on every
+subsequent run — no env var needed, no shell-rc edit. The env var still
+wins when set, so a one-off `AGENCY_TRUST_MODE=off agency run ...` can
+downgrade for a single command without touching the persistent config.
+
+Resolution order: `AGENCY_TRUST_MODE` env var → `~/.agency/trust.conf` →
+`off`. The default stays `off` so a fresh clone in CI / Docker / a
+shared host doesn't silently grant the agent everything; personal
+machines opt in via either knob.
 
 The denylist on `on-my-machine` exists because LLMs hallucinate
 variables — `rm -rf $UNDEFINED/path` expands to `rm -rf /path`, and

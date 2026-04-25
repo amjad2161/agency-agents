@@ -15,6 +15,16 @@ trusted with `rm -rf /` (you obviously can on your own machine), but because
 LLMs hallucinate variables. `rm -rf $UNDEFINED/path` expands to `rm -rf /path`.
 The denylist catches the catastrophic-typo set so a single confidently-wrong
 token doesn't take your home down. If you want even that gone, use `yolo`.
+
+Resolution order for the active mode:
+  1. `AGENCY_TRUST_MODE` env var (if set to a recognized value).
+  2. `~/.agency/trust.conf` (if it exists). One line, the mode name. Lets
+     you mark a personal machine as `yolo` once and forget about it,
+     without leaking that choice into shell-rc files or shared configs.
+  3. Default `off`.
+
+The default stays `off` so a fresh clone in CI / Docker / a shared box
+doesn't silently grant the agent everything. Personal machines opt in.
 """
 
 from __future__ import annotations
@@ -23,6 +33,7 @@ import os
 import re
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Pattern
 
 
@@ -32,13 +43,57 @@ class TrustMode(str, Enum):
     YOLO = "yolo"
 
 
-def current() -> TrustMode:
-    """Read AGENCY_TRUST_MODE. Unknown values quietly fall back to OFF."""
-    raw = (os.environ.get("AGENCY_TRUST_MODE") or "").strip().lower()
+# The persistent-mode file. Override with AGENCY_TRUST_CONF if you need to
+# point at a different path (e.g. for tests or alternate XDG layouts).
+def trust_conf_path() -> Path:
+    override = os.environ.get("AGENCY_TRUST_CONF")
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".agency" / "trust.conf"
+
+
+def _coerce_mode_name(raw: str | None) -> TrustMode | None:
+    """Turn a raw string into a TrustMode, or None if unrecognized."""
+    if raw is None:
+        return None
+    raw = raw.strip().lower()
     if raw in ("on-my-machine", "machine", "trust"):
         return TrustMode.ON_MY_MACHINE
     if raw in ("yolo", "no-guards"):
         return TrustMode.YOLO
+    if raw in ("off", "default", "safe"):
+        return TrustMode.OFF
+    return None
+
+
+def _read_trust_conf() -> TrustMode | None:
+    """Read the persistent-mode file. Returns None if missing/unreadable."""
+    path = trust_conf_path()
+    try:
+        # Take the first non-blank, non-comment line so users can leave
+        # notes in the file without breaking parsing.
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            return _coerce_mode_name(line)
+        return None
+    except (FileNotFoundError, IsADirectoryError, PermissionError, OSError):
+        return None
+
+
+def current() -> TrustMode:
+    """Resolve the active trust mode.
+
+    Env var wins (so a one-off shell can override). Falls through to
+    `~/.agency/trust.conf` for the persistent personal-machine setting.
+    """
+    env = _coerce_mode_name(os.environ.get("AGENCY_TRUST_MODE"))
+    if env is not None:
+        return env
+    persistent = _read_trust_conf()
+    if persistent is not None:
+        return persistent
     return TrustMode.OFF
 
 
