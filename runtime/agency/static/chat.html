@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>JARVIS · Agency Runtime</title>
+  <style>
+    /* ============================================================
+       GRAVIS-style HUD chat for the Agency Runtime
+       — dark holographic, cyan glow, glassmorphism panels,
+         code-rain background, voice + text input,
+         streaming typewriter, live skill sidebar.
+       ============================================================ */
+    :root {
+      --bg-deep: #03070f;
+      --bg-mid: #050b1a;
+      --bg-glass: rgba(12, 26, 52, 0.45);
+      --bg-glass-strong: rgba(8, 18, 38, 0.78);
+      --cyan: #4fe3ff;
+      --cyan-soft: rgba(79, 227, 255, 0.55);
+      --cyan-glow: rgba(79, 227, 255, 0.18);
+      --green: #6cff9a;
+      --amber: #ffb14f;
+      --magenta: #ff66c4;
+      --text: #e3f0ff;
+      --muted: #6ba0c8;
+      --line: rgba(79, 227, 255, 0.22);
+      --shadow: 0 0 24px rgba(79, 227, 255, 0.18);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: 'Rajdhani', 'Inter', -apple-system, system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(ellipse at 80% -10%, rgba(79, 227, 255, 0.10), transparent 60%),
+        radial-gradient(ellipse at -10% 110%, rgba(255, 102, 196, 0.08), transparent 55%),
+        var(--bg-deep);
+      overflow: hidden;
+      letter-spacing: 0.01em;
+    }
+
+    /* ----- code rain ------------------------------------------ */
+    #rain {
+      position: fixed; inset: 0; z-index: 0;
+      pointer-events: none; opacity: 0.22;
+    }
+
+    /* ----- scan-lines ----------------------------------------- */
+    body::after {
+      content: ''; position: fixed; inset: 0; z-index: 100;
+      background: repeating-linear-gradient(
+        to bottom, transparent 0, transparent 2px,
+        rgba(79, 227, 255, 0.025) 2px, rgba(79, 227, 255, 0.025) 3px);
+      pointer-events: none;
+    }
+
+    /* ----- layout --------------------------------------------- */
+    #app {
+      position: relative; z-index: 2;
+      display: grid;
+      grid-template-columns: 240px 1fr 320px;
+      grid-template-rows: 56px 1fr 80px;
+      grid-template-areas:
+        "header header header"
+        "sidebar main panel"
+        "sidebar input panel";
+      height: 100vh;
+      gap: 1px;
+      background: var(--line);
+    }
+
+    /* ----- header --------------------------------------------- */
+    #header {
+      grid-area: header;
+      background: var(--bg-glass-strong);
+      backdrop-filter: blur(18px);
+      display: flex; align-items: center;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--line);
+    }
+    #brand {
+      font-family: 'Orbitron', 'Rajdhani', sans-serif;
+      font-weight: 700; font-size: 18px;
+      letter-spacing: 0.32em;
+      color: var(--cyan);
+      text-shadow: 0 0 12px var(--cyan-glow);
+    }
+    #brand-sub {
+      margin-left: 12px; font-size: 10px; letter-spacing: 0.4em;
+      color: var(--muted); text-transform: uppercase;
+    }
+    #header-right {
+      margin-left: auto; display: flex; gap: 18px; align-items: center;
+      font-size: 13px; color: var(--muted);
+    }
+    .badge {
+      padding: 4px 10px; border: 1px solid var(--line);
+      border-radius: 4px; font-size: 11px; letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    .badge.trust-yolo {
+      color: var(--magenta); border-color: var(--magenta);
+      box-shadow: 0 0 12px rgba(255, 102, 196, 0.35);
+      animation: pulse-magenta 2s ease-in-out infinite;
+    }
+    .badge.trust-on-my-machine { color: var(--amber); border-color: var(--amber); }
+    .badge.trust-off { color: var(--muted); }
+    @keyframes pulse-magenta {
+      0%, 100% { box-shadow: 0 0 12px rgba(255, 102, 196, 0.35); }
+      50%      { box-shadow: 0 0 22px rgba(255, 102, 196, 0.65); }
+    }
+    #clock { font-family: 'JetBrains Mono', monospace; color: var(--cyan); font-size: 14px; }
+
+    /* ----- sidebar -------------------------------------------- */
+    #sidebar {
+      grid-area: sidebar;
+      background: var(--bg-glass);
+      backdrop-filter: blur(14px);
+      padding: 18px 12px;
+      overflow-y: auto;
+      border-right: 1px solid var(--line);
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; border-radius: 6px;
+      cursor: pointer; transition: background 120ms;
+      font-size: 14px; color: var(--text);
+    }
+    .nav-item:hover { background: rgba(79, 227, 255, 0.07); }
+    .nav-item.active {
+      background: rgba(79, 227, 255, 0.12);
+      box-shadow: inset 2px 0 var(--cyan);
+    }
+    .nav-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      box-shadow: 0 0 8px currentColor;
+    }
+    .dot-home { color: #ff6363; background: #ff6363; }
+    .dot-skills { color: var(--amber); background: var(--amber); }
+    .dot-memory { color: #ffd866; background: #ffd866; }
+    .dot-sessions { color: var(--green); background: var(--green); }
+    .dot-trust { color: var(--magenta); background: var(--magenta); }
+    .dot-settings { color: #fff; background: #fff; }
+    #sidebar h4 {
+      font-size: 10px; letter-spacing: 0.3em; color: var(--muted);
+      margin: 22px 12px 8px; text-transform: uppercase; font-weight: 500;
+    }
+
+    /* ----- main / chat --------------------------------------- */
+    #main {
+      grid-area: main;
+      background: linear-gradient(180deg, transparent, rgba(79, 227, 255, 0.025));
+      overflow-y: auto;
+      padding: 28px 36px;
+      position: relative;
+    }
+    #greeting {
+      max-width: 640px;
+      margin: 18vh auto 0;
+      text-align: center;
+    }
+    #greeting h1 {
+      font-family: 'Orbitron', sans-serif; font-weight: 600;
+      font-size: 28px; letter-spacing: 0.18em;
+      color: var(--cyan); text-shadow: 0 0 18px var(--cyan-glow);
+      margin: 0 0 12px;
+    }
+    #greeting p { color: var(--muted); font-size: 16px; line-height: 1.6; margin: 8px 0; }
+    .orb {
+      width: 220px; height: 220px;
+      margin: 0 auto 26px;
+      position: relative;
+    }
+    .orb::before, .orb::after {
+      content: ''; position: absolute; inset: 0;
+      border-radius: 50%;
+      border: 1px solid var(--cyan-soft);
+      animation: spin-slow 8s linear infinite;
+    }
+    .orb::after { inset: 22px; border-color: rgba(79, 227, 255, 0.3);
+                   animation-direction: reverse; animation-duration: 12s; }
+    .orb-core {
+      position: absolute; inset: 60px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(79, 227, 255, 0.55),
+                                  rgba(79, 227, 255, 0.10) 60%, transparent);
+      box-shadow: 0 0 60px rgba(79, 227, 255, 0.55);
+      animation: pulse-orb 3.2s ease-in-out infinite;
+    }
+    @keyframes spin-slow { to { transform: rotate(360deg); } }
+    @keyframes pulse-orb {
+      0%, 100% { transform: scale(1); opacity: 0.8; }
+      50%      { transform: scale(1.06); opacity: 1; }
+    }
+
+    .msg { margin: 0 0 22px; max-width: 720px; }
+    .msg.you { margin-left: auto; }
+    .msg-meta {
+      font-size: 11px; color: var(--muted);
+      letter-spacing: 0.2em; text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .msg.you .msg-meta { text-align: right; }
+    .msg-body {
+      background: var(--bg-glass);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 18px;
+      box-shadow: var(--shadow);
+      white-space: pre-wrap; word-wrap: break-word;
+      font-size: 15px; line-height: 1.6;
+    }
+    .msg.you .msg-body {
+      background: rgba(79, 227, 255, 0.08);
+      border-color: var(--cyan-soft);
+    }
+    .msg.tool {
+      max-width: 720px;
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      color: var(--amber); margin: 8px 0;
+      padding: 6px 12px; border-left: 2px solid var(--amber);
+      background: rgba(255, 177, 79, 0.06);
+    }
+    .msg.tool.error { color: #ff6363; border-color: #ff6363;
+                       background: rgba(255, 99, 99, 0.06); }
+    .typing::after {
+      content: '▍'; color: var(--cyan);
+      animation: blink 1s infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* ----- input bar ----------------------------------------- */
+    #inputbar {
+      grid-area: input;
+      background: var(--bg-glass-strong); backdrop-filter: blur(16px);
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 18px; border-top: 1px solid var(--line);
+    }
+    #mic {
+      width: 44px; height: 44px; border-radius: 50%;
+      border: 1px solid var(--cyan-soft);
+      background: rgba(79, 227, 255, 0.08);
+      color: var(--cyan); cursor: pointer; flex-shrink: 0;
+      display: grid; place-items: center; font-size: 20px;
+      box-shadow: 0 0 12px var(--cyan-glow);
+      transition: all 200ms;
+    }
+    #mic:hover { background: rgba(79, 227, 255, 0.15); }
+    #mic.listening {
+      background: var(--magenta); color: #fff;
+      box-shadow: 0 0 24px rgba(255, 102, 196, 0.6);
+      animation: pulse-magenta 1.4s infinite;
+    }
+    #msg {
+      flex: 1; background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--line); border-radius: 6px;
+      padding: 12px 16px; color: var(--text);
+      font: inherit; font-size: 15px;
+      outline: none;
+    }
+    #msg:focus { border-color: var(--cyan); box-shadow: 0 0 12px var(--cyan-glow); }
+    #send {
+      background: var(--cyan); color: var(--bg-deep);
+      border: 0; padding: 10px 22px; border-radius: 6px;
+      font: inherit; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; cursor: pointer;
+      box-shadow: 0 0 16px var(--cyan-glow);
+      transition: all 150ms;
+    }
+    #send:hover { background: #6ef0ff; box-shadow: 0 0 24px var(--cyan); }
+    #send:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+    /* ----- right panel (skills / sessions) ------------------- */
+    #panel {
+      grid-area: panel;
+      background: var(--bg-glass); backdrop-filter: blur(14px);
+      border-left: 1px solid var(--line);
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .panel-title {
+      font-family: 'Orbitron', sans-serif; font-size: 11px;
+      letter-spacing: 0.32em; color: var(--cyan);
+      margin: 0 0 12px; text-transform: uppercase;
+    }
+    #skill-search {
+      width: 100%; background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--line); border-radius: 4px;
+      color: var(--text); padding: 8px 10px; font: inherit; font-size: 13px;
+      margin-bottom: 12px; outline: none;
+    }
+    #skill-search:focus { border-color: var(--cyan); }
+    .skill-card {
+      display: flex; gap: 10px; align-items: center;
+      padding: 8px 10px; border-radius: 4px;
+      cursor: pointer; font-size: 13px;
+      border-left: 2px solid transparent;
+      transition: background 120ms;
+    }
+    .skill-card:hover {
+      background: rgba(79, 227, 255, 0.06);
+      border-left-color: var(--cyan);
+    }
+    .skill-card.active {
+      background: rgba(79, 227, 255, 0.14);
+      border-left-color: var(--cyan);
+    }
+    .skill-emoji { font-size: 16px; }
+    .skill-name { flex: 1; color: var(--text); }
+    .skill-cat {
+      font-size: 9px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.18em;
+    }
+    .cat-section { margin-bottom: 18px; }
+    .cat-header {
+      font-size: 10px; color: var(--cyan); letter-spacing: 0.3em;
+      padding: 4px 10px; margin-bottom: 4px;
+      text-transform: uppercase; opacity: 0.8;
+    }
+
+    /* status line */
+    #status {
+      position: fixed; bottom: 86px; left: 252px;
+      font-size: 11px; color: var(--muted); letter-spacing: 0.2em;
+      text-transform: uppercase; z-index: 5;
+    }
+
+    /* responsive collapse */
+    @media (max-width: 1024px) {
+      #app { grid-template-columns: 200px 1fr; grid-template-areas:
+        "header header" "sidebar main" "sidebar input"; }
+      #panel { display: none; }
+    }
+    @media (max-width: 720px) {
+      #app { grid-template-columns: 1fr; grid-template-areas:
+        "header" "main" "input"; }
+      #sidebar { display: none; }
+    }
+  </style>
+</head>
+<body dir="auto">
+  <canvas id="rain"></canvas>
+
+  <div id="app">
+
+    <header id="header">
+      <div>
+        <span id="brand">JARVIS</span>
+        <span id="brand-sub">Agency Runtime</span>
+      </div>
+      <div id="header-right">
+        <span id="trust-badge" class="badge trust-off">trust: off</span>
+        <span id="skills-count">0 specialists</span>
+        <span id="clock">--:--:--</span>
+      </div>
+    </header>
+
+    <nav id="sidebar">
+      <h4>Workspace</h4>
+      <div class="nav-item active" data-view="home">
+        <span class="nav-dot dot-home"></span><span>Home</span>
+      </div>
+      <div class="nav-item" data-view="skills">
+        <span class="nav-dot dot-skills"></span><span>Specialists</span>
+      </div>
+      <div class="nav-item" data-view="memory">
+        <span class="nav-dot dot-memory"></span><span>Memory</span>
+      </div>
+      <div class="nav-item" data-view="sessions">
+        <span class="nav-dot dot-sessions"></span><span>Sessions</span>
+      </div>
+      <h4>System</h4>
+      <div class="nav-item" data-view="trust">
+        <span class="nav-dot dot-trust"></span><span>Trust mode</span>
+      </div>
+      <div class="nav-item" data-view="settings">
+        <span class="nav-dot dot-settings"></span><span>Settings</span>
+      </div>
+    </nav>
+
+    <main id="main">
+      <div id="greeting">
+        <div class="orb"><div class="orb-core"></div></div>
+        <h1>HELLO.</h1>
+        <p>I'm <strong>JARVIS</strong> — your Agency runtime.</p>
+        <p>Speak or type. I'll route to the right specialist of <span id="greeting-skills">…</span>.</p>
+      </div>
+      <div id="log"></div>
+    </main>
+
+    <div id="status"></div>
+
+    <form id="inputbar" autocomplete="off" onsubmit="return false;">
+      <button id="mic" type="button" title="Voice input">🎙</button>
+      <input id="msg" type="text" placeholder="Speak or type a request — Cmd/Ctrl+K to focus" />
+      <button id="send" type="submit">Send</button>
+    </form>
+
+    <aside id="panel">
+      <div class="panel-title">Specialists</div>
+      <input id="skill-search" placeholder="Filter…" />
+      <div id="skills-list"></div>
+    </aside>
+
+  </div>
+
+<script>
+/* ===========================================================
+   GRAVIS HUD — front-end logic
+   =========================================================== */
+const $ = (id) => document.getElementById(id);
+const log = $('log');
+const status = $('status');
+const skillsCount = $('skills-count');
+const trustBadge = $('trust-badge');
+const greetingSkills = $('greeting-skills');
+
+const state = {
+  skills: [],
+  selectedSkill: null,
+  sessionId: localStorage.getItem('jarvis_session') || null,
+  history: [],
+};
+
+/* ----- code rain --------------------------------------------- */
+(function rain() {
+  const c = $('rain'), ctx = c.getContext('2d');
+  function resize() {
+    c.width = window.innerWidth;
+    c.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン01';
+  const fontSize = 14;
+  const cols = () => Math.floor(c.width / fontSize);
+  let drops = Array(cols()).fill(0);
+
+  setInterval(() => {
+    if (drops.length !== cols()) drops = Array(cols()).fill(0);
+    ctx.fillStyle = 'rgba(3, 7, 15, 0.10)';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.font = fontSize + 'px JetBrains Mono, monospace';
+    for (let i = 0; i < drops.length; i++) {
+      const ch = chars[Math.floor(Math.random() * chars.length)];
+      ctx.fillStyle = Math.random() < 0.05 ? '#aef0ff' : '#1d6f8e';
+      ctx.fillText(ch, i * fontSize, drops[i] * fontSize);
+      if (drops[i] * fontSize > c.height && Math.random() > 0.97) drops[i] = 0;
+      drops[i]++;
+    }
+  }, 70);
+})();
+
+/* ----- clock ------------------------------------------------- */
+setInterval(() => {
+  const d = new Date();
+  $('clock').textContent = d.toTimeString().slice(0, 8);
+}, 1000);
+
+/* ----- skill loading ----------------------------------------- */
+async function loadSkills() {
+  const r = await fetch('/api/skills');
+  const data = await r.json();
+  state.skills = data.skills;
+  skillsCount.textContent = data.count + ' specialists';
+  greetingSkills.textContent = data.count + ' specialists';
+  renderSkills();
+}
+
+function renderSkills(filter = '') {
+  const list = $('skills-list');
+  list.innerHTML = '';
+  const f = filter.toLowerCase().trim();
+  const filtered = f
+    ? state.skills.filter(s =>
+        s.name.toLowerCase().includes(f) ||
+        s.slug.toLowerCase().includes(f) ||
+        (s.description || '').toLowerCase().includes(f))
+    : state.skills;
+
+  // group by category
+  const byCat = {};
+  for (const s of filtered) {
+    (byCat[s.category] = byCat[s.category] || []).push(s);
+  }
+  const cats = Object.keys(byCat).sort();
+  for (const cat of cats) {
+    const sec = document.createElement('div');
+    sec.className = 'cat-section';
+    sec.innerHTML = `<div class="cat-header">${cat} · ${byCat[cat].length}</div>`;
+    for (const s of byCat[cat]) {
+      const card = document.createElement('div');
+      card.className = 'skill-card' + (state.selectedSkill === s.slug ? ' active' : '');
+      card.innerHTML = `
+        <span class="skill-emoji">${s.emoji || '🤖'}</span>
+        <span class="skill-name">${s.name}</span>
+        <span class="skill-cat">${s.slug.split('-')[0]}</span>`;
+      card.addEventListener('click', () => {
+        state.selectedSkill = state.selectedSkill === s.slug ? null : s.slug;
+        renderSkills(filter);
+        setStatus(state.selectedSkill ? `Routing to: ${s.slug}` : 'Auto-route');
+      });
+      sec.appendChild(card);
+    }
+    list.appendChild(sec);
+  }
+}
+
+$('skill-search').addEventListener('input', e => renderSkills(e.target.value));
+
+/* ----- trust mode badge -------------------------------------- */
+async function loadHealth() {
+  try {
+    const r = await fetch('/api/health');
+    if (!r.ok) return;
+    const h = await r.json();
+    // health endpoint doesn't directly expose trust mode in the response;
+    // we infer it from the doctor / trust CLI not the API. Fall back
+    // to a static value here. The badge updates on each chat run too.
+  } catch (e) { /* ignore */ }
+}
+
+/* ----- streaming chat ---------------------------------------- */
+function setStatus(s) { status.textContent = s; }
+function hideGreeting() { $('greeting').style.display = 'none'; }
+
+function appendUserMsg(text) {
+  hideGreeting();
+  const div = document.createElement('div');
+  div.className = 'msg you';
+  div.innerHTML = `<div class="msg-meta">YOU · ${new Date().toLocaleTimeString()}</div>
+                   <div class="msg-body"></div>`;
+  div.querySelector('.msg-body').textContent = text;
+  log.appendChild(div);
+  log.parentElement.scrollTop = log.parentElement.scrollHeight;
+}
+
+function startAgentMsg(skillName, slug) {
+  const div = document.createElement('div');
+  div.className = 'msg agent';
+  div.innerHTML = `<div class="msg-meta">${skillName.toUpperCase()} · ${slug}</div>
+                   <div class="msg-body typing"></div>`;
+  log.appendChild(div);
+  log.parentElement.scrollTop = log.parentElement.scrollHeight;
+  return div.querySelector('.msg-body');
+}
+
+function appendTool(name, isError, content) {
+  const div = document.createElement('div');
+  div.className = 'msg tool' + (isError ? ' error' : '');
+  div.textContent = `[${isError ? '✗' : '⚙'} ${name}] ${String(content).slice(0, 240)}`;
+  log.appendChild(div);
+  log.parentElement.scrollTop = log.parentElement.scrollHeight;
+}
+
+function parseSSE(buf) {
+  const events = [];
+  let idx;
+  while ((idx = buf.indexOf('\n\n')) !== -1) {
+    const block = buf.slice(0, idx);
+    buf = buf.slice(idx + 2);
+    let event = 'message', data = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      else if (line.startsWith('data:')) data += line.slice(5).trim();
+    }
+    try { events.push({ event, data: JSON.parse(data) }); }
+    catch { events.push({ event, data }); }
+  }
+  return [events, buf];
+}
+
+async function send() {
+  const msg = $('msg').value.trim();
+  if (!msg) return;
+  $('send').disabled = true;
+  $('msg').value = '';
+  appendUserMsg(msg);
+  setStatus('thinking…');
+
+  let bodyEl = null;
+  let buf = '';
+  try {
+    const r = await fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json',
+                 'accept': 'text/event-stream' },
+      body: JSON.stringify({
+        message: msg,
+        skill: state.selectedSkill || null,
+        session_id: state.sessionId,
+      }),
+    });
+    if (!r.ok) {
+      appendTool('http', true, `${r.status}: ${await r.text()}`);
+      return;
+    }
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let evs;
+      [evs, buf] = parseSSE(buf);
+      for (const ev of evs) {
+        if (ev.event === 'plan') {
+          const s = ev.data.skill;
+          bodyEl = startAgentMsg(`${s.emoji || '🤖'} ${s.name}`, s.slug);
+          setStatus(`→ ${s.slug}`);
+        } else if (ev.event === 'text_delta') {
+          if (bodyEl) {
+            bodyEl.classList.remove('typing');
+            bodyEl.textContent += ev.data;
+            bodyEl.classList.add('typing');
+            log.parentElement.scrollTop = log.parentElement.scrollHeight;
+          }
+        } else if (ev.event === 'tool_use') {
+          appendTool(ev.data.name, false,
+                     JSON.stringify(ev.data.input).slice(0, 120));
+        } else if (ev.event === 'tool_result') {
+          appendTool(ev.data.name, ev.data.is_error,
+                     String(ev.data.content).slice(0, 200));
+        } else if (ev.event === 'stop') {
+          if (bodyEl) bodyEl.classList.remove('typing');
+        } else if (ev.event === 'error') {
+          appendTool('error', true, ev.data.message || ev.data);
+          if (bodyEl) bodyEl.classList.remove('typing');
+        } else if (ev.event === 'done') {
+          setStatus('done');
+        }
+      }
+    }
+  } catch (e) {
+    appendTool('network', true, String(e));
+  } finally {
+    $('send').disabled = false;
+    if (bodyEl) bodyEl.classList.remove('typing');
+    $('msg').focus();
+  }
+}
+
+$('send').addEventListener('click', send);
+$('msg').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault(); $('msg').focus();
+  }
+});
+
+/* ----- voice input (Web Speech API) -------------------------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const mic = $('mic');
+if (SR) {
+  const rec = new SR();
+  rec.continuous = false; rec.interimResults = false;
+  rec.lang = (navigator.language || 'en-US');
+  let listening = false;
+  mic.addEventListener('click', () => {
+    if (listening) { rec.stop(); return; }
+    try { rec.start(); listening = true; mic.classList.add('listening'); }
+    catch { /* already running */ }
+  });
+  rec.onresult = e => {
+    const text = e.results[0][0].transcript;
+    $('msg').value = text;
+    listening = false; mic.classList.remove('listening');
+    send();
+  };
+  rec.onend   = () => { listening = false; mic.classList.remove('listening'); };
+  rec.onerror = () => { listening = false; mic.classList.remove('listening'); };
+} else {
+  mic.title = 'Voice input not supported in this browser';
+  mic.style.opacity = '0.4';
+  mic.style.cursor = 'not-allowed';
+}
+
+/* ----- session id persistence -------------------------------- */
+if (!state.sessionId) {
+  state.sessionId = 's_' + Math.random().toString(36).slice(2, 10);
+  localStorage.setItem('jarvis_session', state.sessionId);
+}
+
+/* ----- skills graph (sidebar nav) ---------------------------- */
+async function showSkillsGraph() {
+  try {
+    const r = await fetch('/api/skills/graph');
+    if (!r.ok) return;
+    const g = await r.json();
+    hideGreeting();
+    const div = document.createElement('div');
+    div.className = 'msg agent';
+    div.innerHTML = `<div class="msg-meta">SYSTEM · skills graph</div>
+                     <div class="msg-body"></div>`;
+    const body = div.querySelector('.msg-body');
+    body.textContent =
+      `Total: ${g.total_skills} specialists across ${g.categories.length} categories.\n\n` +
+      g.categories.map(c => `· ${c.name}: ${c.count}`).join('\n');
+    log.appendChild(div);
+  } catch (e) { /* ignore */ }
+}
+
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+    const view = el.dataset.view;
+    if (view === 'skills') showSkillsGraph();
+    if (view === 'home') location.reload();
+    if (view === 'memory')
+      window.open('https://github.com/amjad2161/agency-agents/blob/main/runtime/agency/lessons.py', '_blank');
+    if (view === 'trust')
+      window.open('https://github.com/amjad2161/agency-agents/blob/main/runtime/agency/trust.py', '_blank');
+  });
+});
+
+/* ----- boot -------------------------------------------------- */
+loadSkills();
+loadHealth();
+$('msg').focus();
+</script>
+</body>
+</html>

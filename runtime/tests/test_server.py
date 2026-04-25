@@ -17,6 +17,35 @@ def test_api_skills_returns_count_and_list():
     assert all({"slug", "name", "category", "description", "emoji"} <= set(s) for s in data["skills"][:3])
 
 
+def test_api_skills_graph_returns_categories_and_hubs():
+    app = build_app()
+    client = TestClient(app)
+    resp = client.get("/api/skills/graph")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_skills"] > 0
+    assert isinstance(data["categories"], list) and data["categories"]
+    cat = data["categories"][0]
+    assert {"name", "count", "top_slugs"} <= set(cat)
+    assert isinstance(cat["top_slugs"], list)
+    # delegation hubs: with the current registry this should pick up
+    # at least jarvis-core and elder-sage.
+    hub_slugs = [h["slug"] for h in data["delegation_hubs"]]
+    assert any("core" in s or "elder" in s or "omega" in s for s in hub_slugs)
+
+
+def test_index_serves_chat_html_from_disk_when_present(tmp_path, monkeypatch):
+    """If runtime/agency/static/chat.html exists, GET / serves it."""
+    app = build_app()
+    client = TestClient(app)
+    resp = client.get("/")
+    assert resp.status_code == 200
+    body = resp.text
+    # The new GRAVIS HUD has an obvious marker not present in the old
+    # _CHAT_HTML fallback.
+    assert "JARVIS" in body or "Agency Runtime" in body
+
+
 def test_api_plan_falls_back_to_keyword_match_without_api_key(monkeypatch):
     # Force _maybe_llm to return None so the planner takes the offline path.
     from agency import server as server_mod

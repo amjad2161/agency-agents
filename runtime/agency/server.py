@@ -38,9 +38,18 @@ def build_app(repo: Path | None = None) -> FastAPI:
 
     app = FastAPI(title="Agency Runtime", version="0.1.0")
 
+    # Locate the chat HUD asset (separate file under static/ — keeps
+    # server.py focused on routing instead of inlining ~700 lines of
+    # HTML/CSS/JS). Falls back to the embedded _CHAT_HTML constant if
+    # the file is missing (developer-mode fallback).
+    _chat_html_path = Path(__file__).parent / "static" / "chat.html"
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
-        return _CHAT_HTML
+        try:
+            return _chat_html_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return _CHAT_HTML
 
     @app.get("/api/version")
     def version_endpoint() -> dict[str, str]:
@@ -131,6 +140,46 @@ def build_app(repo: Path | None = None) -> FastAPI:
                 }
                 for s in registry.all()
             ],
+        }
+
+    @app.get("/api/skills/graph")
+    def skills_graph() -> dict[str, Any]:
+        """Compact category + relationship view for the HUD sidebar.
+
+        Returns:
+          - total_skills: int
+          - categories: [{name, count, top_slugs: [...]}]
+          - delegation_hubs: slugs that other skills are most likely to
+            delegate to (currently a heuristic: anything with `core`,
+            `master`, `orchestrator`, `omega` in the slug — the
+            registry doesn't carry explicit delegation edges yet).
+        """
+        skills = registry.all()
+        cats: dict[str, list[Any]] = {}
+        for s in skills:
+            cats.setdefault(s.category, []).append(s)
+
+        hub_keywords = ("core", "brainiac", "elder", "omega",
+                        "orchestrator", "master", "research-director",
+                        "goal-decomposer")
+        hubs = [
+            {"slug": s.slug, "name": s.name, "emoji": s.emoji,
+             "category": s.category}
+            for s in skills
+            if any(k in s.slug.lower() for k in hub_keywords)
+        ][:20]
+
+        return {
+            "total_skills": len(skills),
+            "categories": [
+                {
+                    "name": cat,
+                    "count": len(items),
+                    "top_slugs": [s.slug for s in items[:5]],
+                }
+                for cat, items in sorted(cats.items())
+            ],
+            "delegation_hubs": hubs,
         }
 
     @app.post("/api/plan")
