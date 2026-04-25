@@ -118,3 +118,32 @@ def test_init_refuses_to_overwrite(runner, no_api_key, tmp_path):
     ])
     assert result.exit_code != 0
     assert "exists" in result.output.lower()
+
+
+def test_verbose_flag_enables_info_logging(runner, no_api_key):
+    """`-v` should bump the agency logger to INFO so plan.picked records show up."""
+    import logging
+
+    # Reset the logger so the CLI's configure() actually attaches a handler
+    # against this run's stderr.
+    agency_logger = logging.getLogger("agency")
+    for h in list(agency_logger.handlers):
+        agency_logger.removeHandler(h)
+    agency_logger.setLevel(logging.WARNING)
+
+    # Plan a request — under -v this should emit a plan.picked log line.
+    result = runner.invoke(main, ["-v", "plan", "build a frontend dashboard"])
+    assert result.exit_code == 0
+    # CliRunner captures the agency logger's stderr handler output too.
+    assert "plan.picked" in result.output or "plan.picked" in (result.stderr or "")
+
+
+def test_double_verbose_flag_enables_debug(runner, no_api_key):
+    import logging
+
+    agency_logger = logging.getLogger("agency")
+    for h in list(agency_logger.handlers):
+        agency_logger.removeHandler(h)
+
+    runner.invoke(main, ["-vv", "list"])
+    assert agency_logger.level == logging.DEBUG
