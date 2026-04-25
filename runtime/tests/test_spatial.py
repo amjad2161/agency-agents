@@ -117,6 +117,71 @@ def test_run_with_unknown_skill_slug_surfaces_error_not_dropped_socket(monkeypat
         assert json.loads(ws.receive_text()) == {"type": "pong"}
 
 
+def test_disconnect_signals_cancellation_to_worker(monkeypatch):
+    """Regression: when the client disconnects mid-stream, the worker thread
+    must observe the cancel signal and stop pulling further executor events,
+    instead of running through the full MAX_TURNS-cap loop while the socket
+    is closed.
+
+    Strategy: stub the LLM to count messages_create() calls, return a
+    minimal `tool_use` response on the first call and an `end_turn` on the
+    second. The consumer-side WebSocket is closed before the second call.
+    A correct implementation sees count == 1 (post-disconnect calls
+    short-circuited); the buggy version saw count == 2.
+    """
+    from agency import server as server_mod
+    from dataclasses import dataclass
+    from typing import Any as _Any
+    import threading
+
+    proceed_to_call_2 = threading.Event()
+    call_count = {"n": 0}
+
+    @dataclass
+    class _T: text: str = "ok"; type: str = "text"
+    @dataclass
+    class _Tool: id: str = "t1"; name: str = "list_dir"; input: dict = None; type: str = "tool_use"
+    @dataclass
+    class _R: content: list; stop_reason: str; usage: _Any = None
+
+    class _StubLLM:
+        class config:
+            model = "fake"; planner_model = "fake"; max_tokens = 1024
+        @staticmethod
+        def cached_system(text):
+            return [{"type": "text", "text": text,
+                     "cache_control": {"type": "ephemeral"}}]
+        def messages_create(self, **k):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                # Block here so the consumer has time to disconnect.
+                proceed_to_call_2.wait(timeout=3)
+                return _R(content=[_T()], stop_reason="end_turn")
+            # If we get here, cancellation didn't work.
+            return _R(content=[_T()], stop_reason="end_turn")
+
+    monkeypatch.setattr(server_mod, "_require_llm", lambda: _StubLLM())
+    monkeypatch.setattr(server_mod, "_maybe_llm", lambda: None)
+
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({"type": "run", "message": "anything"}))
+        plan_msg = json.loads(ws.receive_text())
+        assert plan_msg["type"] == "plan"
+        # Don't read the first stream event; just close the socket while
+        # the LLM call is blocked.
+    proceed_to_call_2.set()
+
+    # Brief grace period for the worker to finish its in-flight call and
+    # observe the cancel flag before deciding whether to continue.
+    import time
+    time.sleep(0.2)
+    # The worker must NOT have made a second LLM call after disconnect.
+    assert call_count["n"] <= 1, (
+        f"worker made {call_count['n']} LLM calls after disconnect; "
+        "cancellation didn't fire"
+    )
+
+
 def test_run_when_executor_raises_still_delivers_done_sentinel(monkeypatch):
     """If the executor blows up mid-stream, the protocol still yields a final
     'done' after the error envelope. Regression for the previous bug where

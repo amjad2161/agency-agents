@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from typing import Any, Awaitable, Callable
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -177,11 +178,17 @@ async def _handle_run(
 
     # The executor's stream() is sync; run it in a worker thread so the
     # WebSocket loop stays responsive (heartbeats, gesture events, etc.).
+    # `cancel_event` lets us tell the worker to stop after the current
+    # in-flight LLM turn if the WebSocket client disconnects — without it,
+    # a closed socket still pays for up to MAX_TURNS Anthropic calls.
     queue: asyncio.Queue = asyncio.Queue()
+    cancel_event = threading.Event()
 
     def _drain() -> None:
         try:
             for ev in executor.stream(plan.skill, user_message, session=session):
+                if cancel_event.is_set():
+                    return  # finally below still enqueues "done"
                 loop.call_soon_threadsafe(
                     queue.put_nowait,
                     {"type": "stream", "kind": ev.kind, "payload": ev.payload},
@@ -197,12 +204,19 @@ async def _handle_run(
     # `_drain` always enqueues a final {"type": "done"} via its `finally`,
     # even on error — so we only break on "done" to guarantee the client
     # sees the protocol's terminal sentinel after any error envelope.
-    while True:
-        item = await queue.get()
-        await _send(ws, item)
-        if item["type"] == "done":
-            break
-    await fut  # let the worker finish before returning
+    try:
+        while True:
+            item = await queue.get()
+            await _send(ws, item)
+            if item["type"] == "done":
+                break
+    except WebSocketDisconnect:
+        # Client gave up. Tell the worker to stop after the current LLM call
+        # so we don't burn additional turns on a closed socket.
+        cancel_event.set()
+        raise
+    finally:
+        await fut  # let the worker finish (or short-circuit on cancel)
 
 
 async def _send(ws: WebSocket, payload: dict[str, Any]) -> None:
