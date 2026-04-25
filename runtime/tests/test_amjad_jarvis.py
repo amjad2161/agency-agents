@@ -147,7 +147,7 @@ class TestAmjadProfile:
 
     def test_load_or_create_handles_corrupt_json(self, tmp_path: Path):
         path = tmp_path / "bad.json"
-        path.write_text("not json {{{{")
+        path.write_text("not json {")
         p = AmjadProfile.load_or_create(path)
         assert p.name == "Amjad"
 

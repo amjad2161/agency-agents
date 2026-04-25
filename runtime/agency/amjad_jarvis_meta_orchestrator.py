@@ -260,9 +260,10 @@ class AmjadJarvisMetaOrchestrator:
     def _create_context_aware_executor(self, skill: Skill) -> tuple[Executor, Skill]:
         """Create an executor with Amjad's profile injected.
 
-        Returns a ``(Executor, enhanced_Skill)`` tuple.  The enhanced skill has
-        Amjad's context prepended to the system prompt and must be passed directly
-        to ``executor.run()`` so the LLM receives the augmented system prompt.
+        Returns ``(executor, enhanced_skill)`` where ``enhanced_skill`` has
+        Amjad's context prepended to the system prompt.  Pass ``enhanced_skill``
+        directly to ``executor.run()`` so the LLM receives the augmented system
+        prompt.
         """
         original_prompt = skill.system_prompt
         amjad_prefix = self.amjad.to_system_prompt_prefix()
