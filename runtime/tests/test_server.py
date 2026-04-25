@@ -88,6 +88,7 @@ def test_health_endpoint_status_ok_with_skills_and_features(monkeypatch):
     monkeypatch.delenv("AGENCY_ENABLE_COMPUTER_USE", raising=False)
     monkeypatch.delenv("AGENCY_ALLOW_SHELL", raising=False)
     monkeypatch.delenv("AGENCY_MCP_SERVERS", raising=False)
+    monkeypatch.delenv("AGENCY_TASK_BUDGET", raising=False)
 
     app = build_app()
     client = TestClient(app)
@@ -122,7 +123,9 @@ def test_health_endpoint_reflects_feature_flags(monkeypatch):
 
     app = build_app()
     client = TestClient(app)
-    data = client.get("/api/health").json()
+    resp = client.get("/api/health")
+    assert resp.status_code == 200
+    data = resp.json()
     assert data["api_key_set"] is True
     assert data["features"]["web_search"] is True
     assert data["features"]["code_execution"] is True
@@ -130,3 +133,65 @@ def test_health_endpoint_reflects_feature_flags(monkeypatch):
     assert data["features"]["shell_allowed"] is True
     assert data["features"]["task_budget_tokens"] == 50000
     assert data["features"]["mcp_servers"] == 1
+
+
+def test_health_endpoint_can_be_disabled(monkeypatch):
+    """AGENCY_DISABLE_HEALTH=1 unregisters the route entirely."""
+    monkeypatch.setenv("AGENCY_DISABLE_HEALTH", "1")
+    app = build_app()
+    client = TestClient(app)
+    resp = client.get("/api/health")
+    assert resp.status_code == 404
+
+
+def test_health_endpoint_returns_200_even_when_internals_blow_up(monkeypatch):
+    """The always-200 contract: a broken probe returns status='error', not HTTP 500."""
+    from agency import server as server_mod
+
+    def _boom() -> dict:
+        raise RuntimeError("optional dep broke")
+    monkeypatch.setattr(server_mod, "optional_deps_status", _boom)
+
+    app = build_app()
+    client = TestClient(app)
+    resp = client.get("/api/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "error"
+    assert "optional dep broke" in data["error"]
+    assert data["version"]
+
+
+def test_optional_deps_status_reports_errors_separately():
+    """A non-ImportError at import time should land in errors, not missing."""
+    import sys
+    from agency.diagnostics import optional_deps_status, OPTIONAL_DEP_GROUPS
+
+    # Build a fake import that raises a non-ImportError when imported.
+    class _ExplodingFinder:
+        def find_spec(self, name, *a, **k):
+            if name == "pyautogui":
+                # Return a loader that raises on exec.
+                from importlib.machinery import ModuleSpec
+                from importlib.abc import Loader
+
+                class _Boom(Loader):
+                    def create_module(self, spec): return None
+                    def exec_module(self, module):
+                        raise OSError("DISPLAY not set, cannot init pyautogui")
+                return ModuleSpec(name, _Boom())
+            return None
+
+    # Drop any previously cached pyautogui import.
+    sys.modules.pop("pyautogui", None)
+    finder = _ExplodingFinder()
+    sys.meta_path.insert(0, finder)
+    try:
+        result = optional_deps_status()
+    finally:
+        sys.meta_path.remove(finder)
+        sys.modules.pop("pyautogui", None)
+
+    assert "pyautogui" in result["computer"]["errors"]
+    assert "DISPLAY not set" in result["computer"]["errors"]["pyautogui"]
+    assert result["computer"]["installed"] is False

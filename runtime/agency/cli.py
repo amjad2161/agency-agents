@@ -197,8 +197,9 @@ def init_cmd(ctx: click.Context, slug: str, name: str | None, category: str,
 @click.pass_context
 def doctor_cmd(ctx: click.Context) -> None:
     """Diagnose the runtime: show what's loaded, enabled, and missing."""
-    import importlib
     import os
+
+    from .diagnostics import optional_deps_status
     from .tools import ToolContext
 
     click.echo("=== Agency Runtime Doctor ===\n")
@@ -237,22 +238,17 @@ def doctor_cmd(ctx: click.Context) -> None:
         val = os.environ.get(f)
         click.echo(f"  {f:32s}  {val or '—'}")
 
-    # Optional deps
+    # Optional deps (shared with /api/health via agency.diagnostics)
     click.echo("\noptional deps:")
-    for group, mods in {
-        "[docs]":     ["pypdf", "docx", "openpyxl"],
-        "[computer]": ["pyautogui", "PIL"],
-    }.items():
-        installed = []
-        missing = []
-        for m in mods:
-            try:
-                importlib.import_module(m)
-                installed.append(m)
-            except ImportError:
-                missing.append(m)
-        status = "ok" if not missing else f"missing: {', '.join(missing)}"
-        click.echo(f"  {group:12s}  {status}")
+    for group, info in optional_deps_status().items():
+        bracket = f"[{group}]"
+        if info["installed"]:
+            status = "ok"
+        elif info["missing"]:
+            status = f"missing: {', '.join(info['missing'])}"
+        else:
+            status = "broken: " + "; ".join(f"{k}: {v}" for k, v in info["errors"].items())
+        click.echo(f"  {bracket:12s}  {status}")
 
     # Tool context defaults
     tc = ToolContext.from_env()

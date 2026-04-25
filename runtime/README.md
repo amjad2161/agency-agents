@@ -37,6 +37,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `AGENCY_ALLOW_SHELL=1` | Opt into the allowlisted shell tool. |
 | `AGENCY_NO_NETWORK=1` | Disable `web_fetch`. |
 | `AGENCY_TOOL_TIMEOUT` | Per-tool wall-clock seconds (default 30). |
+| `AGENCY_DISABLE_HEALTH=1` | Don't register `/api/health`. Set this if you bind 0.0.0.0 on an untrusted network and don't want the diagnostic snapshot exposed. |
 
 Example MCP config:
 
