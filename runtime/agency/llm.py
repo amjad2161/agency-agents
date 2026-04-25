@@ -6,6 +6,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
+from .logging import get_logger, timed
+
 DEFAULT_MODEL = "claude-opus-4-7"
 PLANNER_MODEL = "claude-haiku-4-5"  # cheap model for routing decisions
 DEFAULT_MAX_TOKENS = 16000
@@ -115,7 +117,22 @@ class AnthropicLLM:
             model=model, max_tokens=max_tokens, thinking=thinking,
         )
         target = client.beta.messages if use_beta else client.messages
-        return target.create(**kwargs)
+        log = get_logger()
+        with timed("llm.create", model=kwargs.get("model"), beta=use_beta,
+                   tools=len(kwargs.get("tools") or []),
+                   messages=len(kwargs.get("messages") or [])):
+            response = target.create(**kwargs)
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            log.info(
+                "llm.usage input=%s output=%s cache_w=%s cache_r=%s stop=%s",
+                getattr(usage, "input_tokens", None),
+                getattr(usage, "output_tokens", None),
+                getattr(usage, "cache_creation_input_tokens", None),
+                getattr(usage, "cache_read_input_tokens", None),
+                getattr(response, "stop_reason", None),
+            )
+        return response
 
     def messages_stream(
         self,

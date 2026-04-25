@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass
 
 from .llm import AnthropicLLM, LLMError
+from .logging import get_logger
 from .skills import Skill, SkillRegistry
 
 
@@ -41,10 +42,12 @@ class Planner:
         self.shortlist_size = shortlist_size
 
     def plan(self, request: str, hint_slug: str | None = None) -> PlanResult:
+        log = get_logger()
         if hint_slug:
             skill = self.registry.by_slug(hint_slug)
             if skill is None:
                 raise ValueError(f"Unknown skill slug: {hint_slug}")
+            log.info("plan.hint slug=%s", hint_slug)
             return PlanResult(skill=skill, rationale="explicit user choice", candidates=[skill])
 
         candidates = self.registry.search(request, limit=self.shortlist_size)
@@ -52,15 +55,16 @@ class Planner:
             candidates = self.registry.all()[: self.shortlist_size]
 
         if len(candidates) == 1 or self.llm is None:
-            return PlanResult(
-                skill=candidates[0],
-                rationale="top keyword match" if self.llm is None else "only candidate",
-                candidates=candidates,
-            )
+            picked = candidates[0]
+            reason = "top keyword match" if self.llm is None else "only candidate"
+            log.info("plan.picked slug=%s reason=%r candidates=%d",
+                     picked.slug, reason, len(candidates))
+            return PlanResult(skill=picked, rationale=reason, candidates=candidates)
 
         try:
             choice_idx, rationale = self._ask_llm(request, candidates)
         except LLMError:
+            log.warning("plan.llm_unavailable falling back to keyword match")
             return PlanResult(
                 skill=candidates[0],
                 rationale="LLM unavailable, fell back to top keyword match",
@@ -68,7 +72,10 @@ class Planner:
             )
         if choice_idx < 0 or choice_idx >= len(candidates):
             choice_idx = 0
-        return PlanResult(skill=candidates[choice_idx], rationale=rationale, candidates=candidates)
+        picked = candidates[choice_idx]
+        log.info("plan.picked slug=%s reason=%r candidates=%d",
+                 picked.slug, rationale, len(candidates))
+        return PlanResult(skill=picked, rationale=rationale, candidates=candidates)
 
     def _ask_llm(self, request: str, candidates: list[Skill]) -> tuple[int, str]:
         assert self.llm is not None

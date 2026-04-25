@@ -4,6 +4,15 @@ All notable changes to the agency runtime, newest first.
 
 ## Unreleased
 
+### Added (post-merge)
+- **Structured logging.** A single `agency` named logger (`runtime/agency/logging.py`).
+  Off by default; enable with `AGENCY_LOG=info` / `debug` or CLI `-v` / `-vv`.
+  Emits records for every routing decision, LLM call (with timings + token
+  usage), and tool invocation (with elapsed_ms and error flag).
+- **Runnable examples.** `runtime/examples/` ships four scripts that exercise
+  the programmatic API: list skills, route a prompt (no key), stream a full
+  run, and drive cross-skill delegation. See `runtime/examples/README.md`.
+
 ### Added
 - **Server-side tool handling.** Executor now recognizes `server_tool_use`,
   `mcp_tool_use`, and `*_tool_result` response blocks and surfaces them on

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .llm import AnthropicLLM
+from .logging import get_logger, timed
 from .memory import MemoryStore, Session
 from .skills import Skill, SkillRegistry
 from .tools import Tool, ToolContext, builtin_tools, tools_by_name
@@ -363,18 +364,26 @@ class Executor:
         return results
 
     def _run_tool(self, name: str, args: dict[str, Any]):
+        log = get_logger()
         tool = self._tool_index.get(name)
         if tool is None:
+            log.warning("tool.unknown name=%s", name)
             from .tools import ToolResult
             return ToolResult(f"Unknown tool: {name}", is_error=True)
-        try:
-            return tool.func(args, self.ctx)
-        except PermissionError as e:
-            from .tools import ToolResult
-            return ToolResult(str(e), is_error=True)
-        except Exception as e:  # noqa: BLE001 - surface tool errors to the model
-            from .tools import ToolResult
-            return ToolResult(f"Tool error: {type(e).__name__}: {e}", is_error=True)
+        with timed("tool.run", name=name):
+            try:
+                result = tool.func(args, self.ctx)
+            except PermissionError as e:
+                from .tools import ToolResult
+                log.warning("tool.permission_error name=%s err=%s", name, e)
+                return ToolResult(str(e), is_error=True)
+            except Exception as e:  # noqa: BLE001 - surface tool errors to the model
+                from .tools import ToolResult
+                log.exception("tool.unhandled name=%s", name)
+                return ToolResult(f"Tool error: {type(e).__name__}: {e}", is_error=True)
+        if result.is_error:
+            log.info("tool.error name=%s preview=%r", name, result.content[:120])
+        return result
 
     @staticmethod
     def _block_to_dict(block) -> dict[str, Any]:

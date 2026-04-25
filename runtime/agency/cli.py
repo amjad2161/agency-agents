@@ -9,6 +9,7 @@ import click
 
 from .executor import Executor
 from .llm import AnthropicLLM, LLMConfig, LLMError
+from .logging import configure as configure_logging
 from .memory import MemoryStore, Session
 from .planner import Planner
 from .skills import SkillRegistry, discover_repo_root
@@ -22,11 +23,19 @@ def _registry(repo: Path | None) -> SkillRegistry:
 @click.group()
 @click.option("--repo", type=click.Path(file_okay=False, exists=True, path_type=Path),
               help="Path to the Agency repo root. Defaults to autodetect.")
+@click.option("-v", "--verbose", count=True,
+              help="-v=INFO, -vv=DEBUG. Or set AGENCY_LOG=info/debug.")
 @click.pass_context
-def main(ctx: click.Context, repo: Path | None) -> None:
+def main(ctx: click.Context, repo: Path | None, verbose: int) -> None:
     """Agency runtime: orchestrate the persona library as runnable skills."""
     ctx.ensure_object(dict)
     ctx.obj["repo"] = repo
+    if verbose >= 2:
+        configure_logging("DEBUG")
+    elif verbose == 1:
+        configure_logging("INFO")
+    else:
+        configure_logging()  # respects AGENCY_LOG env var; default WARNING
 
 
 @main.command("list")
