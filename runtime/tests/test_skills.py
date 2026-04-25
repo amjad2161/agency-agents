@@ -46,6 +46,62 @@ def test_system_prompt_is_non_empty():
         assert skill.system_prompt.strip(), f"empty system prompt for {skill.slug}"
 
 
+def test_skill_tool_policy_defaults_to_open():
+    """Skills without tools_allowed / tools_denied see every tool by default."""
+    reg = SkillRegistry.load(REPO)
+    s = reg.all()[0]
+    assert s.tools_allowed is None
+    assert s.tools_denied == ()
+    assert s.tool_is_allowed("read_file")
+    assert s.tool_is_allowed("run_shell")
+    assert s.tool_is_allowed("delegate_to_skill")
+
+
+def test_parse_tool_list_handles_yaml_list_and_csv(tmp_path):
+    """Either a YAML list or a comma-joined string is accepted in frontmatter."""
+    from agency.skills import _parse_one
+    body = (
+        "---\n"
+        "name: Test\n"
+        "description: x\n"
+        "tools_allowed:\n"
+        "  - read_file\n"
+        "  - list_dir\n"
+        "tools_denied: run_shell, write_file\n"
+        "---\n"
+        "system body"
+    )
+    md = tmp_path / "test-skill.md"
+    md.write_text(body)
+    skill = _parse_one(md, "test")
+    assert skill is not None
+    assert skill.tools_allowed == ("read_file", "list_dir")
+    assert skill.tools_denied == ("run_shell", "write_file")
+    assert skill.tool_is_allowed("read_file")
+    assert not skill.tool_is_allowed("write_file")  # in denied
+    assert not skill.tool_is_allowed("delegate_to_skill")  # not in allowed
+
+
+def test_skill_with_only_denied_keeps_others_open(tmp_path):
+    from agency.skills import _parse_one
+    body = (
+        "---\n"
+        "name: NoShell\n"
+        "description: x\n"
+        "tools_denied: [run_shell]\n"
+        "---\n"
+        "body"
+    )
+    md = tmp_path / "no-shell.md"
+    md.write_text(body)
+    skill = _parse_one(md, "test")
+    assert skill is not None
+    assert skill.tools_allowed is None
+    assert "run_shell" in skill.tools_denied
+    assert not skill.tool_is_allowed("run_shell")
+    assert skill.tool_is_allowed("read_file")
+
+
 def test_default_categories_matches_repo_layout():
     """Every category folder on disk that contains *.md should be in DEFAULT_CATEGORIES,
     and every entry in DEFAULT_CATEGORIES should correspond to a real folder.

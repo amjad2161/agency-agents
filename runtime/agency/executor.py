@@ -143,7 +143,7 @@ class Executor:
         self._bind_session_to_ctx(session)
         messages = self._initial_messages(session, user_message)
         system = AnthropicLLM.cached_system(skill.system_prompt)
-        tool_defs = [t.to_anthropic() for t in self.tools]
+        tool_defs = self._tool_defs_for(skill)
 
         turns = 0
         for _ in range(MAX_TURNS):
@@ -229,7 +229,7 @@ class Executor:
         usage = Usage()
         messages = self._initial_messages(session, user_message)
         system = AnthropicLLM.cached_system(skill.system_prompt)
-        tool_defs = [t.to_anthropic() for t in self.tools]
+        tool_defs = self._tool_defs_for(skill)
 
         # `try/finally` guarantees memory persistence even if an SDK error or
         # tool crash aborts mid-stream — a partial answer is saved so the next
@@ -313,6 +313,10 @@ class Executor:
         yield ExecutionEvent("usage", usage.as_dict())
 
     # ----- helpers -----
+
+    def _tool_defs_for(self, skill: Skill) -> list[dict[str, Any]]:
+        """Build the tool list the API sees for this skill, honoring its policy."""
+        return [t.to_anthropic() for t in self.tools if skill.tool_is_allowed(t.name)]
 
     def _initial_messages(self, session: Session | None, user_message: str) -> list[dict[str, Any]]:
         messages: list[dict[str, Any]] = []

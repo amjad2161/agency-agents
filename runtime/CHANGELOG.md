@@ -4,6 +4,15 @@ All notable changes to the agency runtime, newest first.
 
 ## Unreleased
 
+### Added
+- **Per-skill tool policy.** A persona's YAML frontmatter can declare
+  `tools_allowed: [...]` and/or `tools_denied: [...]`. When set, the
+  executor filters its tool list per skill before each API call, so
+  e.g. a marketing skill can be denied `run_shell` while
+  engineering-security keeps it. Defense at the declaration layer:
+  disallowed tools are never advertised to the model. Backwards-
+  compatible — skills without either field see every builtin tool.
+
 ### Added (post-merge)
 - **Structured logging.** A single `agency` named logger (`runtime/agency/logging.py`).
   Off by default; enable with `AGENCY_LOG=info` / `debug` or CLI `-v` / `-vv`.
