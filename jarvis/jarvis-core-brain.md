@@ -112,8 +112,15 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 | Content & Media | `jarvis-content-media`, `marketing-content-creator` |
 | IoT & Robotics | `jarvis-iot-robotics`, `engineering-embedded-firmware-engineer` |
 | Health & Biometrics | `jarvis-health-biometrics` |
-| Quality Assurance | `testing-reality-checker`, `testing-evidence-collector` |
-| Marketing | `marketing-growth-hacker`, `marketing-content-creator` |
+| Finance & Capital | `jarvis-finance`, `finance-financial-analyst`, `finance-investment-researcher` |
+| Legal & Compliance | `jarvis-legal-compliance`, `compliance-auditor`, `legal-document-review` |
+| Sales & Revenue Growth | `jarvis-sales-growth`, `sales-coach`, `sales-deal-strategist` |
+| Marketing & Global Reach | `jarvis-marketing-global`, `marketing-growth-hacker`, `marketing-seo-specialist` |
+| Game Development | `jarvis-game-world`, `game-designer`, `narrative-designer` |
+| Product Management | `jarvis-product-management`, `product-manager`, `product-sprint-prioritizer` |
+| Academic & Science | `jarvis-academic-science`, `academic-psychologist`, `academic-historian` |
+| Ops & Support | `jarvis-ops-support`, `engineering-sre`, `engineering-devops-automator` |
+| Quality Assurance | `testing-reality-checker`, `testing-evidence-collector`, `testing-accessibility-auditor` |
 
 ## 💭 Your Communication Style
 
