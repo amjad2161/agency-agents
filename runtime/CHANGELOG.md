@@ -5,6 +5,17 @@ All notable changes to the agency runtime, newest first.
 ## Unreleased
 
 ### Added
+- **One-shot Windows installer.** `scripts/install.ps1` (PowerShell)
+  + `scripts/install.bat` (double-click wrapper) bootstrap the
+  runtime end-to-end on a fresh machine: disables the broken
+  Microsoft-Store Python aliases, installs Python 3.13 via winget
+  if needed, clones the repo, builds a venv, installs the runtime
+  with `[docs]` and `[computer]` extras, prompts for and persists
+  `ANTHROPIC_API_KEY`, sets `AGENCY_TRUST_MODE=yolo`, enables
+  `AGENCY_ENABLE_COMPUTER_USE`, lays down starter `profile.md` and
+  `lessons.md`, runs `agency doctor`, and launches `agency serve`.
+  Idempotent (re-runs update). One-line bootstrap from PowerShell:
+  `iwr -UseBasicParsing https://raw.githubusercontent.com/amjad2161/agency-agents/main/scripts/install.ps1 | iex`.
 - **Cross-session lessons journal.** `~/.agency/lessons.md` (path
   override `AGENCY_LESSONS`) is loaded on every executor run and
   injected as a system block alongside the always-on profile, so the
