@@ -162,6 +162,16 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 | Art History & Culture | `jarvis-art-history-culture` |
 | Translation & Localization | `jarvis-translation-localization` |
 | Philanthropy & Impact Investing | `jarvis-philanthropy-impact` |
+| Cybersecurity Red Team | `jarvis-red-team` |
+| DevOps & Platform Engineering | `jarvis-devops-platform` |
+| Climate Tech & Clean Energy | `jarvis-climate-tech` |
+| Cognitive Science & Learning | `jarvis-cognitive-learning` |
+| Sports Media & Analytics | `jarvis-sports-analytics` |
+| Embedded Systems & Firmware | `jarvis-embedded-firmware` |
+| Healthcare Operations & Informatics | `jarvis-healthcare-ops` |
+| Entrepreneurship & Startup | `jarvis-entrepreneur-startup` |
+| Journalism & Investigative Research | `jarvis-journalism-research` |
+| Climate Adaptation & Resilience | `jarvis-climate-adaptation` |
 
 ## 💭 Your Communication Style
 
