@@ -206,7 +206,16 @@ async def _handle_run(
     # sees the protocol's terminal sentinel after any error envelope.
     try:
         while True:
-            item = await queue.get()
+            # Bounded wait so a stalled executor (e.g. first LLM call hung
+            # on the network) doesn't keep us parked forever after the client
+            # disconnects. We poll the WebSocket state on each tick and bail
+            # out if it has gone away.
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=0.5)
+            except asyncio.TimeoutError:
+                if _is_websocket_disconnected(ws):
+                    break
+                continue
             await _send(ws, item)
             if item["type"] == "done":
                 break
@@ -217,7 +226,32 @@ async def _handle_run(
         # (no-op because _drain has already returned). This guarantees
         # the worker thread can never burn LLM turns on a dead socket.
         cancel_event.set()
-        await fut  # let the worker finish (or short-circuit on cancel)
+        # Don't tie up the WS handler waiting for the worker to exit — a
+        # blocking LLM call inside the SDK can't be interrupted from another
+        # thread. Wait briefly so the cancel can land and the worker can
+        # close out cleanly; otherwise let it finish in the background.
+        try:
+            await asyncio.wait_for(asyncio.shield(fut), timeout=1.0)
+        except asyncio.TimeoutError:
+            pass
+
+
+def _is_websocket_disconnected(ws: WebSocket) -> bool:
+    """Best-effort 'is the WS gone' check that doesn't depend on a send.
+
+    Starlette tracks both `client_state` and `application_state`; when the
+    client closes the TCP connection, `client_state` flips to DISCONNECTED.
+    Falls back to False if either attribute is missing on a future
+    framework version — better to keep the loop alive than to spuriously
+    abort.
+    """
+    state = getattr(ws, "client_state", None)
+    if state is None:
+        return False
+    name = getattr(state, "name", None)
+    if name is not None:
+        return name == "DISCONNECTED"
+    return str(state).endswith("DISCONNECTED")
 
 
 async def _send(ws: WebSocket, payload: dict[str, Any]) -> None:
