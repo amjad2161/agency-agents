@@ -198,6 +198,30 @@ def init_cmd(ctx: click.Context, slug: str, name: str | None, category: str,
     click.echo(f"Created {path.relative_to(root)}")
 
 
+@main.command("trust")
+def trust_cmd() -> None:
+    """Print the active trust mode and what it allows.
+
+    Trust mode is read from `AGENCY_TRUST_MODE`. Values:
+      off            (default) — current sandboxes, allowlists, opt-ins.
+      on-my-machine  — agent gets your reach. Shell on (denylist instead of
+                       allowlist), workdir sandbox lifted, web_fetch can hit
+                       loopback / private IPs.
+      yolo           — same as on-my-machine, plus an empty shell denylist.
+    """
+    from .trust import current, gate
+
+    mode = current()
+    g = gate()
+    click.echo(f"trust mode: {mode.value}")
+    click.echo()
+    click.echo(f"  allow_shell (default)     : {g.allow_shell}")
+    click.echo(f"  shell allowlist enforced  : {g.enforce_shell_allowlist}")
+    click.echo(f"  shell denylist enforced   : {g.enforce_shell_denylist}")
+    click.echo(f"  workdir sandbox enforced  : {g.sandbox_paths_to_workdir}")
+    click.echo(f"  block private/loopback IPs: {g.block_private_ip_fetches}")
+
+
 @main.command("doctor")
 @click.pass_context
 def doctor_cmd(ctx: click.Context) -> None:
@@ -271,6 +295,10 @@ def doctor_cmd(ctx: click.Context) -> None:
         f"allow_computer_use={tc.allow_computer_use}  "
         f"timeout={tc.timeout_s}s"
     )
+
+    # Trust mode
+    from .trust import current as _trust_current
+    click.echo(f"\nAGENCY_TRUST_MODE: {_trust_current().value}")
 
     click.echo("\nDone.")
 

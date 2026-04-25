@@ -39,6 +39,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `AGENCY_TOOL_TIMEOUT` | Per-tool wall-clock seconds (default 30). |
 | `AGENCY_DISABLE_HEALTH=1` | Don't register `/api/health`. Set this if you bind 0.0.0.0 on an untrusted network and don't want the diagnostic snapshot exposed. |
 | `AGENCY_PROFILE` | Override the profile file path (default `~/.agency/profile.md`). |
+| `AGENCY_TRUST_MODE` | `off` (default), `on-my-machine`, or `yolo`. See **Trust modes** below. |
 
 Example MCP config:
 
@@ -248,6 +249,37 @@ agency profile clear    # delete it
 Set `AGENCY_PROFILE` to override the path. Subagents (via
 `delegate_to_skill`) inherit the same profile so the context stays
 consistent across hops.
+
+## Trust modes
+
+By default the runtime is conservative — shell access is opt-in and
+allowlisted, file paths are sandboxed under the workdir, and `web_fetch`
+refuses private/loopback addresses. That's the right default for
+shared/CI/Docker contexts.
+
+For *"the agent is running on my machine and I trust it the way I trust
+myself"*, set `AGENCY_TRUST_MODE`:
+
+| Capability | `off` (default) | `on-my-machine` | `yolo` |
+|---|---|---|---|
+| Shell tool | needs `AGENCY_ALLOW_SHELL=1` + allowlist | on, denylisted | on, no denylist |
+| File paths | sandboxed under workdir | anywhere on disk | anywhere on disk |
+| `web_fetch` to loopback / RFC1918 | refused (SSRF block) | allowed | allowed |
+| `web_fetch` to cloud metadata IP (169.254.169.254) | refused | refused (credential exfil block) | allowed |
+| Catastrophic-typo denylist (`rm -rf /`, fork bombs, `mkfs /dev/...`, `dd of=/dev/...`, `chmod 000 /`) | n/a | enforced | empty |
+
+```bash
+export AGENCY_TRUST_MODE=on-my-machine
+agency trust    # show the active gate
+agency doctor   # also includes the trust mode in its output
+```
+
+The denylist on `on-my-machine` exists because LLMs hallucinate
+variables — `rm -rf $UNDEFINED/path` expands to `rm -rf /path`, and
+that's almost never what you meant. The cloud-metadata block stays on
+because the IAM-credential exfil pathway is rarely worth lifting. You
+retain full ability to run those commands yourself; if you want the
+agent to as well, use `yolo`.
 
 ## Delegation
 

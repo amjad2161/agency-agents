@@ -37,6 +37,21 @@ All notable changes to the agency runtime, newest first.
   frontend in `agency/static/spatial.html`. The spatial UI doesn't
   add authority — it produces the same `run` events the chat UI does
   and passes through the existing per-skill tool policy.
+- **Trust modes (`AGENCY_TRUST_MODE`).** New `agency.trust` module that
+  every tool consults instead of its own ad-hoc gates. Three values:
+  - `off` (default) — current behavior. Shell needs `AGENCY_ALLOW_SHELL=1`
+    + allowlist; file paths sandboxed under workdir; `web_fetch` refuses
+    private / loopback / metadata IPs.
+  - `on-my-machine` — agent's reach == user's reach. Shell on; allowlist
+    replaced with a tiny catastrophic-typo denylist (`rm -rf /`, fork
+    bombs, `mkfs /dev/...`, `dd of=/dev/...`, `chmod 000 /`). File paths
+    can be anywhere. `web_fetch` can hit loopback / private IPs (cloud
+    instance metadata stays blocked unless `yolo`).
+  - `yolo` — same as `on-my-machine` but with the denylist empty and
+    metadata IPs reachable.
+  New `agency trust` CLI subcommand prints the active gate. `agency
+  doctor` also surfaces the mode. README has a side-by-side capability
+  table.
 - **Structured logging.** A single `agency` named logger (`runtime/agency/logging.py`).
   Off by default; enable with `AGENCY_LOG=info` / `debug` or CLI `-v` / `-vv`.
   Emits records for every routing decision, LLM call (with timings + token

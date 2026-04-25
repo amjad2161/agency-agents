@@ -4,10 +4,11 @@ Each tool has:
  - a JSON-schema definition (fed to Claude)
  - a Python implementation that returns a string result
 
-Shell access is gated by AGENCY_ALLOW_SHELL (default off). When enabled, only
-commands whose first token is in SHELL_ALLOWLIST run. Network fetch is a
-read-only GET over http/https with private-range hosts blocked (see
-`_is_private_host`).
+Default behavior: shell needs `AGENCY_ALLOW_SHELL=1` and uses an allowlist;
+file IO is sandboxed under workdir; web_fetch refuses private/loopback hosts.
+
+`AGENCY_TRUST_MODE=on-my-machine` (or `yolo`) lifts these to the level of
+"act like the user is running this on their own machine" — see `trust.py`.
 """
 
 from __future__ import annotations
@@ -21,6 +22,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 import httpx
+
+from .trust import gate as trust_gate, shell_command_is_denied
 
 DEFAULT_SHELL_ALLOWLIST = (
     "ls", "cat", "head", "tail", "wc", "find", "grep", "rg",
@@ -70,9 +73,14 @@ class ToolContext:
             timeout_s = int(os.environ.get("AGENCY_TOOL_TIMEOUT", "30"))
         except ValueError:
             timeout_s = 30
+        gate = trust_gate()
+        # `allow_shell` defaults to whatever the trust mode says, but
+        # AGENCY_ALLOW_SHELL=1 still works as a per-session opt-in when
+        # trust mode is off.
+        allow_shell = gate.allow_shell or _truthy(os.environ.get("AGENCY_ALLOW_SHELL"))
         return cls(
             workdir=(workdir or Path.cwd()).resolve(),
-            allow_shell=_truthy(os.environ.get("AGENCY_ALLOW_SHELL")),
+            allow_shell=allow_shell,
             allow_network=not _truthy(os.environ.get("AGENCY_NO_NETWORK")),
             allow_computer_use=_truthy(os.environ.get("AGENCY_ENABLE_COMPUTER_USE")),
             timeout_s=timeout_s,
@@ -84,8 +92,16 @@ def _truthy(v: str | None) -> bool:
 
 
 def _safe_path(ctx: ToolContext, raw: str) -> Path:
-    """Resolve `raw` against the workdir and reject anything escaping it."""
+    """Resolve `raw` against the workdir.
+
+    In trust modes that don't sandbox paths (`on-my-machine`, `yolo`), absolute
+    paths and paths that escape the workdir are allowed — the agent sees the
+    filesystem the user sees. The path is still resolved (symlinks followed)
+    so the model can't surprise itself with relative-path arithmetic.
+    """
     candidate = (ctx.workdir / raw).resolve() if not os.path.isabs(raw) else Path(raw).resolve()
+    if not trust_gate().sandbox_paths_to_workdir:
+        return candidate
     try:
         candidate.relative_to(ctx.workdir)
     except ValueError as e:
@@ -307,8 +323,8 @@ def _extract_xlsx(path: Path) -> str:
 def _run_shell(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
     if not ctx.allow_shell:
         return ToolResult(
-            "Shell access is disabled. Set AGENCY_ALLOW_SHELL=1 to enable "
-            "(commands are still gated by an allowlist).",
+            "Shell access is disabled. Set AGENCY_ALLOW_SHELL=1 (allowlisted "
+            "commands) or AGENCY_TRUST_MODE=on-my-machine (denylist) to enable.",
             is_error=True,
         )
     command = args["command"].strip()
@@ -319,11 +335,26 @@ def _run_shell(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
     except ValueError as e:
         return ToolResult(f"Could not parse command: {e}", is_error=True)
     head = tokens[0]
-    if head not in ctx.shell_allowlist:
-        return ToolResult(
-            f"Command not in allowlist: {head}. Allowed: {', '.join(sorted(ctx.shell_allowlist))}",
-            is_error=True,
-        )
+
+    gate = trust_gate()
+    if gate.enforce_shell_allowlist:
+        if head not in ctx.shell_allowlist:
+            return ToolResult(
+                f"Command not in allowlist: {head}. Allowed: "
+                f"{', '.join(sorted(ctx.shell_allowlist))}",
+                is_error=True,
+            )
+    elif gate.enforce_shell_denylist:
+        denied, pat = shell_command_is_denied(command)
+        if denied:
+            return ToolResult(
+                f"Refusing to run command — matches catastrophic-typo denylist "
+                f"({pat!r}). Run it yourself if that's really what you want, "
+                f"or set AGENCY_TRUST_MODE=yolo to disable the denylist.",
+                is_error=True,
+            )
+    # else: yolo — anything goes.
+
     if shutil.which(head) is None:
         return ToolResult(f"Executable not found: {head}", is_error=True)
     try:
@@ -364,12 +395,13 @@ def _web_fetch(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
             follow_redirects=False, timeout=ctx.timeout_s,
             headers={"User-Agent": "agency-runtime/0.1"},
         ) as client:
+            block_private = trust_gate().block_private_ip_fetches
             for hop in range(6):
                 parsed = httpx.URL(url)
                 host = parsed.host
                 if not host:
                     return ToolResult("URL has no host.", is_error=True)
-                if _is_private_host(host):
+                if block_private and _is_private_host(host):
                     return ToolResult(
                         f"Refusing to fetch {host}: private / loopback / metadata address.",
                         is_error=True,
