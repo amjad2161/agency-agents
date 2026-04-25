@@ -1,6 +1,6 @@
 """Spatial-computing bridge: webcam-driven 3D HUD over WebSocket.
 
-The frontend (runtime/agency/static/spatial.html) runs MediaPipe Holistic in
+The frontend (runtime/agency/static/spatial.html) runs MediaPipe Hands in
 the browser, detects a small allowlist of gestures, and pushes events to the
 WebSocket exposed here. The backend translates those events into the same
 runtime actions the SSE chat already supports — *no new authority*. A pinch
@@ -20,7 +20,7 @@ from typing import Any, Awaitable, Callable
 from fastapi import WebSocket, WebSocketDisconnect
 
 from .executor import Executor
-from .llm import AnthropicLLM, LLMConfig, LLMError
+from .llm import AnthropicLLM, LLMError
 from .memory import MemoryStore, Session
 from .planner import Planner
 from .skills import SkillRegistry
@@ -34,13 +34,12 @@ _CLIENT_EVENTS = frozenset({
 })
 
 # Gesture vocabulary the client is expected to emit. Anything outside this set
-# is logged and ignored on the server — the contract stays narrow.
+# gets a typed `error` reply (the socket stays open). Keep this list aligned
+# with the classifier in static/spatial.html.
 KNOWN_GESTURES = frozenset({
     "pinch",        # thumb tip + index tip < threshold
     "open_palm",    # all 5 fingertips above wrist y
     "fist",         # all fingertips below midpoint of palm
-    "swipe_left",
-    "swipe_right",
     "point",        # only index extended
 })
 
@@ -81,12 +80,13 @@ async def spatial_ws_handler(
             except json.JSONDecodeError:
                 await _send(ws, {"type": "error", "message": "invalid JSON"})
                 continue
-            if not isinstance(msg, dict) or msg.get("type") not in _CLIENT_EVENTS:
+            t = msg.get("type") if isinstance(msg, dict) else None
+            if t not in _CLIENT_EVENTS:
                 await _send(ws, {"type": "error",
-                                 "message": f"unsupported event: {msg.get('type')!r}"})
+                                 "message": f"unsupported event: {t!r}"})
                 continue
 
-            t = msg["type"]
+            # `t` is already validated as one of _CLIENT_EVENTS above.
             if t == "hello":
                 await _send(ws, {
                     "type": "hello",
@@ -170,12 +170,13 @@ async def _handle_run(
             loop.call_soon_threadsafe(queue.put_nowait, {"type": "done"})
 
     fut: Awaitable = loop.run_in_executor(None, _drain)
+    # `_drain` always enqueues a final {"type": "done"} via its `finally`,
+    # even on error — so we only break on "done" to guarantee the client
+    # sees the protocol's terminal sentinel after any error envelope.
     while True:
         item = await queue.get()
         await _send(ws, item)
-        if item["type"] in ("done", "error") and item["type"] == "done":
-            break
-        if item["type"] == "error":
+        if item["type"] == "done":
             break
     await fut  # let the worker finish before returning
 

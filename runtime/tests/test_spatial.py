@@ -14,9 +14,8 @@ from fastapi.testclient import TestClient
 from agency.server import build_app
 
 
-def _client(monkeypatch=None):
-    app = build_app()
-    return TestClient(app)
+def _client():
+    return TestClient(build_app())
 
 
 def test_hello_returns_skill_list():
@@ -86,6 +85,39 @@ def test_run_returns_error_when_no_api_key(monkeypatch):
         msg = json.loads(ws.receive_text())
         assert msg["type"] == "error"
         assert "ANTHROPIC_API_KEY" in msg["message"]
+
+
+def test_run_when_executor_raises_still_delivers_done_sentinel(monkeypatch):
+    """If the executor blows up mid-stream, the protocol still yields a final
+    'done' after the error envelope. Regression for the previous bug where
+    the consumer broke on 'error' and left 'done' unconsumed in the queue."""
+    from agency import server as server_mod
+
+    class _ExplodingLLM:
+        class config:
+            model = "fake"; planner_model = "fake"; max_tokens = 1024
+        @staticmethod
+        def cached_system(text):
+            return [{"type": "text", "text": text,
+                     "cache_control": {"type": "ephemeral"}}]
+        def messages_create(self, **kwargs):
+            raise RuntimeError("simulated mid-stream failure")
+
+    monkeypatch.setattr(server_mod, "_require_llm", lambda: _ExplodingLLM())
+    monkeypatch.setattr(server_mod, "_maybe_llm", lambda: None)
+
+    with _client().websocket_connect("/ws/spatial") as ws:
+        ws.send_text(json.dumps({"type": "run", "message": "boom"}))
+        seen = []
+        # Drain until we see 'done' (or timeout via test runner).
+        while True:
+            m = json.loads(ws.receive_text())
+            seen.append(m["type"])
+            if m["type"] == "done":
+                break
+        # We must have seen at least one error envelope before done.
+        assert "error" in seen
+        assert seen[-1] == "done"
 
 
 def test_run_streams_executor_events_with_stubbed_llm(monkeypatch):

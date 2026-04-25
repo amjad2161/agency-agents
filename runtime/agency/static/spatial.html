@@ -99,7 +99,9 @@ ws.addEventListener("message", (ev) => {
   } else if (m.type === "plan") {
     appendLog(`\n→ ${m.skill.emoji} ${m.skill.name} (${m.skill.slug})\n  ${m.rationale}\n\n`);
   } else if (m.type === "stream") {
-    if (m.kind === "text_delta") appendLog(m.payload);
+    // text_delta = streaming token; text = whole-block fallback (non-streaming
+    // executor path or stubbed LLM in tests).
+    if (m.kind === "text_delta" || m.kind === "text") appendLog(m.payload);
     else if (m.kind === "tool_use") appendLog(`\n[tool] ${m.payload.name}(${JSON.stringify(m.payload.input)})\n`);
     else if (m.kind === "tool_result") {
       const tag = m.payload.is_error ? "tool_error" : "tool_result";
@@ -133,7 +135,10 @@ function sendCurrent() {
 /* ----- Three.js HUD ------------------------------------------------------ */
 const stage = $("stage");
 const renderer = new THREE.WebGLRenderer({ canvas: stage, alpha: true, antialias: true });
-renderer.setPixelRatio(window.devicePixelRatio);
+// Cap the pixel ratio at 2 — devicePixelRatio can be 3 or 4 on phones / Retina
+// laptops, which doubles or quadruples the GPU fill rate for an imperceptible
+// quality gain over 2. Keeps the HUD responsive on high-DPI displays.
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 function fitRenderer() { renderer.setSize(window.innerWidth, window.innerHeight); }
 fitRenderer();
 window.addEventListener("resize", fitRenderer);

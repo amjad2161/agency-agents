@@ -28,8 +28,8 @@ All notable changes to the agency runtime, newest first.
   CLI subgroup: `show` / `path` / `edit` / `clear`.
 - **Spatial HUD.** `GET /spatial` serves a self-contained page that runs
   MediaPipe Hands in the browser, classifies pinch / open-palm / fist /
-  point / swipe gestures, and routes them over a `WS /ws/spatial`
-  WebSocket into the same Executor the chat UI uses. A Three.js scene
+  point gestures, and routes them over a `WS /ws/spatial` WebSocket into
+  the same Executor the chat UI uses. A Three.js scene
   renders an over-the-camera HUD with a cursor sphere on the index
   fingertip. The WebSocket protocol accepts only a closed set of
   events (`hello`, `gesture`, `run`, `ping`); arbitrary "action"
