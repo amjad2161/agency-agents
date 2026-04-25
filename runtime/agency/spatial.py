@@ -81,10 +81,15 @@ async def spatial_ws_handler(
             except json.JSONDecodeError:
                 await _send(ws, {"type": "error", "message": "invalid JSON"})
                 continue
-            t = msg.get("type") if isinstance(msg, dict) else None
+            # Defensive: `type` can be any JSON value (list, dict, number, …).
+            # `set` membership of an unhashable type would raise TypeError and
+            # drop the socket. Coerce non-strings to None so the unsupported
+            # branch fires cleanly.
+            raw_t = msg.get("type") if isinstance(msg, dict) else None
+            t = raw_t if isinstance(raw_t, str) else None
             if t not in _CLIENT_EVENTS:
                 await _send(ws, {"type": "error",
-                                 "message": f"unsupported event: {t!r}"})
+                                 "message": f"unsupported event: {raw_t!r}"})
                 continue
 
             # `t` is already validated as one of _CLIENT_EVENTS above.
@@ -100,12 +105,15 @@ async def spatial_ws_handler(
             elif t == "ping":
                 await _send(ws, {"type": "pong"})
             elif t == "gesture":
-                name = msg.get("name")
-                if name in KNOWN_GESTURES:
+                # Same defensive coerce: `name` could be any JSON value, and
+                # an unhashable type would crash the membership check.
+                raw_name = msg.get("name")
+                name = raw_name if isinstance(raw_name, str) else None
+                if name is not None and name in KNOWN_GESTURES:
                     await _send(ws, {"type": "gesture_ack", "name": name})
                 else:
                     await _send(ws, {"type": "error",
-                                     "message": f"unknown gesture: {name!r}"})
+                                     "message": f"unknown gesture: {raw_name!r}"})
             elif t == "run":
                 # Surface ALL exceptions to the client, not just LLMError. The
                 # most concrete way to hit this is `skill: "nonexistent"`,

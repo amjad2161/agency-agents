@@ -119,63 +119,97 @@ def test_run_with_unknown_skill_slug_surfaces_error_not_dropped_socket(monkeypat
 
 def test_disconnect_signals_cancellation_to_worker(monkeypatch):
     """Regression: when the client disconnects mid-stream, the worker thread
-    must observe the cancel signal and stop pulling further executor events,
-    instead of running through the full MAX_TURNS-cap loop while the socket
-    is closed.
+    must observe the cancel signal and stop after the in-flight LLM call.
 
-    Strategy: stub the LLM to count messages_create() calls, return a
-    minimal `tool_use` response on the first call and an `end_turn` on the
-    second. The consumer-side WebSocket is closed before the second call.
-    A correct implementation sees count == 1 (post-disconnect calls
-    short-circuited); the buggy version saw count == 2.
+    Test design (refining a Devin finding):
+    - We pass a `skill` hint so Planner.plan() short-circuits without
+      calling the LLM. Otherwise the planner's own messages_create call
+      could be the one that gets counted, masking real executor behavior.
+    - First LLM call returns `tool_use` so the executor would normally
+      make a second call after dispatching the tool. The first call also
+      blocks on a barrier so we have time to disconnect.
+    - The assertion `count <= 1` only passes if cancel_event genuinely
+      stopped the second call. With cancel removed, we'd see 2.
     """
     from agency import server as server_mod
-    from dataclasses import dataclass
+    from dataclasses import dataclass, field
     from typing import Any as _Any
     import threading
 
-    proceed_to_call_2 = threading.Event()
+    proceed = threading.Event()
     call_count = {"n": 0}
 
     @dataclass
     class _T: text: str = "ok"; type: str = "text"
     @dataclass
-    class _Tool: id: str = "t1"; name: str = "list_dir"; input: dict = None; type: str = "tool_use"
+    class _Tool:
+        id: str = "t1"
+        name: str = "list_dir"
+        input: dict = field(default_factory=dict)
+        type: str = "tool_use"
     @dataclass
     class _R: content: list; stop_reason: str; usage: _Any = None
+
+    # Stub stream that yields one text delta then returns the final message.
+    # `messages_stream` is what executor.stream() prefers — using it puts the
+    # cancellation check on the per-turn boundary (the way production runs).
+    class _Stream:
+        def __init__(self, final): self._final = final
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def __iter__(self):
+            from dataclasses import dataclass
+            @dataclass
+            class _Delta: text: str = "ok"; type: str = "text_delta"
+            @dataclass
+            class _Ev: delta: _Any; type: str = "content_block_delta"
+            yield _Ev(delta=_Delta())
+        def get_final_message(self): return self._final
 
     class _StubLLM:
         class config:
             model = "fake"; planner_model = "fake"; max_tokens = 1024
         @staticmethod
-        def cached_system(text):
+        def cached_system(text, profile=None):
             return [{"type": "text", "text": text,
                      "cache_control": {"type": "ephemeral"}}]
-        def messages_create(self, **k):
+        def messages_stream(self, **k):
             call_count["n"] += 1
             if call_count["n"] == 1:
-                # Block here so the consumer has time to disconnect.
-                proceed_to_call_2.wait(timeout=3)
-                return _R(content=[_T()], stop_reason="end_turn")
-            # If we get here, cancellation didn't work.
-            return _R(content=[_T()], stop_reason="end_turn")
+                # Hold the worker so the consumer can close the socket
+                # before this turn completes. Returning `tool_use` would
+                # normally drive the executor to a second turn — exactly
+                # what cancel_event must prevent.
+                proceed.wait(timeout=3)
+                return _Stream(_R(content=[_Tool()], stop_reason="tool_use"))
+            # If we get here, cancellation failed.
+            return _Stream(_R(content=[_T()], stop_reason="end_turn"))
 
     monkeypatch.setattr(server_mod, "_require_llm", lambda: _StubLLM())
     monkeypatch.setattr(server_mod, "_maybe_llm", lambda: None)
 
+    # Pick any real slug so the planner doesn't need an LLM.
+    from agency.skills import SkillRegistry, discover_repo_root
+    skill_hint = SkillRegistry.load(discover_repo_root()).all()[0].slug
+
     with _client().websocket_connect("/ws/spatial") as ws:
-        ws.send_text(json.dumps({"type": "run", "message": "anything"}))
+        ws.send_text(json.dumps({
+            "type": "run", "message": "anything", "skill": skill_hint,
+        }))
         plan_msg = json.loads(ws.receive_text())
         assert plan_msg["type"] == "plan"
         # Don't read the first stream event; just close the socket while
         # the LLM call is blocked.
-    proceed_to_call_2.set()
+    proceed.set()
 
     # Brief grace period for the worker to finish its in-flight call and
     # observe the cancel flag before deciding whether to continue.
     import time
-    time.sleep(0.2)
-    # The worker must NOT have made a second LLM call after disconnect.
+    time.sleep(0.5)
+    # Cancellation must prevent the second messages_create call. Without
+    # the cancel_event check, we would see count == 2 because the executor
+    # would dispatch the tool from the `tool_use` response and call the LLM
+    # again with the tool_result.
     assert call_count["n"] <= 1, (
         f"worker made {call_count['n']} LLM calls after disconnect; "
         "cancellation didn't fire"
@@ -183,41 +217,62 @@ def test_disconnect_signals_cancellation_to_worker(monkeypatch):
 
 
 def test_send_failure_other_than_disconnect_still_cancels_worker(monkeypatch):
-    """Regression: previously cancel_event was only set in the
-    `except WebSocketDisconnect` branch. If `_send` raised any other
-    exception (or asyncio.CancelledError, which is a BaseException and
-    doesn't match `except Exception`), the worker thread kept running.
+    """Regression: cancel_event must fire on every exit path of the consumer
+    loop, not just `except WebSocketDisconnect`. We force `_send` to raise a
+    plain RuntimeError on its second call and confirm the worker thread does
+    not make a second LLM call after that.
 
-    Strategy: stub `_send` to raise a RuntimeError on the second call.
-    Confirm the LLM stub is not called a second time after that point.
+    Same Devin refinement applied as the disconnect test: skip the planner
+    LLM via a `skill` hint, and use `tool_use` on the first messages_create
+    return so the executor would actually attempt a second turn.
     """
     from agency import server as server_mod
     from agency import spatial as spatial_mod
-    from dataclasses import dataclass
+    from dataclasses import dataclass, field
     from typing import Any as _Any
     import threading
     import time
 
-    proceed_to_call_2 = threading.Event()
+    proceed = threading.Event()
     call_count = {"n": 0}
 
     @dataclass
     class _T: text: str = "ok"; type: str = "text"
     @dataclass
+    class _Tool:
+        id: str = "t1"
+        name: str = "list_dir"
+        input: dict = field(default_factory=dict)
+        type: str = "tool_use"
+    @dataclass
     class _R: content: list; stop_reason: str; usage: _Any = None
+
+    class _Stream:
+        def __init__(self, final): self._final = final
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def __iter__(self):
+            from dataclasses import dataclass
+            @dataclass
+            class _Delta: text: str = "ok"; type: str = "text_delta"
+            @dataclass
+            class _Ev: delta: _Any; type: str = "content_block_delta"
+            yield _Ev(delta=_Delta())
+        def get_final_message(self): return self._final
 
     class _StubLLM:
         class config:
             model = "fake"; planner_model = "fake"; max_tokens = 1024
         @staticmethod
-        def cached_system(text):
+        def cached_system(text, profile=None):
             return [{"type": "text", "text": text,
                      "cache_control": {"type": "ephemeral"}}]
-        def messages_create(self, **k):
+        def messages_stream(self, **k):
             call_count["n"] += 1
             if call_count["n"] == 1:
-                proceed_to_call_2.wait(timeout=3)
-            return _R(content=[_T()], stop_reason="end_turn")
+                proceed.wait(timeout=3)
+                return _Stream(_R(content=[_Tool()], stop_reason="tool_use"))
+            return _Stream(_R(content=[_T()], stop_reason="end_turn"))
 
     monkeypatch.setattr(server_mod, "_require_llm", lambda: _StubLLM())
     monkeypatch.setattr(server_mod, "_maybe_llm", lambda: None)
@@ -228,22 +283,25 @@ def test_send_failure_other_than_disconnect_still_cancels_worker(monkeypatch):
     async def _exploding_send(ws, payload):
         sends["n"] += 1
         if sends["n"] == 2:
-            # Not WebSocketDisconnect — simulate an unexpected send failure.
             raise RuntimeError("simulated send failure")
         await real_send(ws, payload)
 
     monkeypatch.setattr(spatial_mod, "_send", _exploding_send)
 
+    from agency.skills import SkillRegistry, discover_repo_root
+    skill_hint = SkillRegistry.load(discover_repo_root()).all()[0].slug
+
     with _client().websocket_connect("/ws/spatial") as ws:
-        ws.send_text(json.dumps({"type": "run", "message": "anything"}))
-        # Read the first frame (plan); the second send will explode.
+        ws.send_text(json.dumps({
+            "type": "run", "message": "anything", "skill": skill_hint,
+        }))
         try:
-            json.loads(ws.receive_text())
+            json.loads(ws.receive_text())  # plan
         except Exception:
             pass
 
-    proceed_to_call_2.set()
-    time.sleep(0.2)
+    proceed.set()
+    time.sleep(0.5)
     assert call_count["n"] <= 1, (
         f"worker made {call_count['n']} LLM calls after non-disconnect "
         f"exit; cancel_event wasn't set on that path"

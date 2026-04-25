@@ -234,6 +234,9 @@ hands.setOptions({
 hands.onResults((results) => {
   if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
     setPill(gPill, "gesture: —");
+    // Reset the debounce window so a re-entered gesture isn't suppressed.
+    lastGesture = null;
+    lastGestureAt = 0;
     return;
   }
   // Use the first detected hand for cursor tracking + gesture classification.
