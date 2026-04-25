@@ -122,7 +122,8 @@ agency debug "list the files in this repo"
 
 ```bash
 agency serve --port 8765
-# open http://127.0.0.1:8765
+# open http://127.0.0.1:8765         # the chat UI
+# open http://127.0.0.1:8765/spatial # the webcam + 3D HUD
 ```
 
 API endpoints:
@@ -134,6 +135,30 @@ API endpoints:
 - `POST /api/run` — `{"message": "...", "skill"?: "...", "session_id"?: "..."}` → final text
 - `POST /api/run/stream` — same body, streamed as Server-Sent Events
   (`plan`, `text_delta`, `tool_use`, `tool_result`, `stop`, `done`, `error`)
+- `GET /spatial` — single-page MediaPipe + Three.js 3D HUD that drives the runtime via webcam gestures
+- `WS /ws/spatial` — bidirectional WebSocket the HUD speaks. Closed event vocabulary:
+  - client → server: `hello`, `gesture`, `run`, `ping`
+  - server → client: `hello`, `gesture_ack`, `plan`, `stream`, `done`, `error`, `pong`
+
+### Spatial HUD
+
+`GET /spatial` serves a self-contained page that runs **MediaPipe Hands** in
+the browser, feeds detected landmarks through a small gesture classifier
+(pinch / open palm / fist / point), and routes high-confidence gestures over
+WebSocket to the same executor the chat UI uses. Gestures map to a fixed
+allowlist of UI actions (e.g. open palm → send the current message); the
+backend never accepts a free-form "action" string from the client. A
+**Three.js** scene renders the HUD over a transparent canvas, with a cursor
+sphere tracking the index fingertip and a slowly rotating ring as a focus
+indicator.
+
+What the spatial UI is and isn't:
+- **Is:** a webcam-driven control surface for the same runtime everything
+  else uses. Same skills, same tool sandbox, same per-skill tool policy.
+- **Isn't:** new authority. A pinch can't make the agent run a tool the
+  current skill's `tools_allowed` policy already forbids. A spoken "rm -rf"
+  can't bypass `AGENCY_ALLOW_SHELL`. Browser-side detection just produces
+  the same `run` event the chat UI does.
 
 ## Architecture
 

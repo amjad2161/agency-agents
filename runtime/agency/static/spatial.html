@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Agency · Spatial HUD</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #000;
+                 font: 14px/1.4 system-ui, sans-serif; color: #ddd; overflow: hidden; }
+    #stage { position: fixed; inset: 0; }
+    #cam { position: fixed; left: 16px; bottom: 16px; width: 240px; height: 180px;
+           border: 1px solid #333; border-radius: 8px; opacity: 0.85; transform: scaleX(-1); }
+    #hud { position: fixed; right: 16px; top: 16px; max-width: 360px;
+           background: rgba(10,10,16,0.7); border: 1px solid #333; border-radius: 8px;
+           padding: 12px 14px; backdrop-filter: blur(8px); }
+    #hud h1 { font-size: 14px; margin: 0 0 6px; letter-spacing: 0.06em; opacity: 0.7; }
+    #log { position: fixed; left: 16px; right: 280px; bottom: 16px; max-height: 38vh;
+           overflow-y: auto; background: rgba(10,10,16,0.6); border: 1px solid #333;
+           border-radius: 8px; padding: 10px 14px; font-family: ui-monospace, monospace;
+           font-size: 12px; white-space: pre-wrap; line-height: 1.45; }
+    #status { font-size: 11px; opacity: 0.6; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px;
+            background: #20203a; margin-right: 6px; font-size: 11px; }
+    .pill.ok { background: #103f1e; color: #b6f0c5; }
+    .pill.err { background: #3f1010; color: #f0b6b6; }
+    input, textarea, select, button {
+      font: inherit; padding: 6px 10px; margin: 2px 0; border-radius: 6px;
+      border: 1px solid #444; background: rgba(10,10,16,0.6); color: inherit; }
+    textarea { width: 100%; min-height: 50px; }
+    button { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="cam" autoplay playsinline muted></video>
+
+  <div id="hud">
+    <h1>AGENCY · SPATIAL HUD</h1>
+    <div id="status"><span class="pill" id="ws-pill">ws: …</span><span class="pill" id="cam-pill">cam: …</span><span class="pill" id="gesture-pill">gesture: —</span></div>
+    <div style="margin-top:10px">
+      <select id="skill"><option value="">(auto-route)</option></select>
+      <input id="session" placeholder="session id (optional)" style="width:100%" />
+      <textarea id="msg" placeholder="What do you want done? (Open palm = send)"></textarea>
+      <button id="send">Send</button>
+    </div>
+    <p style="font-size:11px;opacity:0.6;margin:8px 0 0">
+      Gestures: <b>pinch</b> on a skill chip to pick · <b>open palm</b> to send ·
+      <b>fist</b> to clear log.
+    </p>
+  </div>
+
+  <div id="log"></div>
+
+<!--
+  CDN dependencies. Pinned to known-good versions because MediaPipe
+  releases regularly break solution APIs.
+-->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466124/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+<script>
+"use strict";
+
+/* ----- DOM helpers ------------------------------------------------------ */
+const $ = (id) => document.getElementById(id);
+const wsPill = $("ws-pill"), camPill = $("cam-pill"), gPill = $("gesture-pill");
+const logEl = $("log"), skillSel = $("skill"), msgEl = $("msg");
+function appendLog(s) {
+  logEl.textContent += s;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function setPill(el, text, cls) {
+  el.textContent = text;
+  el.className = "pill" + (cls ? " " + cls : "");
+}
+
+/* ----- WebSocket --------------------------------------------------------- */
+const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+const ws = new WebSocket(`${wsProto}//${location.host}/ws/spatial`);
+ws.addEventListener("open", () => {
+  setPill(wsPill, "ws: connected", "ok");
+  ws.send(JSON.stringify({ type: "hello" }));
+});
+ws.addEventListener("close", () => setPill(wsPill, "ws: closed", "err"));
+ws.addEventListener("error", () => setPill(wsPill, "ws: error", "err"));
+ws.addEventListener("message", (ev) => {
+  let m;
+  try { m = JSON.parse(ev.data); } catch { return; }
+  if (m.type === "hello") {
+    skillSel.innerHTML = '<option value="">(auto-route)</option>';
+    for (const s of m.skills) {
+      const opt = document.createElement("option");
+      opt.value = s.slug;
+      opt.textContent = `${s.emoji} ${s.name} (${s.category})`;
+      skillSel.appendChild(opt);
+    }
+  } else if (m.type === "plan") {
+    appendLog(`\n→ ${m.skill.emoji} ${m.skill.name} (${m.skill.slug})\n  ${m.rationale}\n\n`);
+  } else if (m.type === "stream") {
+    // text_delta = streaming token; text = whole-block fallback (non-streaming
+    // executor path or stubbed LLM in tests).
+    if (m.kind === "text_delta" || m.kind === "text") appendLog(m.payload);
+    else if (m.kind === "tool_use") appendLog(`\n[tool] ${m.payload.name}(${JSON.stringify(m.payload.input)})\n`);
+    else if (m.kind === "tool_result") {
+      const tag = m.payload.is_error ? "tool_error" : "tool_result";
+      appendLog(`[${tag}] ${String(m.payload.content).slice(0, 200)}\n`);
+    } else if (m.kind === "stop") appendLog(`\n[stop: ${m.payload}]\n`);
+    else if (m.kind === "usage") appendLog(`[usage] ${JSON.stringify(m.payload)}\n`);
+  } else if (m.type === "error") {
+    appendLog(`\n[error] ${m.message}\n`);
+  } else if (m.type === "done") {
+    /* no-op; visible via [stop:] */
+  }
+});
+
+function send(payload) {
+  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+}
+
+$("send").addEventListener("click", () => sendCurrent());
+function sendCurrent() {
+  const message = msgEl.value.trim();
+  if (!message) return;
+  appendLog("\n");
+  send({
+    type: "run",
+    message,
+    skill: skillSel.value || null,
+    session_id: $("session").value || null,
+  });
+}
+
+/* ----- Three.js HUD ------------------------------------------------------ */
+const stage = $("stage");
+const renderer = new THREE.WebGLRenderer({ canvas: stage, alpha: true, antialias: true });
+// Cap the pixel ratio at 2 — devicePixelRatio can be 3 or 4 on phones / Retina
+// laptops, which doubles or quadruples the GPU fill rate for an imperceptible
+// quality gain over 2. Keeps the HUD responsive on high-DPI displays.
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+function fitRenderer() { renderer.setSize(window.innerWidth, window.innerHeight); }
+fitRenderer();
+window.addEventListener("resize", fitRenderer);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+camera.position.set(0, 0, 4);
+function fitCamera() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+}
+fitCamera();
+window.addEventListener("resize", fitCamera);
+
+scene.add(new THREE.AmbientLight(0x99aaff, 0.6));
+const dl = new THREE.DirectionalLight(0xffffff, 0.7); dl.position.set(2, 3, 4); scene.add(dl);
+
+// A simple ring + cursor sphere that we'll move to the user's index fingertip.
+const cursorGeom = new THREE.SphereGeometry(0.05, 24, 24);
+const cursorMat = new THREE.MeshStandardMaterial({ color: 0x66ccff, emissive: 0x113355 });
+const cursor = new THREE.Mesh(cursorGeom, cursorMat);
+scene.add(cursor);
+
+const ringGeom = new THREE.TorusGeometry(0.4, 0.02, 16, 64);
+const ringMat = new THREE.MeshStandardMaterial({ color: 0x335599, emissive: 0x101a33 });
+const ring = new THREE.Mesh(ringGeom, ringMat); ring.rotation.x = Math.PI / 2;
+scene.add(ring);
+
+function animate() {
+  ring.rotation.z += 0.005;
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+animate();
+
+/* ----- Webcam + MediaPipe Hands ----------------------------------------- */
+const camEl = $("cam");
+let lastGesture = null, lastGestureAt = 0;
+const GESTURE_DEBOUNCE_MS = 700;
+
+function emitGesture(name, hand, at) {
+  const now = performance.now();
+  if (name === lastGesture && (now - lastGestureAt) < GESTURE_DEBOUNCE_MS) return;
+  lastGesture = name;
+  lastGestureAt = now;
+  setPill(gPill, `gesture: ${name}`, "ok");
+  send({ type: "gesture", name, hand, at, ts: Date.now() / 1000 });
+
+  // Local UI side-effects (these don't touch the agent unless run is sent)
+  if (name === "open_palm") sendCurrent();
+  if (name === "fist") logEl.textContent = "";
+}
+
+function dist(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y, dz = (a.z || 0) - (b.z || 0);
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+// Classify a single hand's 21 landmarks into one of our gesture vocabulary.
+function classifyGesture(landmarks) {
+  const wrist = landmarks[0];
+  const tips = [4, 8, 12, 16, 20].map((i) => landmarks[i]);
+  const bases = [2, 5, 9, 13, 17].map((i) => landmarks[i]);
+
+  // pinch: thumb tip + index tip distance small
+  if (dist(landmarks[4], landmarks[8]) < 0.05) return "pinch";
+
+  // fist: every fingertip y > its base y (lower in image = larger y in MP coords)
+  const isFist = tips.every((t, i) => t.y > bases[i].y);
+  if (isFist) return "fist";
+
+  // open_palm: every fingertip is meaningfully above the wrist (smaller y)
+  const isOpenPalm = tips.every((t) => (wrist.y - t.y) > 0.15);
+  if (isOpenPalm) return "open_palm";
+
+  // point: index extended, others curled
+  const indexExtended = (wrist.y - tips[1].y) > 0.15;
+  const othersCurled = [tips[2], tips[3], tips[4]].every((t, i) => t.y > bases[i + 2].y);
+  if (indexExtended && othersCurled) return "point";
+
+  return null;
+}
+
+const hands = new Hands({
+  locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`,
+});
+hands.setOptions({
+  maxNumHands: 2,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.6,
+  minTrackingConfidence: 0.6,
+});
+hands.onResults((results) => {
+  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+    setPill(gPill, "gesture: —");
+    // Reset the debounce window so a re-entered gesture isn't suppressed.
+    lastGesture = null;
+    lastGestureAt = 0;
+    return;
+  }
+  // Use the first detected hand for cursor tracking + gesture classification.
+  const lm = results.multiHandLandmarks[0];
+  const handedness = results.multiHandedness?.[0]?.label || "unknown";
+  const tip = lm[8];
+  // Map normalized coords (0..1) to a -2..2 range in 3D space, mirrored on X.
+  cursor.position.set((0.5 - tip.x) * 4, (0.5 - tip.y) * 3, -tip.z * 4);
+
+  const g = classifyGesture(lm);
+  if (g) emitGesture(g, handedness, [tip.x, tip.y, tip.z || 0]);
+});
+
+navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+  .then((stream) => {
+    camEl.srcObject = stream;
+    setPill(camPill, "cam: live", "ok");
+    const cam = new Camera(camEl, {
+      onFrame: async () => { await hands.send({ image: camEl }); },
+      width: 320, height: 240,
+    });
+    cam.start();
+  })
+  .catch((err) => {
+    setPill(camPill, "cam: blocked", "err");
+    appendLog(`\n[camera] ${err.message}\n`);
+  });
+
+/* heartbeat */
+setInterval(() => send({ type: "ping" }), 15000);
+</script>
+</body>
+</html>
