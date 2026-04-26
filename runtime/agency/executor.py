@@ -37,6 +37,39 @@ def _summarize_server_tool_result(block: Any) -> dict:
         return {"type": block.type, "content": list(content)[:5]}
     except Exception:  # noqa: BLE001
         return {"type": block.type, "content": repr(content)[:500]}
+def _image_content_block(spec: str) -> dict[str, Any]:
+    """Convert an image string into an Anthropic API content block.
+
+    Accepts:
+      - "data:image/<type>;base64,<payload>"  → base64 source block
+      - "http(s)://..."                       → url source block
+    Anything else raises ValueError so the caller surfaces a clear
+    error to the user instead of producing a garbage payload.
+    """
+    s = (spec or "").strip()
+    if s.startswith("data:"):
+        # data:image/png;base64,XXXX
+        try:
+            header, payload = s.split(",", 1)
+        except ValueError as e:
+            raise ValueError(f"malformed data URL: {s[:64]}…") from e
+        # header is "data:image/png;base64"
+        media_type = header.split(":", 1)[1].split(";", 1)[0] or "image/png"
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": payload,
+            },
+        }
+    if s.startswith("http://") or s.startswith("https://"):
+        return {"type": "image", "source": {"type": "url", "url": s}}
+    raise ValueError(
+        f"unrecognized image spec (must be data: URL or http(s) URL): {s[:64]}…"
+    )
+
+
 MAX_DELEGATION_DEPTH = 2  # A → B → C is allowed; A → B → C → D is not
 PARALLEL_SAFE_TOOLS = frozenset({
     "read_file", "list_dir", "list_skills", "extract_doc", "web_fetch",
@@ -269,7 +302,8 @@ class Executor:
             usage=Usage(),  # backend doesn't surface per-call usage in the same shape
         )
 
-    def run(self, skill: Skill, user_message: str, session: Session | None = None) -> ExecutionResult:
+    def run(self, skill: Skill, user_message: str, session: Session | None = None,
+            images: list[str] | None = None) -> ExecutionResult:
         # Backend switch: when AGENCY_BACKEND=managed_agents is set,
         # delegate the whole execution to Anthropic's hosted runner
         # instead of looping locally. This is purely opt-in and falls
@@ -284,7 +318,7 @@ class Executor:
         usage = Usage()
 
         self._bind_session_to_ctx(session)
-        messages = self._initial_messages(session, user_message)
+        messages = self._initial_messages(session, user_message, images=images)
         system = AnthropicLLM.cached_system(skill.system_prompt, profile=self._resolve_profile(), lessons=self._resolve_lessons())
         tool_defs = self._tool_defs_for(skill)
 
@@ -354,7 +388,8 @@ class Executor:
 
         return ExecutionResult(text=final_text, turns=turns, events=events, usage=usage)
 
-    def stream(self, skill: Skill, user_message: str, session: Session | None = None) -> Iterator[ExecutionEvent]:
+    def stream(self, skill: Skill, user_message: str, session: Session | None = None,
+               images: list[str] | None = None) -> Iterator[ExecutionEvent]:
         """Yield events as they happen.
 
         Emits `text_delta` events for each token chunk from the model and
@@ -370,7 +405,7 @@ class Executor:
         self._bind_session_to_ctx(session)
         text_parts: list[str] = []
         usage = Usage()
-        messages = self._initial_messages(session, user_message)
+        messages = self._initial_messages(session, user_message, images=images)
         system = AnthropicLLM.cached_system(skill.system_prompt, profile=self._resolve_profile(), lessons=self._resolve_lessons())
         tool_defs = self._tool_defs_for(skill)
 
@@ -461,12 +496,29 @@ class Executor:
         """Build the tool list the API sees for this skill, honoring its policy."""
         return [t.to_anthropic() for t in self.tools if skill.tool_is_allowed(t.name)]
 
-    def _initial_messages(self, session: Session | None, user_message: str) -> list[dict[str, Any]]:
+    def _initial_messages(
+        self,
+        session: Session | None,
+        user_message: str,
+        images: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         messages: list[dict[str, Any]] = []
         if session is not None:
             for turn in session.turns:
                 messages.append({"role": turn.role, "content": turn.text})
-        messages.append({"role": "user", "content": user_message})
+        if images:
+            # Multimodal user turn: text + 1..N image content blocks.
+            # Each image entry can be a data URL ("data:image/png;base64,...")
+            # or an http(s) URL — both shapes are accepted by the Anthropic
+            # API as image content sources.
+            blocks: list[dict[str, Any]] = [
+                {"type": "text", "text": user_message},
+            ]
+            for img in images:
+                blocks.append(_image_content_block(img))
+            messages.append({"role": "user", "content": blocks})
+        else:
+            messages.append({"role": "user", "content": user_message})
         return messages
 
     def _execute_tools(self, tool_uses: list[Any]) -> list[Any]:
