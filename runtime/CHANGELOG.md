@@ -4,6 +4,32 @@ All notable changes to the agency runtime, newest first.
 
 ## Unreleased
 
+### Added (HUD interactivity)
+- **`GET /api/lessons`, `POST /api/lessons`** — read the cross-session
+  lessons journal and append a timestamped entry. Powers the HUD's
+  Memory tab.
+- **`GET /api/trust`, `POST /api/trust`** — snapshot of the active
+  trust gate, and persist a new mode to `~/.agency/trust.conf`.
+  Powers the HUD's Trust tab; switching modes from the UI updates
+  the in-process env var so subsequent calls in the same server
+  process see the new mode without restart.
+- **`GET /api/sessions`** — list recent saved sessions under
+  `~/.agency/sessions/` (id, size, modified time). Powers the HUD's
+  Sessions tab.
+- **HUD: TTS voice output.** Toggle button (🔊/🔇) in the input bar.
+  When on, streams agent text deltas through `SpeechSynthesisUtterance`
+  in sentence-boundary chunks so speech doesn't clip mid-word.
+  Persists preference to `localStorage`.
+- **HUD: webcam hologram.** Optional cyan-shifted webcam preview in
+  the bottom-left corner with a scan-line overlay. Toggle button
+  starts/stops the `getUserMedia` stream cleanly.
+- **HUD: functional sidebar tabs.** Memory / Trust / Sessions /
+  Settings now open real modal overlays backed by the new endpoints
+  (read journal + append; switch trust mode; list sessions; reset
+  session ID). Memory shows the journal contents; Trust offers a
+  3-card grid for off / on-my-machine / yolo; Sessions lists
+  recent saves.
+
 ### Added
 - **GRAVIS-style HUD chat UI.** New `runtime/agency/static/chat.html`
   replaces the inline `_CHAT_HTML`. Dark holographic layout, code-rain

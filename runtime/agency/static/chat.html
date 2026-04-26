@@ -237,6 +237,19 @@
       display: flex; align-items: center; gap: 12px;
       padding: 0 18px; border-top: 1px solid var(--line);
     }
+    #tts {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 1px solid var(--cyan-soft);
+      background: rgba(79, 227, 255, 0.04);
+      color: var(--cyan); cursor: pointer; flex-shrink: 0;
+      display: grid; place-items: center; font-size: 14px;
+      transition: all 200ms;
+    }
+    #tts:hover { background: rgba(79, 227, 255, 0.12); }
+    #tts.on {
+      background: var(--cyan); color: var(--bg-deep);
+      box-shadow: 0 0 16px var(--cyan);
+    }
     #mic {
       width: 44px; height: 44px; border-radius: 50%;
       border: 1px solid var(--cyan-soft);
@@ -326,6 +339,127 @@
       text-transform: uppercase; z-index: 5;
     }
 
+    /* ----- modal overlays for sidebar tabs ----------------- */
+    #modal {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(3, 7, 15, 0.78);
+      backdrop-filter: blur(8px);
+      display: none; align-items: center; justify-content: center;
+      padding: 60px 40px;
+    }
+    #modal.open { display: flex; }
+    .modal-card {
+      background: var(--bg-glass-strong); backdrop-filter: blur(20px);
+      border: 1px solid var(--cyan-soft);
+      border-radius: 8px;
+      box-shadow: 0 0 40px var(--cyan-glow);
+      width: 100%; max-width: 760px; max-height: 80vh;
+      display: flex; flex-direction: column;
+    }
+    .modal-head {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 18px; border-bottom: 1px solid var(--line);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 13px; letter-spacing: 0.28em;
+      color: var(--cyan); text-transform: uppercase;
+    }
+    .modal-close {
+      margin-left: auto; background: transparent;
+      border: 1px solid var(--line); color: var(--cyan);
+      padding: 4px 10px; border-radius: 4px; cursor: pointer;
+      font-size: 13px;
+    }
+    .modal-close:hover { background: rgba(79, 227, 255, 0.08); }
+    .modal-body {
+      padding: 18px; overflow-y: auto; flex: 1;
+      font-size: 14px; line-height: 1.6;
+    }
+    .modal-body pre, .modal-body textarea {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--line); border-radius: 4px;
+      padding: 12px; color: var(--text);
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      width: 100%; box-sizing: border-box;
+      white-space: pre-wrap; word-wrap: break-word;
+    }
+    .modal-body textarea { resize: vertical; min-height: 80px; }
+    .trust-mode-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px; margin: 12px 0;
+    }
+    .trust-mode-card {
+      padding: 12px; border: 1px solid var(--line); border-radius: 6px;
+      cursor: pointer; transition: all 150ms;
+      text-align: center;
+    }
+    .trust-mode-card:hover { background: rgba(79, 227, 255, 0.06); }
+    .trust-mode-card.active {
+      border-color: var(--cyan);
+      box-shadow: 0 0 14px var(--cyan-glow);
+    }
+    .trust-mode-card .name {
+      font-family: 'Orbitron', sans-serif; font-size: 13px;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .trust-mode-card .desc {
+      font-size: 11px; color: var(--muted);
+    }
+    .trust-mode-card[data-mode="off"] .name { color: var(--muted); }
+    .trust-mode-card[data-mode="on-my-machine"] .name { color: var(--amber); }
+    .trust-mode-card[data-mode="yolo"] .name { color: var(--magenta); }
+    .modal-actions {
+      display: flex; gap: 10px; justify-content: flex-end;
+      padding: 12px 18px; border-top: 1px solid var(--line);
+    }
+    .btn {
+      background: transparent; border: 1px solid var(--cyan);
+      color: var(--cyan); padding: 8px 16px; border-radius: 4px;
+      font: inherit; font-size: 13px; cursor: pointer;
+      letter-spacing: 0.12em; text-transform: uppercase;
+    }
+    .btn.primary { background: var(--cyan); color: var(--bg-deep); }
+    .btn:hover { box-shadow: 0 0 12px var(--cyan-glow); }
+    .session-row {
+      display: flex; gap: 10px; padding: 8px 12px;
+      border-bottom: 1px solid var(--line);
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    }
+    .session-row .id { color: var(--cyan); flex: 1; }
+    .session-row .ts { color: var(--muted); }
+
+    /* ----- webcam hologram ---------------------------------- */
+    #cam-hologram {
+      position: fixed; bottom: 90px; left: 252px;
+      width: 180px; height: 130px;
+      border: 1px solid var(--cyan-soft); border-radius: 8px;
+      overflow: hidden; opacity: 0.85;
+      box-shadow: 0 0 24px var(--cyan-glow);
+      display: none; z-index: 30;
+      background: var(--bg-deep);
+    }
+    #cam-hologram.on { display: block; }
+    #cam-hologram video {
+      width: 100%; height: 100%; object-fit: cover;
+      transform: scaleX(-1);
+      filter: hue-rotate(165deg) saturate(2) brightness(0.9) contrast(1.2);
+    }
+    #cam-hologram .scan {
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(
+        to bottom, transparent 0, transparent 2px,
+        rgba(79, 227, 255, 0.08) 2px, rgba(79, 227, 255, 0.08) 3px);
+      pointer-events: none;
+    }
+    #cam-toggle {
+      position: fixed; bottom: 230px; left: 252px;
+      background: var(--bg-glass-strong); border: 1px solid var(--cyan-soft);
+      color: var(--cyan); padding: 6px 12px; border-radius: 4px;
+      font-size: 11px; letter-spacing: 0.2em; cursor: pointer;
+      text-transform: uppercase; z-index: 31;
+    }
+    #cam-toggle:hover { background: rgba(79, 227, 255, 0.1); }
+
     /* responsive collapse */
     @media (max-width: 1024px) {
       #app { grid-template-columns: 200px 1fr; grid-template-areas:
@@ -393,9 +527,27 @@
 
     <form id="inputbar" autocomplete="off" onsubmit="return false;">
       <button id="mic" type="button" title="Voice input">🎙</button>
+      <button id="tts" type="button" title="Toggle voice output">🔇</button>
       <input id="msg" type="text" placeholder="Speak or type a request — Cmd/Ctrl+K to focus" />
       <button id="send" type="submit">Send</button>
     </form>
+
+    <button id="cam-toggle" title="Webcam hologram">CAM ▸</button>
+    <div id="cam-hologram">
+      <video id="cam-video" autoplay muted playsinline></video>
+      <div class="scan"></div>
+    </div>
+
+    <div id="modal" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <span id="modal-title">·</span>
+          <button class="modal-close" data-action="close">CLOSE</button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+        <div class="modal-actions" id="modal-actions"></div>
+      </div>
+    </div>
 
     <aside id="panel">
       <div class="panel-title">Specialists</div>
@@ -622,6 +774,7 @@ async function send() {
             bodyEl.textContent += ev.data;
             bodyEl.classList.add('typing');
             log.parentElement.scrollTop = log.parentElement.scrollHeight;
+            ttsPush(ev.data);
           }
         } else if (ev.event === 'tool_use') {
           appendTool(ev.data.name, false,
@@ -631,11 +784,13 @@ async function send() {
                      String(ev.data.content).slice(0, 200));
         } else if (ev.event === 'stop') {
           if (bodyEl) bodyEl.classList.remove('typing');
+          ttsEnd();
         } else if (ev.event === 'error') {
           appendTool('error', true, ev.data.message || ev.data);
           if (bodyEl) bodyEl.classList.remove('typing');
         } else if (ev.event === 'done') {
           setStatus('done');
+          ttsEnd();
         }
       }
     }
@@ -710,23 +865,274 @@ async function showSkillsGraph() {
   } catch (e) { /* ignore */ }
 }
 
+/* ============================================================
+   modal + sidebar tabs (Memory / Trust / Sessions / Settings)
+   ============================================================ */
+
+const modal = $('modal');
+const modalBody = $('modal-body');
+const modalTitle = $('modal-title');
+const modalActions = $('modal-actions');
+
+function openModal(title, bodyHTML, actionsHTML = '') {
+  modalTitle.textContent = title;
+  modalBody.innerHTML = bodyHTML;
+  modalActions.innerHTML = actionsHTML;
+  modal.classList.add('open');
+}
+function closeModal() { modal.classList.remove('open'); }
+
+modal.addEventListener('click', e => {
+  if (e.target.dataset.action === 'close' || e.target === modal) closeModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+/* ----- Memory tab (lessons.md) ------------------------------ */
+async function showMemory() {
+  openModal('Memory · lessons journal', '<em>loading…</em>');
+  try {
+    const r = await fetch('/api/lessons');
+    const data = await r.json();
+    modalBody.innerHTML = `
+      <div style="color:var(--muted);font-size:11px;margin-bottom:8px;
+                   letter-spacing:.2em;text-transform:uppercase;">
+        ${data.path}
+        ${data.exists ? `· ${data.size_bytes} bytes` : '· (none yet)'}
+      </div>
+      <pre>${data.text ? escapeHtml(data.text) : '(empty — append your first lesson below)'}</pre>
+      <div style="margin-top:12px;font-size:11px;color:var(--muted);
+                   letter-spacing:.2em;text-transform:uppercase;">Append</div>
+      <textarea id="lesson-text" placeholder="One concrete thing the agent should remember about this work…"></textarea>
+    `;
+    modalActions.innerHTML = `
+      <button class="btn" data-action="close">cancel</button>
+      <button class="btn primary" id="lesson-save">append</button>
+    `;
+    $('lesson-save').addEventListener('click', async () => {
+      const text = $('lesson-text').value.trim();
+      if (!text) return;
+      const resp = await fetch('/api/lessons', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (resp.ok) showMemory();
+      else alert('Failed: ' + (await resp.text()));
+    });
+  } catch (e) {
+    modalBody.textContent = 'Error: ' + e;
+  }
+}
+
+/* ----- Trust tab (mode switcher) ---------------------------- */
+async function showTrust() {
+  openModal('Trust mode', '<em>loading…</em>');
+  try {
+    const r = await fetch('/api/trust');
+    const data = await r.json();
+    const modes = [
+      { id: 'off',           desc: 'Conservative. Allowlists, sandboxes, opt-ins. CI/Docker default.' },
+      { id: 'on-my-machine', desc: 'Personal box. Shell on, denylisted. Workdir lifted. Metadata still blocked.' },
+      { id: 'yolo',          desc: 'Full reach. No denylist. No sandbox. No SSRF block. No metadata block.' },
+    ];
+    const cards = modes.map(m => `
+      <div class="trust-mode-card ${data.mode === m.id ? 'active' : ''}" data-mode="${m.id}">
+        <div class="name">${m.id}</div>
+        <div class="desc">${m.desc}</div>
+      </div>`).join('');
+    const gateRows = Object.entries(data.gate || {})
+      .map(([k, v]) => `<tr><td style="padding:2px 12px;color:var(--muted);">${k}</td>
+                          <td style="font-family:JetBrains Mono,monospace;color:var(--cyan);">${v}</td></tr>`)
+      .join('');
+    modalBody.innerHTML = `
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">
+        Active: <strong style="color:var(--cyan);">${data.mode}</strong>
+        · config: ${data.config_present ? '<span style="color:var(--green)">file present</span>' : '<span style="color:var(--muted)">(env-var only)</span>'}
+        · ${data.config_file}
+      </div>
+      <div class="trust-mode-grid">${cards}</div>
+      <table style="border-collapse:collapse;font-size:12px;margin-top:14px;">${gateRows}</table>
+    `;
+    modalActions.innerHTML = '<button class="btn" data-action="close">close</button>';
+    document.querySelectorAll('.trust-mode-card').forEach(card => {
+      card.addEventListener('click', async () => {
+        const mode = card.dataset.mode;
+        const resp = await fetch('/api/trust', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode }),
+        });
+        if (resp.ok) {
+          await showTrust();
+          // Update header badge.
+          updateTrustBadge(mode);
+        } else {
+          alert('Failed: ' + (await resp.text()));
+        }
+      });
+    });
+  } catch (e) {
+    modalBody.textContent = 'Error: ' + e;
+  }
+}
+
+/* ----- Sessions tab ---------------------------------------- */
+async function showSessions() {
+  openModal('Sessions', '<em>loading…</em>');
+  try {
+    const r = await fetch('/api/sessions');
+    const data = await r.json();
+    const rows = (data.sessions || []).map(s => {
+      const dt = new Date(s.modified * 1000).toLocaleString();
+      return `<div class="session-row">
+        <span class="id">${s.id}</span>
+        <span class="ts">${dt}</span>
+        <span style="color:var(--muted);">${s.size_bytes} B</span>
+      </div>`;
+    }).join('') || '<div style="color:var(--muted);">No saved sessions yet.</div>';
+    modalBody.innerHTML = `
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;
+                   letter-spacing:.2em;text-transform:uppercase;">${data.path}</div>
+      ${rows}
+    `;
+    modalActions.innerHTML = '<button class="btn" data-action="close">close</button>';
+  } catch (e) {
+    modalBody.textContent = 'Error: ' + e;
+  }
+}
+
+function updateTrustBadge(mode) {
+  trustBadge.className = 'badge trust-' + mode;
+  trustBadge.textContent = 'trust: ' + mode;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ----- nav wiring (replaces stub) --------------------------- */
 document.querySelectorAll('.nav-item').forEach(el => {
   el.addEventListener('click', () => {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     el.classList.add('active');
     const view = el.dataset.view;
+    if (view === 'home') closeModal();
     if (view === 'skills') showSkillsGraph();
-    if (view === 'home') location.reload();
-    if (view === 'memory')
-      window.open('https://github.com/amjad2161/agency-agents/blob/main/runtime/agency/lessons.py', '_blank');
-    if (view === 'trust')
-      window.open('https://github.com/amjad2161/agency-agents/blob/main/runtime/agency/trust.py', '_blank');
+    if (view === 'memory') showMemory();
+    if (view === 'sessions') showSessions();
+    if (view === 'trust') showTrust();
+    if (view === 'settings') showSettings();
   });
+});
+
+/* ----- Settings tab ---------------------------------------- */
+function showSettings() {
+  openModal('Settings', `
+    <div style="font-size:13px;line-height:1.8;">
+      <div><strong>Session ID:</strong> <code>${state.sessionId}</code>
+        <button class="btn" id="reset-session" style="margin-left:10px;font-size:11px;">reset</button></div>
+      <div><strong>Selected skill:</strong> <code>${state.selectedSkill || '(auto-route)'}</code></div>
+      <div><strong>Voice output (TTS):</strong> <code>${ttsEnabled ? 'on' : 'off'}</code></div>
+      <div><strong>Webcam hologram:</strong> <code>${camOn ? 'on' : 'off'}</code></div>
+      <hr style="border-color:var(--line);margin:14px 0;">
+      <div style="color:var(--muted);">
+        Trust mode and lessons are managed in their own tabs.
+        Profile (~/.agency/profile.md) is best edited from the CLI:
+        <code>agency profile edit</code>.
+      </div>
+    </div>
+  `, '<button class="btn" data-action="close">close</button>');
+  $('reset-session').addEventListener('click', () => {
+    state.sessionId = 's_' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem('jarvis_session', state.sessionId);
+    showSettings();
+  });
+}
+
+/* ============================================================
+   TTS — speak agent text as it streams
+   ============================================================ */
+let ttsEnabled = localStorage.getItem('jarvis_tts') === '1';
+const tts = $('tts');
+function updateTtsBtn() {
+  tts.classList.toggle('on', ttsEnabled);
+  tts.textContent = ttsEnabled ? '🔊' : '🔇';
+  tts.title = ttsEnabled ? 'Voice output: ON (click to mute)' : 'Voice output: OFF (click to unmute)';
+}
+tts.addEventListener('click', () => {
+  ttsEnabled = !ttsEnabled;
+  localStorage.setItem('jarvis_tts', ttsEnabled ? '1' : '0');
+  updateTtsBtn();
+  if (!ttsEnabled) window.speechSynthesis.cancel();
+});
+updateTtsBtn();
+
+let ttsBuffer = '';
+function ttsFlush(force = false) {
+  if (!ttsEnabled || !window.speechSynthesis) return;
+  // Speak in sentence-ish chunks: flush whenever we hit a `.`, `!`, `?`,
+  // `\n\n`, or on `force=true`. Keeps the speech from clipping mid-word.
+  while (true) {
+    const idx = ttsBuffer.search(/[.!?]\s|\n\n/);
+    if (idx === -1 && !force) break;
+    let chunk;
+    if (idx === -1) {
+      chunk = ttsBuffer; ttsBuffer = '';
+      if (!chunk.trim()) return;
+    } else {
+      chunk = ttsBuffer.slice(0, idx + 1);
+      ttsBuffer = ttsBuffer.slice(idx + 1);
+    }
+    if (!chunk.trim()) continue;
+    const u = new SpeechSynthesisUtterance(chunk);
+    u.rate = 1.0; u.pitch = 0.9; u.volume = 0.85;
+    window.speechSynthesis.speak(u);
+    if (idx === -1) break;
+  }
+}
+function ttsPush(text) { ttsBuffer += text; ttsFlush(); }
+function ttsEnd() { ttsFlush(true); }
+
+/* ============================================================
+   Webcam hologram (the GRAVIS look)
+   ============================================================ */
+let camOn = false;
+let camStream = null;
+const camToggle = $('cam-toggle');
+const camHologram = $('cam-hologram');
+const camVideo = $('cam-video');
+
+camToggle.addEventListener('click', async () => {
+  if (camOn) {
+    camStream && camStream.getTracks().forEach(t => t.stop());
+    camStream = null;
+    camHologram.classList.remove('on');
+    camOn = false;
+    camToggle.textContent = 'CAM ▸';
+    return;
+  }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 320, height: 240 }, audio: false,
+    });
+    camVideo.srcObject = camStream;
+    camHologram.classList.add('on');
+    camOn = true;
+    camToggle.textContent = 'CAM ◾';
+  } catch (e) {
+    alert('Webcam access denied: ' + e.message);
+  }
 });
 
 /* ----- boot -------------------------------------------------- */
 loadSkills();
 loadHealth();
+fetch('/api/trust').then(r => r.json()).then(d => updateTrustBadge(d.mode))
+  .catch(() => {});
 $('msg').focus();
 </script>
 </body>
