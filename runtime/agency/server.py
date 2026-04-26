@@ -25,6 +25,10 @@ class RunRequest(BaseModel):
     message: str
     skill: str | None = None
     session_id: str | None = None
+    # Optional: list of image URLs OR base64 data URLs
+    # ("data:image/png;base64,...") to attach to the user turn.
+    # Anthropic API accepts both shapes natively in image content blocks.
+    images: list[str] | None = None
 
 
 class PlanRequestBody(BaseModel):
@@ -427,7 +431,7 @@ def build_app(repo: Path | None = None) -> FastAPI:
                 "rationale": plan.rationale,
             })
             try:
-                for event in executor.stream(plan.skill, body.message, session=session):
+                for event in executor.stream(plan.skill, body.message, session=session, images=body.images):
                     yield _sse(event.kind, event.payload)
             except Exception as e:  # noqa: BLE001 - surface to the client
                 yield _sse("error", {"message": str(e)})
@@ -454,7 +458,7 @@ def build_app(repo: Path | None = None) -> FastAPI:
             )
 
         executor = Executor(registry, llm, memory=memory)
-        result = executor.run(plan.skill, body.message, session=session)
+        result = executor.run(plan.skill, body.message, session=session, images=body.images)
         return {
             "skill": {"slug": plan.skill.slug, "name": plan.skill.name, "emoji": plan.skill.emoji},
             "rationale": plan.rationale,

@@ -4,6 +4,23 @@ All notable changes to the agency runtime, newest first.
 
 ## Unreleased
 
+### Added (round 3)
+- **Proactive Tool Evolution daemon.** New `agency.daemons.tool_evolver`
+  walks `~/.agency/tools/*.py`, runs each tool's `BENCH` suite (3
+  reps per case), and asks the LLM to rewrite the slow ones. The
+  rewrite is benched against the same suite and the file is replaced
+  ONLY if the new version both passes BENCH and is faster at the
+  median. Original is backed up to `<name>.py.bak.<timestamp>` first.
+  New CLI: `agency evolve` (`--rewrite`/`--bench-only`, `--dry-run`).
+  Threshold: `AGENCY_EVOLVE_SLOW_S` (default 0.5s).
+- **Image input in the HUD.** Multimodal user turns: paste from
+  clipboard, drag-drop onto the page, or click 📎. Attached images
+  appear as a thumbnail bar above the input bar. Sent through
+  `RunRequest.images` as data URLs or http(s) URLs; the executor
+  converts each to an Anthropic API image content block (base64 or
+  url source). User message bubble shows the attached images
+  alongside the text.
+
 ### Added (HUD round 2)
 - **`GET /api/profile`, `POST /api/profile`** — read and replace
   `~/.agency/profile.md` from the HUD. Empty body deletes the file.
