@@ -31,6 +31,14 @@ class PlanRequestBody(BaseModel):
     message: str
 
 
+class LessonAppend(BaseModel):
+    text: str
+
+
+class TrustSet(BaseModel):
+    mode: str
+
+
 def build_app(repo: Path | None = None) -> FastAPI:
     root = repo if repo else discover_repo_root()
     registry = SkillRegistry.load(root)
@@ -181,6 +189,93 @@ def build_app(repo: Path | None = None) -> FastAPI:
             ],
             "delegation_hubs": hubs,
         }
+
+    @app.get("/api/lessons")
+    def lessons_get() -> dict[str, Any]:
+        """Return the cross-session lessons journal contents."""
+        from .lessons import lessons_path, load_lessons_text
+        text = load_lessons_text() or ""
+        p = lessons_path()
+        return {
+            "path": str(p),
+            "exists": p.exists() and p.is_file(),
+            "size_bytes": (p.stat().st_size if p.exists() and p.is_file() else 0),
+            "text": text,
+        }
+
+    @app.post("/api/lessons")
+    def lessons_append(body: LessonAppend) -> dict[str, Any]:
+        """Append a single timestamped lesson entry."""
+        from datetime import datetime, timezone
+        from .lessons import ensure_default_lessons
+
+        line = (body.text or "").strip()
+        if not line:
+            raise HTTPException(400, "text cannot be empty")
+        p = ensure_default_lessons()
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        with p.open("a", encoding="utf-8") as f:
+            f.write(f"\n## {stamp} · note from HUD\n\n{line}\n")
+        return {"appended": True, "path": str(p), "timestamp": stamp}
+
+    @app.get("/api/trust")
+    def trust_get() -> dict[str, Any]:
+        """Snapshot of the active trust gate."""
+        from dataclasses import asdict
+        from .trust import current, gate, trust_conf_path
+        g = gate()
+        return {
+            "mode": current().value,
+            "gate": {k: v for k, v in asdict(g).items() if k != "mode"},
+            "config_file": str(trust_conf_path()),
+            "config_present": trust_conf_path().exists(),
+        }
+
+    @app.post("/api/trust")
+    def trust_set(body: TrustSet) -> dict[str, Any]:
+        """Persist the trust mode to ~/.agency/trust.conf so subsequent
+        runs pick it up without an env var."""
+        from .trust import trust_conf_path
+
+        mode = (body.mode or "").strip().lower()
+        if mode not in ("off", "on-my-machine", "yolo"):
+            raise HTTPException(400,
+                f"unrecognized mode: {body.mode!r}. "
+                "Choose off | on-my-machine | yolo.")
+        p = trust_conf_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(
+            f"# Agency trust mode for this machine.\n"
+            f"# Values: off | on-my-machine | yolo.\n"
+            f"{mode}\n",
+            encoding="utf-8",
+        )
+        # Refresh in-process env so subsequent calls in THIS server pick
+        # up the change without restart.
+        import os as _os
+        _os.environ["AGENCY_TRUST_MODE"] = mode
+        return {"mode": mode, "config_file": str(p), "applied": True}
+
+    @app.get("/api/sessions")
+    def sessions_list() -> dict[str, Any]:
+        """List recent saved sessions (filenames + last-modified time)."""
+        sess_dir = Path.home() / ".agency" / "sessions"
+        if not sess_dir.is_dir():
+            return {"path": str(sess_dir), "sessions": []}
+        sessions = []
+        for f in sorted(sess_dir.glob("*.jsonl"),
+                        key=lambda p: p.stat().st_mtime,
+                        reverse=True)[:50]:
+            try:
+                stat = f.stat()
+                sessions.append({
+                    "id": f.stem,
+                    "size_bytes": stat.st_size,
+                    "modified": stat.st_mtime,
+                })
+            except OSError:
+                continue
+        return {"path": str(sess_dir), "sessions": sessions}
 
     @app.post("/api/plan")
     def plan_endpoint(body: PlanRequestBody) -> dict[str, Any]:

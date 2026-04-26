@@ -2,9 +2,32 @@
 
 from __future__ import annotations
 
+import os
+
+from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 
 from agency.server import build_app
+
+
+# /api/trust set writes directly to os.environ so the change is
+# visible to subsequent in-process calls. monkeypatch can't track
+# that write — so without this fixture, AGENCY_TRUST_MODE would leak
+# from one test_server case into test_tools and flip its expectations
+# on web_fetch / shell. Snapshot + restore at the boundary.
+@pytest.fixture(autouse=True)
+def _isolate_trust_env():
+    keys = ("AGENCY_TRUST_MODE", "AGENCY_TRUST_CONF",
+            "AGENCY_LESSONS", "AGENCY_PROFILE", "AGENCY_VECTOR_DB")
+    snap = {k: os.environ.get(k) for k in keys}
+    yield
+    for k, v in snap.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
 
 
 def test_api_skills_returns_count_and_list():
@@ -32,6 +55,83 @@ def test_api_skills_graph_returns_categories_and_hubs():
     # at least jarvis-core and elder-sage.
     hub_slugs = [h["slug"] for h in data["delegation_hubs"]]
     assert any("core" in s or "elder" in s or "omega" in s for s in hub_slugs)
+
+
+def test_api_lessons_get_returns_path_and_text(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_LESSONS", str(tmp_path / "lessons.md"))
+    (tmp_path / "lessons.md").write_text("# Lessons\n\n## a\n\nx", encoding="utf-8")
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/lessons")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["exists"] is True
+    assert "Lessons" in d["text"]
+
+
+def test_api_lessons_post_appends(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_LESSONS", str(tmp_path / "lessons.md"))
+    app = build_app()
+    client = TestClient(app)
+    r = client.post("/api/lessons", json={"text": "ship the lessons feature"})
+    assert r.status_code == 200
+    body = (tmp_path / "lessons.md").read_text(encoding="utf-8")
+    assert "ship the lessons feature" in body
+    assert "## " in body and "UTC" in body
+
+
+def test_api_lessons_post_rejects_empty(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_LESSONS", str(tmp_path / "lessons.md"))
+    app = build_app()
+    client = TestClient(app)
+    r = client.post("/api/lessons", json={"text": "   "})
+    assert r.status_code == 400
+
+
+def test_api_trust_get_reports_active_mode(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_TRUST_CONF", str(tmp_path / "trust.conf"))
+    monkeypatch.setenv("AGENCY_TRUST_MODE", "yolo")
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/trust")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["mode"] == "yolo"
+    assert "block_metadata_fetches" in d["gate"]
+
+
+def test_api_trust_post_persists_mode(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_TRUST_CONF", str(tmp_path / "trust.conf"))
+    monkeypatch.delenv("AGENCY_TRUST_MODE", raising=False)
+    app = build_app()
+    client = TestClient(app)
+    r = client.post("/api/trust", json={"mode": "on-my-machine"})
+    assert r.status_code == 200
+    assert r.json()["mode"] == "on-my-machine"
+    contents = (tmp_path / "trust.conf").read_text(encoding="utf-8")
+    assert "on-my-machine" in contents
+
+
+def test_api_trust_post_rejects_unknown(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_TRUST_CONF", str(tmp_path / "trust.conf"))
+    app = build_app()
+    client = TestClient(app)
+    r = client.post("/api/trust", json={"mode": "supreme"})
+    assert r.status_code == 400
+
+
+def test_api_sessions_returns_listing(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    sess_dir = fake_home / ".agency" / "sessions"
+    sess_dir.mkdir(parents=True)
+    (sess_dir / "abc.jsonl").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/sessions")
+    assert r.status_code == 200
+    d = r.json()
+    assert any(s["id"] == "abc" for s in d["sessions"])
 
 
 def test_index_serves_chat_html_from_disk_when_present(tmp_path, monkeypatch):
