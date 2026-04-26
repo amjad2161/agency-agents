@@ -39,6 +39,10 @@ class TrustSet(BaseModel):
     mode: str
 
 
+class ProfileWrite(BaseModel):
+    text: str
+
+
 def build_app(repo: Path | None = None) -> FastAPI:
     root = repo if repo else discover_repo_root()
     registry = SkillRegistry.load(root)
@@ -276,6 +280,112 @@ def build_app(repo: Path | None = None) -> FastAPI:
             except OSError:
                 continue
         return {"path": str(sess_dir), "sessions": sessions}
+
+    @app.get("/api/sessions/{session_id}/export")
+    def session_export(session_id: str) -> dict[str, Any]:
+        """Export a saved session as a self-contained markdown transcript.
+
+        Reads the JSONL turns under ~/.agency/sessions/<id>.jsonl and
+        renders user/assistant messages as a single markdown blob the
+        user can save, paste into a doc, or share.
+        """
+        # Defensive: don't let arbitrary paths leak — only resolve under
+        # the sessions dir, no `..` allowed.
+        if not session_id or "/" in session_id or "\\" in session_id or ".." in session_id:
+            raise HTTPException(400, "invalid session id")
+        sess_dir = Path.home() / ".agency" / "sessions"
+        path = sess_dir / f"{session_id}.jsonl"
+        if not path.is_file():
+            raise HTTPException(404, f"session not found: {session_id}")
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError as e:
+            raise HTTPException(500, f"could not read session: {e}")
+        out = [f"# Session · {session_id}\n",
+               f"_{path}_\n"]
+        for raw in lines:
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                turn = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            role = turn.get("role", "?")
+            content = turn.get("content", turn.get("text", ""))
+            if isinstance(content, list):
+                content = "\n".join(
+                    str(b.get("text", b)) if isinstance(b, dict) else str(b)
+                    for b in content
+                )
+            out.append(f"\n## {role}\n\n{content}\n")
+        return {
+            "session_id": session_id,
+            "markdown": "\n".join(out),
+            "size_bytes": path.stat().st_size,
+        }
+
+    @app.get("/api/profile")
+    def profile_get() -> dict[str, Any]:
+        """Return the always-on user profile contents."""
+        from .profile import load_profile_text, profile_path
+        text = load_profile_text() or ""
+        p = profile_path()
+        return {
+            "path": str(p),
+            "exists": p.exists() and p.is_file(),
+            "size_bytes": (p.stat().st_size if p.exists() and p.is_file() else 0),
+            "text": text,
+        }
+
+    @app.post("/api/profile")
+    def profile_write(body: ProfileWrite) -> dict[str, Any]:
+        """Replace the entire profile body. Empty text deletes the file."""
+        from .profile import profile_path
+        p = profile_path()
+        text = body.text or ""
+        if not text.strip():
+            if p.exists():
+                p.unlink()
+            return {"deleted": True, "path": str(p)}
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+        return {"saved": True, "path": str(p), "size_bytes": p.stat().st_size}
+
+    @app.get("/api/mcp")
+    def mcp_list() -> dict[str, Any]:
+        """Return the configured MCP servers from `AGENCY_MCP_SERVERS`.
+
+        Reflects what the runtime would forward to Anthropic on the
+        `mcp-client-2025-11-20` beta. Doesn't make a network call —
+        just shows the parsed config.
+        """
+        import os as _os
+        raw = _os.environ.get("AGENCY_MCP_SERVERS", "").strip()
+        if not raw:
+            return {"configured": False, "servers": [],
+                    "note": "Set AGENCY_MCP_SERVERS to a JSON list to enable."}
+        try:
+            servers = json.loads(raw)
+        except json.JSONDecodeError as e:
+            return {"configured": True, "servers": [], "parse_error": str(e)}
+        if not isinstance(servers, list):
+            return {"configured": True, "servers": [],
+                    "parse_error": "AGENCY_MCP_SERVERS must be a JSON list"}
+        # Strip any field that smells like a secret before returning.
+        safe = []
+        for s in servers:
+            if not isinstance(s, dict):
+                continue
+            redacted = {k: v for k, v in s.items()
+                        if k.lower() not in ("authorization", "api_key", "token",
+                                              "secret", "password")}
+            for k in s:
+                if k.lower() in ("authorization", "api_key", "token", "secret",
+                                  "password"):
+                    redacted[k] = "(redacted)"
+            safe.append(redacted)
+        return {"configured": True, "servers": safe}
 
     @app.post("/api/plan")
     def plan_endpoint(body: PlanRequestBody) -> dict[str, Any]:

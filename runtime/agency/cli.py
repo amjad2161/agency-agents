@@ -542,6 +542,50 @@ def serve_cmd(ctx: click.Context, host: str, port: int) -> None:
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
+@main.command("hud")
+@click.option("--host", default="127.0.0.1")
+@click.option("--port", default=8765, type=int)
+@click.option("--no-browser", is_flag=True,
+              help="Don't auto-open the browser.")
+@click.pass_context
+def hud_cmd(ctx: click.Context, host: str, port: int, no_browser: bool) -> None:
+    """Launch the GRAVIS HUD — same as `agency serve` but opens
+    a browser at the chat URL after the server binds the port."""
+    try:
+        import uvicorn
+    except ImportError as e:
+        raise click.ClickException("uvicorn not installed. Install runtime deps.") from e
+    from .server import build_app
+
+    repo = ctx.obj["repo"]
+    app = build_app(repo)
+    url = f"http://{host}:{port}"
+    click.echo(f"GRAVIS HUD launching on {url}")
+
+    if not no_browser:
+        # Spawn a one-shot thread that polls the port and opens the
+        # browser only once the server is actually listening — avoids
+        # the "site can't be reached" race.
+        import socket
+        import threading
+        import time
+        import webbrowser
+
+        def _open_when_ready() -> None:
+            for _ in range(40):  # ~10s budget @ 250ms each
+                time.sleep(0.25)
+                try:
+                    with socket.create_connection((host, port), timeout=0.5):
+                        webbrowser.open(url)
+                        return
+                except OSError:
+                    continue
+
+        threading.Thread(target=_open_when_ready, daemon=True).start()
+
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
 # Wire the Amjad-Jarvis subcommand group into the main CLI as `agency amjad …`.
 # The group lives in its own module so the orchestrator-specific code stays
 # isolated from the core CLI; this just gives it a stable entry point.
