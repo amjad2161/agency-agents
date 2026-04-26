@@ -111,6 +111,60 @@
       50%      { box-shadow: 0 0 22px rgba(255, 102, 196, 0.65); }
     }
     #clock { font-family: 'JetBrains Mono', monospace; color: var(--cyan); font-size: 14px; }
+    .live-status {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      letter-spacing: 0.18em; text-transform: uppercase;
+    }
+    .live-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: currentColor; box-shadow: 0 0 6px currentColor;
+    }
+    .live-status.idle      { color: var(--muted); }
+    .live-status.thinking  { color: var(--cyan); animation: pulse-cyan 1.4s ease-in-out infinite; }
+    .live-status.tool      { color: var(--amber); }
+    .live-status.speaking  { color: var(--magenta); animation: pulse-magenta 1.2s ease-in-out infinite; }
+    .live-status.error     { color: #ff6363; }
+    @keyframes pulse-cyan {
+      0%, 100% { opacity: 0.85; } 50% { opacity: 1; text-shadow: 0 0 8px var(--cyan); }
+    }
+
+    /* voice waveform — shown during TTS */
+    #waveform {
+      position: fixed; bottom: 92px; right: 18px;
+      display: none; gap: 3px; align-items: flex-end;
+      height: 32px; padding: 4px 10px;
+      background: var(--bg-glass-strong); backdrop-filter: blur(10px);
+      border: 1px solid var(--magenta);
+      border-radius: 6px; z-index: 30;
+      box-shadow: 0 0 16px rgba(255, 102, 196, 0.4);
+    }
+    #waveform.on { display: flex; }
+    #waveform .bar {
+      width: 3px; background: var(--magenta);
+      box-shadow: 0 0 4px var(--magenta);
+      animation: wave 800ms ease-in-out infinite;
+    }
+    #waveform .bar:nth-child(1) { animation-delay: 0ms;   }
+    #waveform .bar:nth-child(2) { animation-delay: 80ms;  }
+    #waveform .bar:nth-child(3) { animation-delay: 160ms; }
+    #waveform .bar:nth-child(4) { animation-delay: 240ms; }
+    #waveform .bar:nth-child(5) { animation-delay: 320ms; }
+    #waveform .bar:nth-child(6) { animation-delay: 400ms; }
+    #waveform .bar:nth-child(7) { animation-delay: 480ms; }
+    @keyframes wave {
+      0%, 100% { height: 6px; opacity: 0.55; }
+      50%      { height: 24px; opacity: 1; }
+    }
+
+    /* image rendering inside agent message bodies */
+    .msg-body img.tool-image {
+      max-width: 360px; max-height: 360px;
+      margin: 8px 0; border-radius: 4px;
+      border: 1px solid var(--cyan-soft);
+      box-shadow: 0 0 12px var(--cyan-glow);
+    }
 
     /* ----- sidebar -------------------------------------------- */
     #sidebar {
@@ -531,6 +585,9 @@
       <div id="header-right">
         <span id="trust-badge" class="badge trust-off">trust: off</span>
         <span id="skills-count">0 specialists</span>
+        <span id="live-status" class="live-status idle">
+          <span class="live-dot"></span><span id="live-text">idle</span>
+        </span>
         <span id="clock">--:--:--</span>
       </div>
     </header>
@@ -589,6 +646,12 @@
     <div id="cam-hologram">
       <video id="cam-video" autoplay muted playsinline></video>
       <div class="scan"></div>
+    </div>
+
+    <div id="waveform">
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      <div class="bar"></div>
     </div>
 
     <div id="attachments"></div>
@@ -737,6 +800,13 @@ async function loadHealth() {
 
 /* ----- streaming chat ---------------------------------------- */
 function setStatus(s) { status.textContent = s; }
+
+/* live status pill in the header — kind ∈ idle/thinking/tool/speaking/error */
+function setLive(kind, text) {
+  const el = $('live-status');
+  el.className = 'live-status ' + (kind || 'idle');
+  $('live-text').textContent = text || kind || 'idle';
+}
 function hideGreeting() { $('greeting').style.display = 'none'; }
 
 function appendUserMsg(text, imageUrls = []) {
@@ -774,6 +844,28 @@ function startAgentMsg(skillName, slug) {
   log.appendChild(div);
   log.parentElement.scrollTop = log.parentElement.scrollHeight;
   return div.querySelector('.msg-body');
+}
+
+/* Tool result with image-aware rendering. If `content` looks like a
+   data URL or http(s) URL pointing at an image, render it inline.
+   Otherwise fall back to the truncated-text appendTool path. */
+function renderToolResult(data) {
+  const content = String(data.content || '');
+  const isImg = /^data:image\//.test(content) ||
+                /^https?:\/\/\S+\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(content);
+  if (isImg && !data.is_error) {
+    const div = document.createElement('div');
+    div.className = 'msg agent';
+    div.innerHTML = `<div class="msg-meta">[⚙ ${data.name}] image</div>
+                     <div class="msg-body"></div>`;
+    const img = document.createElement('img');
+    img.className = 'tool-image'; img.src = content; img.alt = data.name;
+    div.querySelector('.msg-body').appendChild(img);
+    log.appendChild(div);
+    log.parentElement.scrollTop = log.parentElement.scrollHeight;
+    return;
+  }
+  appendTool(data.name, data.is_error, content.slice(0, 240));
 }
 
 function appendTool(name, isError, content) {
@@ -877,6 +969,7 @@ async function send() {
   $('msg').value = '';
   appendUserMsg(msg, attachments.map(a => a.dataUrl));
   setStatus('thinking…');
+  setLive('thinking', 'thinking');
 
   let bodyEl = null;
   let buf = '';
@@ -923,17 +1016,20 @@ async function send() {
         } else if (ev.event === 'tool_use') {
           appendTool(ev.data.name, false,
                      JSON.stringify(ev.data.input).slice(0, 120));
+          setLive('tool', `tool: ${ev.data.name}`);
         } else if (ev.event === 'tool_result') {
-          appendTool(ev.data.name, ev.data.is_error,
-                     String(ev.data.content).slice(0, 200));
+          renderToolResult(ev.data);
+          setLive('thinking', 'thinking');
         } else if (ev.event === 'stop') {
           if (bodyEl) bodyEl.classList.remove('typing');
           ttsEnd();
         } else if (ev.event === 'error') {
           appendTool('error', true, ev.data.message || ev.data);
           if (bodyEl) bodyEl.classList.remove('typing');
+          setLive('error', 'error');
         } else if (ev.event === 'done') {
           setStatus('done');
+          setLive('idle', 'idle');
           ttsEnd();
         }
       }
@@ -1338,6 +1434,19 @@ function ttsFlush(force = false) {
     if (!chunk.trim()) continue;
     const u = new SpeechSynthesisUtterance(chunk);
     u.rate = 1.0; u.pitch = 0.9; u.volume = 0.85;
+    u.onstart = () => {
+      $('waveform').classList.add('on');
+      setLive('speaking', 'speaking');
+    };
+    u.onend = () => {
+      // Hide waveform only when nothing's queued. SpeechSynthesis
+      // queues utterances internally, so check `speaking` after a tick.
+      setTimeout(() => {
+        if (!window.speechSynthesis.speaking) {
+          $('waveform').classList.remove('on');
+        }
+      }, 50);
+    };
     window.speechSynthesis.speak(u);
     if (idx === -1) break;
   }
@@ -1379,8 +1488,18 @@ camToggle.addEventListener('click', async () => {
 /* ----- boot -------------------------------------------------- */
 loadSkills();
 loadHealth();
-fetch('/api/trust').then(r => r.json()).then(d => updateTrustBadge(d.mode))
-  .catch(() => {});
+
+/* Single boot fetch — pulls trust mode + key counts from /api/dashboard
+   so we don't fan out 5 separate requests on initial paint. */
+fetch('/api/dashboard').then(r => r.json()).then(d => {
+  updateTrustBadge(d.trust_mode);
+  if (d.trust_mode === 'yolo') {
+    setLive('idle', `yolo · ${d.skills_total} specialists`);
+  } else {
+    setLive('idle', `${d.trust_mode} · ${d.skills_total} specialists`);
+  }
+}).catch(() => {});
+
 $('msg').focus();
 </script>
 </body>

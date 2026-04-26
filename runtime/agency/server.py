@@ -158,6 +158,83 @@ def build_app(repo: Path | None = None) -> FastAPI:
             ],
         }
 
+    @app.get("/api/dashboard")
+    def dashboard() -> dict[str, Any]:
+        """One-shot snapshot of everything a Home tab cares about.
+
+        Returns the active trust mode, persona/tool counts, profile +
+        lessons + MCP presence flags, last-N saved sessions, and
+        whether the API key is configured. Replaces 5+ separate fetch
+        calls the HUD would otherwise need on initial paint.
+        """
+        import os as _os
+        from .lessons import lessons_path, load_lessons_text
+        from .profile import profile_path, load_profile_text
+        from .trust import current as trust_current, gate as trust_gate
+
+        skills = registry.all()
+        cats: dict[str, int] = {}
+        for s in skills:
+            cats[s.category] = cats.get(s.category, 0) + 1
+
+        # recent sessions (top 5)
+        sess_dir = Path.home() / ".agency" / "sessions"
+        recent_sessions = []
+        if sess_dir.is_dir():
+            for f in sorted(sess_dir.glob("*.jsonl"),
+                            key=lambda p: p.stat().st_mtime, reverse=True)[:5]:
+                try:
+                    recent_sessions.append({
+                        "id": f.stem,
+                        "modified": f.stat().st_mtime,
+                        "size_bytes": f.stat().st_size,
+                    })
+                except OSError:
+                    continue
+
+        # tools in the user's tools dir (for the tool-evolver)
+        tools_dir = Path(_os.environ.get(
+            "AGENCY_TOOLS_DIR",
+            str(Path.home() / ".agency" / "tools"),
+        ))
+        user_tools = (
+            sorted(p.name for p in tools_dir.glob("*.py")
+                   if p.name != "__init__.py" and not p.name.startswith("."))
+            if tools_dir.is_dir() else []
+        )
+
+        # MCP servers (parsed count, not contents)
+        mcp_count = 0
+        mcp_raw = _os.environ.get("AGENCY_MCP_SERVERS", "").strip()
+        if mcp_raw:
+            try:
+                parsed = json.loads(mcp_raw)
+                if isinstance(parsed, list):
+                    mcp_count = len(parsed)
+            except json.JSONDecodeError:
+                pass
+
+        return {
+            "trust_mode": trust_current().value,
+            "trust_yolo_active": trust_gate().mode.value == "yolo",
+            "api_key_set": bool(_os.environ.get("ANTHROPIC_API_KEY")),
+            "skills_total": len(skills),
+            "skills_categories": [
+                {"name": k, "count": v} for k, v in sorted(cats.items())
+            ],
+            "profile_present": bool(load_profile_text()),
+            "profile_size_bytes": (profile_path().stat().st_size
+                                    if profile_path().is_file() else 0),
+            "lessons_present": bool(load_lessons_text()),
+            "lessons_size_bytes": (lessons_path().stat().st_size
+                                    if lessons_path().is_file() else 0),
+            "sessions_recent": recent_sessions,
+            "user_tools": user_tools,
+            "mcp_servers_count": mcp_count,
+            "computer_use": (_os.environ.get("AGENCY_ENABLE_COMPUTER_USE", "")
+                              .strip().lower() in ("1", "true", "yes", "on")),
+        }
+
     @app.get("/api/skills/graph")
     def skills_graph() -> dict[str, Any]:
         """Compact category + relationship view for the HUD sidebar.

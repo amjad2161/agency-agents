@@ -251,6 +251,72 @@ def test_api_session_export_rejects_path_traversal():
     assert r.status_code != 200
 
 
+def test_api_dashboard_returns_full_snapshot(tmp_path, monkeypatch):
+    """One-shot snapshot endpoint for the HUD home view."""
+    monkeypatch.setenv("AGENCY_LESSONS", str(tmp_path / "lessons.md"))
+    monkeypatch.setenv("AGENCY_PROFILE", str(tmp_path / "profile.md"))
+    monkeypatch.setenv("AGENCY_TRUST_CONF", str(tmp_path / "trust.conf"))
+    monkeypatch.delenv("AGENCY_TRUST_MODE", raising=False)
+    (tmp_path / "lessons.md").write_text("# Lessons\n\n## a\n\nfirst lesson",
+                                           encoding="utf-8")
+    (tmp_path / "profile.md").write_text("- Name: tester", encoding="utf-8")
+
+    fake_home = tmp_path / "home"
+    sess_dir = fake_home / ".agency" / "sessions"
+    sess_dir.mkdir(parents=True)
+    (sess_dir / "abc.jsonl").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/dashboard")
+    assert r.status_code == 200
+    d = r.json()
+
+    assert d["trust_mode"] == "off"  # default
+    assert d["trust_yolo_active"] is False
+    assert d["skills_total"] > 0
+    assert isinstance(d["skills_categories"], list)
+    assert d["skills_categories"][0].keys() >= {"name", "count"}
+    assert d["profile_present"] is True
+    assert d["profile_size_bytes"] > 0
+    assert d["lessons_present"] is True
+    assert any(s["id"] == "abc" for s in d["sessions_recent"])
+    assert d["mcp_servers_count"] == 0
+    assert isinstance(d["user_tools"], list)
+
+
+def test_api_dashboard_handles_missing_files(tmp_path, monkeypatch):
+    """Dashboard must work even with no profile/lessons/sessions present."""
+    monkeypatch.setenv("AGENCY_LESSONS", str(tmp_path / "lessons.md"))
+    monkeypatch.setenv("AGENCY_PROFILE", str(tmp_path / "profile.md"))
+    monkeypatch.delenv("AGENCY_TRUST_MODE", raising=False)
+
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/dashboard")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["profile_present"] is False
+    assert d["lessons_present"] is False
+    assert d["sessions_recent"] == []
+    assert d["user_tools"] == []
+
+
+def test_api_dashboard_reflects_trust_yolo(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_TRUST_CONF", str(tmp_path / "trust.conf"))
+    monkeypatch.setenv("AGENCY_TRUST_MODE", "yolo")
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/dashboard")
+    d = r.json()
+    assert d["trust_mode"] == "yolo"
+    assert d["trust_yolo_active"] is True
+
+
 def test_index_serves_chat_html_from_disk_when_present(tmp_path, monkeypatch):
     """If runtime/agency/static/chat.html exists, GET / serves it."""
     app = build_app()
