@@ -4,6 +4,25 @@ All notable changes to the agency runtime, newest first.
 
 ## Unreleased
 
+### Added (round 4 — HUD polish)
+- **`GET /api/dashboard`** — single endpoint that returns trust mode +
+  skills count + categories + profile/lessons presence + recent
+  sessions (top 5) + user-tool list + MCP server count + computer-use
+  flag + API-key-set flag in one snapshot. The HUD calls it on boot
+  instead of fanning out 5+ requests.
+- **HUD: live status pill** in the header — `idle / thinking / tool /
+  speaking / error` with a colored pulse dot. Updates live as the SSE
+  stream emits events.
+- **HUD: voice waveform animation.** When TTS speaks, a 7-bar magenta
+  waveform appears bottom-right and animates at sub-second cadence.
+  Auto-hides when `speechSynthesis.speaking` is false (handles the
+  internal queue cleanly).
+- **HUD: image-aware tool results.** When a tool returns a `data:image`
+  URL or an http(s) URL ending in a known image extension, render the
+  image inline (max 360×360, cyan border + glow) instead of the
+  truncated-text fallback. Multimodal *output* completes the multimodal
+  loop (PR #28 added input).
+
 ### Added (round 3)
 - **Proactive Tool Evolution daemon.** New `agency.daemons.tool_evolver`
   walks `~/.agency/tools/*.py`, runs each tool's `BENCH` suite (3
