@@ -134,6 +134,123 @@ def test_api_sessions_returns_listing(tmp_path, monkeypatch):
     assert any(s["id"] == "abc" for s in d["sessions"])
 
 
+def test_api_profile_get(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_PROFILE", str(tmp_path / "p.md"))
+    (tmp_path / "p.md").write_text("# About me\n\n- Name: Test", encoding="utf-8")
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/profile")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["exists"] is True
+    assert "About me" in d["text"]
+
+
+def test_api_profile_post_writes(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_PROFILE", str(tmp_path / "p.md"))
+    app = build_app()
+    client = TestClient(app)
+    r = client.post("/api/profile", json={"text": "# fresh"})
+    assert r.status_code == 200
+    assert r.json()["saved"] is True
+    assert (tmp_path / "p.md").read_text() == "# fresh"
+
+
+def test_api_profile_post_empty_deletes(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_PROFILE", str(tmp_path / "p.md"))
+    (tmp_path / "p.md").write_text("# old", encoding="utf-8")
+    app = build_app()
+    client = TestClient(app)
+    r = client.post("/api/profile", json={"text": "   "})
+    assert r.status_code == 200
+    assert r.json()["deleted"] is True
+    assert not (tmp_path / "p.md").exists()
+
+
+def test_api_mcp_returns_unconfigured_by_default(monkeypatch):
+    monkeypatch.delenv("AGENCY_MCP_SERVERS", raising=False)
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/mcp")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["configured"] is False
+    assert d["servers"] == []
+
+
+def test_api_mcp_returns_parsed_list(monkeypatch):
+    import json as _json
+    monkeypatch.setenv(
+        "AGENCY_MCP_SERVERS",
+        _json.dumps([
+            {"type": "url", "name": "github",
+             "url": "https://api.githubcopilot.com/mcp/",
+             "authorization": "Bearer SECRETSHOULDREDACT"},
+        ]),
+    )
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/mcp")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["configured"] is True
+    assert len(d["servers"]) == 1
+    s = d["servers"][0]
+    assert s["name"] == "github"
+    # secret keys must be redacted
+    assert s.get("authorization") == "(redacted)"
+    assert "SECRETSHOULDREDACT" not in _json.dumps(d)
+
+
+def test_api_mcp_handles_bad_json(monkeypatch):
+    monkeypatch.setenv("AGENCY_MCP_SERVERS", "{not json")
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/mcp")
+    assert r.status_code == 200
+    d = r.json()
+    assert "parse_error" in d
+
+
+def test_api_session_export_renders_markdown(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    sess_dir = fake_home / ".agency" / "sessions"
+    sess_dir.mkdir(parents=True)
+    (sess_dir / "abc.jsonl").write_text(
+        '{"role":"user","content":"hello"}\n'
+        '{"role":"assistant","content":"world"}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/sessions/abc/export")
+    assert r.status_code == 200
+    md = r.json()["markdown"]
+    assert "## user" in md
+    assert "hello" in md
+    assert "## assistant" in md
+    assert "world" in md
+
+
+def test_api_session_export_404_for_missing(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    (fake_home / ".agency" / "sessions").mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/sessions/nope/export")
+    assert r.status_code == 404
+
+
+def test_api_session_export_rejects_path_traversal():
+    app = build_app()
+    client = TestClient(app)
+    r = client.get("/api/sessions/..%2Fetc/export")
+    # FastAPI normalizes %2F so we may see 400 directly; either way not 200.
+    assert r.status_code != 200
+
+
 def test_index_serves_chat_html_from_disk_when_present(tmp_path, monkeypatch):
     """If runtime/agency/static/chat.html exists, GET / serves it."""
     app = build_app()

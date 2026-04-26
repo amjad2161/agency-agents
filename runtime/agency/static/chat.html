@@ -142,6 +142,8 @@
     .dot-sessions { color: var(--green); background: var(--green); }
     .dot-trust { color: var(--magenta); background: var(--magenta); }
     .dot-settings { color: #fff; background: #fff; }
+    .dot-profile { color: #6cff9a; background: #6cff9a; }
+    .dot-mcp { color: #4fe3ff; background: #4fe3ff; }
     #sidebar h4 {
       font-size: 10px; letter-spacing: 0.3em; color: var(--muted);
       margin: 22px 12px 8px; text-transform: uppercase; font-weight: 500;
@@ -504,9 +506,15 @@
       <div class="nav-item" data-view="sessions">
         <span class="nav-dot dot-sessions"></span><span>Sessions</span>
       </div>
+      <div class="nav-item" data-view="profile">
+        <span class="nav-dot dot-profile"></span><span>Profile</span>
+      </div>
       <h4>System</h4>
       <div class="nav-item" data-view="trust">
         <span class="nav-dot dot-trust"></span><span>Trust mode</span>
+      </div>
+      <div class="nav-item" data-view="mcp">
+        <span class="nav-dot dot-mcp"></span><span>MCP servers</span>
       </div>
       <div class="nav-item" data-view="settings">
         <span class="nav-dot dot-settings"></span><span>Settings</span>
@@ -990,6 +998,8 @@ async function showSessions() {
         <span class="id">${s.id}</span>
         <span class="ts">${dt}</span>
         <span style="color:var(--muted);">${s.size_bytes} B</span>
+        <button class="btn" style="font-size:10px;padding:2px 8px;"
+                onclick="exportSession('${s.id}')">export</button>
       </div>`;
     }).join('') || '<div style="color:var(--muted);">No saved sessions yet.</div>';
     modalBody.innerHTML = `
@@ -1025,9 +1035,111 @@ document.querySelectorAll('.nav-item').forEach(el => {
     if (view === 'memory') showMemory();
     if (view === 'sessions') showSessions();
     if (view === 'trust') showTrust();
+    if (view === 'profile') showProfile();
+    if (view === 'mcp') showMCP();
     if (view === 'settings') showSettings();
   });
 });
+
+// Make export accessible from inline onclick="" in the sessions table.
+window.exportSession = exportSession;
+
+/* ----- Profile tab (~/.agency/profile.md) ------------------- */
+async function showProfile() {
+  openModal('Profile · always-on context', '<em>loading…</em>');
+  try {
+    const r = await fetch('/api/profile');
+    const data = await r.json();
+    modalBody.innerHTML = `
+      <div style="color:var(--muted);font-size:11px;margin-bottom:8px;
+                   letter-spacing:.2em;text-transform:uppercase;">
+        ${data.path}
+        ${data.exists ? `· ${data.size_bytes} bytes` : '· (none yet)'}
+      </div>
+      <textarea id="profile-text" style="min-height:280px;">${escapeHtml(data.text)}</textarea>
+      <div style="margin-top:10px;color:var(--muted);font-size:12px;">
+        This text is sent as background context to <em>every</em> agent run
+        — keep it tight. Empty body deletes the file.
+      </div>
+    `;
+    modalActions.innerHTML = `
+      <button class="btn" data-action="close">cancel</button>
+      <button class="btn primary" id="profile-save">save</button>
+    `;
+    $('profile-save').addEventListener('click', async () => {
+      const text = $('profile-text').value;
+      const resp = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (resp.ok) {
+        setStatus('profile saved');
+        closeModal();
+      } else alert('Failed: ' + (await resp.text()));
+    });
+  } catch (e) {
+    modalBody.textContent = 'Error: ' + e;
+  }
+}
+
+/* ----- MCP servers tab -------------------------------------- */
+async function showMCP() {
+  openModal('MCP servers', '<em>loading…</em>');
+  try {
+    const r = await fetch('/api/mcp');
+    const data = await r.json();
+    let body = '';
+    if (!data.configured) {
+      body = `<div style="color:var(--muted);">
+        ${data.note || 'No MCP servers configured.'}
+      </div>
+      <pre style="margin-top:14px;">export AGENCY_MCP_SERVERS='[
+  {"type": "url", "name": "github",
+   "url": "https://api.githubcopilot.com/mcp/"}
+]'</pre>`;
+    } else if (data.parse_error) {
+      body = `<div style="color:#ff6363;">Parse error: ${escapeHtml(data.parse_error)}</div>`;
+    } else {
+      body = (data.servers || []).map(s => `
+        <div style="padding:10px 12px;border:1px solid var(--line);
+                    border-radius:4px;margin-bottom:8px;">
+          <div style="color:var(--cyan);font-family:JetBrains Mono,monospace;
+                       font-size:13px;">${escapeHtml(s.name || '(unnamed)')}</div>
+          <pre style="margin-top:8px;">${escapeHtml(JSON.stringify(s, null, 2))}</pre>
+        </div>`).join('');
+      if (!body) body = '<div style="color:var(--muted);">No servers in list.</div>';
+    }
+    modalBody.innerHTML = `
+      <div style="color:var(--muted);font-size:11px;margin-bottom:10px;
+                   letter-spacing:.2em;text-transform:uppercase;">
+        Configured via <code>AGENCY_MCP_SERVERS</code> env var
+      </div>
+      ${body}
+    `;
+    modalActions.innerHTML = '<button class="btn" data-action="close">close</button>';
+  } catch (e) {
+    modalBody.textContent = 'Error: ' + e;
+  }
+}
+
+/* ----- Sessions tab — with export button on each row -------- */
+async function exportSession(id) {
+  try {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(id)}/export`);
+    if (!r.ok) { alert('Export failed: ' + (await r.text())); return; }
+    const data = await r.json();
+    // Trigger a download.
+    const blob = new Blob([data.markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `session-${id}.md`;
+    document.body.appendChild(a); a.click();
+    a.remove(); URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Export failed: ' + e);
+  }
+}
 
 /* ----- Settings tab ---------------------------------------- */
 function showSettings() {

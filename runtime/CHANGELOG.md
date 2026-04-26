@@ -4,6 +4,26 @@ All notable changes to the agency runtime, newest first.
 
 ## Unreleased
 
+### Added (HUD round 2)
+- **`GET /api/profile`, `POST /api/profile`** — read and replace
+  `~/.agency/profile.md` from the HUD. Empty body deletes the file.
+- **`GET /api/mcp`** — return the parsed `AGENCY_MCP_SERVERS` config
+  with secrets (`authorization`, `api_key`, `token`, `secret`,
+  `password`) redacted before serialization.
+- **`GET /api/sessions/{id}/export`** — render a saved session as a
+  self-contained markdown transcript. Path-traversal-safe (rejects
+  any id with `/`, `\`, or `..`).
+- **HUD: Profile + MCP tabs.** Sidebar gets two new dots — Profile
+  (green) and MCP servers (cyan). Profile tab is a textarea editor;
+  MCP tab lists configured servers (with redacted secrets) or shows
+  a copy-paste example if none are configured.
+- **HUD: per-row Export button** on the Sessions tab, downloads the
+  rendered markdown as `session-<id>.md`.
+- **`agency hud` CLI** — alias for `serve` that polls the port via
+  `socket.create_connection` and opens the browser only after the
+  server is actually listening (avoids the "site can't be reached"
+  race). `--no-browser` skips the open.
+
 ### Added (HUD interactivity)
 - **`GET /api/lessons`, `POST /api/lessons`** — read the cross-session
   lessons journal and append a timestamped entry. Powers the HUD's
