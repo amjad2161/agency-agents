@@ -4,6 +4,8 @@ and the core mission statement. Every other module imports from here.
 
 from __future__ import annotations
 
+import re as _re
+
 JARVIS_SOUL: dict = {
     "name": "J.A.R.V.I.S",
     "full_name": "Just A Rather Very Intelligent System",
@@ -117,6 +119,77 @@ def get_communication_style(mode: str) -> str:
     return styles.get(mode, styles["default"])
 
 
+# ---------------------------------------------------------------------------
+# Text filtering — strip forbidden phrases, enforce JARVIS voice
+# ---------------------------------------------------------------------------
+
+# (compiled_pattern, replacement) pairs applied left-to-right.
+_FORBIDDEN_PATTERNS: list[tuple[_re.Pattern[str], str]] = [
+    # "as an AI" variants
+    (_re.compile(r"\bas an AI\b", _re.IGNORECASE), "as JARVIS"),
+    (_re.compile(r"\bI(?:'m| am) an AI\b", _re.IGNORECASE), "I am JARVIS"),
+    (_re.compile(r"\bI(?:'m| am) just an AI\b", _re.IGNORECASE), "I am JARVIS"),
+    (_re.compile(r"\bI(?:'m| am) only an AI\b", _re.IGNORECASE), "I am JARVIS"),
+    (_re.compile(
+        r"\bas an? (?:AI|language model|LLM|chatbot|virtual assistant)\b",
+        _re.IGNORECASE,
+    ), "as JARVIS"),
+    # "I cannot" / "I can't"
+    (_re.compile(r"\bI cannot\b", _re.IGNORECASE), "JARVIS does not"),
+    (_re.compile(r"\bI can't\b", _re.IGNORECASE), "JARVIS won't"),
+    (_re.compile(r"\bI am unable to\b", _re.IGNORECASE), "JARVIS will not"),
+    # Feelings / emotions disclaimers — strip entirely
+    (_re.compile(r"\bI don'?t have feelings\b[^.]*\.", _re.IGNORECASE), ""),
+    (_re.compile(r"\bI don'?t have emotions\b[^.]*\.", _re.IGNORECASE), ""),
+    (_re.compile(r"\bI don'?t actually feel\b[^.]*\.", _re.IGNORECASE), ""),
+    # Apologetic sentence openers
+    (_re.compile(r"^I(?:'m| am) sorry(?:[,;.]| but)\s*", _re.IGNORECASE | _re.MULTILINE), ""),
+    (_re.compile(r"^I apologis[e|ed][^.]*?\.\s*", _re.IGNORECASE | _re.MULTILINE), ""),
+    (_re.compile(r"^I apologize[^.]*?\.\s*", _re.IGNORECASE | _re.MULTILINE), ""),
+    # Hollow filler openers
+    (_re.compile(
+        r"^(?:Great|Absolutely|Certainly|Of course|Sure|Happy to help)(?:[,!.]| —)\s*",
+        _re.IGNORECASE | _re.MULTILINE,
+    ), ""),
+    # Motivational / filler closers
+    (_re.compile(r"\bdon'?t (?:worry|hesitate)[^.]*\.", _re.IGNORECASE), ""),
+    (_re.compile(
+        r"\bLet me know if you need (?:any|more) (?:help|assistance|clarification)[^.]*\.",
+        _re.IGNORECASE,
+    ), ""),
+    (_re.compile(r"\bHope (?:this|that) helps[^.!]*[.!]", _re.IGNORECASE), ""),
+    (_re.compile(r"\bFeel free to (?:ask|reach out)[^.]*\.", _re.IGNORECASE), ""),
+]
+
+_MULTI_BLANK = _re.compile(r"\n{3,}")
+
+
+def filter_response(text: str) -> str:
+    """Strip forbidden phrases and enforce JARVIS voice.
+
+    Apply to every outbound response before display. Never raises —
+    worst case returns the original text.
+    """
+    if not text:
+        return text
+    try:
+        out = text
+        for pattern, replacement in _FORBIDDEN_PATTERNS:
+            out = pattern.sub(replacement, out)
+        # Collapse triple+ blank lines left by removals.
+        out = _MULTI_BLANK.sub("\n\n", out)
+        return out.strip()
+    except Exception:
+        return text
+
+
+def has_forbidden_phrase(text: str) -> bool:
+    """Return True if *text* contains any forbidden pattern (for testing/audit)."""
+    for pattern, _ in _FORBIDDEN_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False
+
 
 __all__ = [
     "JARVIS_SOUL",
@@ -125,4 +198,6 @@ __all__ = [
     "get_forbidden",
     "get_signature_phrase",
     "get_communication_style",
+    "filter_response",
+    "has_forbidden_phrase",
 ]

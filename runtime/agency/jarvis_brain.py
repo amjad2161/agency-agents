@@ -192,6 +192,86 @@ KEYWORD_SLUG_BOOST: dict[str, dict[str, float]] = {
     "vr": {"spatial": 5.0, "vr": 6.0},
     "xr": {"spatial": 6.0, "xr": 6.0},
     "geospatial": {"geospatial": 7.0, "mapping": 6.0},
+    # Creative writing / poetry
+    "poem": {"creative-writing": 9.0, "creative": 7.0, "omega-creative": 6.0},
+    "poetry": {"creative-writing": 9.0, "creative": 7.0},
+    "haiku": {"creative-writing": 9.0},
+    "rhyme": {"creative-writing": 7.0},
+    "creative writing": {"creative-writing": 10.0, "omega-creative": 7.0},
+    "short story": {"creative-writing": 9.0},
+    "lyrics": {"creative-writing": 8.0, "music": 5.0},
+
+    # Translation / linguistics
+    "translate": {"linguistics-nlp": 9.0, "linguistics": 8.0},
+    "translation": {"linguistics-nlp": 9.0, "linguistics": 8.0},
+    "hebrew": {"linguistics-nlp": 8.0, "linguistics": 7.0},
+    "arabic": {"linguistics-nlp": 8.0, "linguistics": 7.0},
+    "multilingual": {"linguistics-nlp": 7.0},
+    "localization": {"linguistics-nlp": 7.0},
+
+    # Visual art / drawing
+    "draw": {"design-creative": 8.0, "omega-creative": 7.0},
+    "drawing": {"design-creative": 8.0, "omega-creative": 7.0},
+    "paint": {"design-creative": 8.0, "omega-creative": 6.0},
+    "illustration": {"design-creative": 8.0, "omega-creative": 6.0},
+    "artwork": {"design-creative": 8.0},
+    "sketch": {"design-creative": 7.0},
+    "generate image": {"design-creative": 9.0, "omega-creative": 8.0},
+    "image generation": {"design-creative": 9.0},
+    "midjourney": {"design-creative": 9.0},
+    "stable diffusion": {"design-creative": 9.0},
+
+    # Video / media
+    "video": {"content-media": 8.0, "omega-creative": 5.0},
+    "make a video": {"content-media": 10.0},
+    "create a video": {"content-media": 10.0},
+    "youtube": {"content-media": 8.0},
+    "reel": {"content-media": 8.0, "marketing": 5.0},
+    "animation": {"content-media": 8.0, "design-creative": 5.0},
+    "podcast": {"content-media": 7.0},
+    "tiktok": {"content-media": 8.0, "marketing": 6.0},
+
+    # API / backend (stronger weights so "build an API" beats "mobile app")
+    "build an api": {"backend-architect": 12.0, "engineering": 6.0},
+    "create an api": {"backend-architect": 12.0, "engineering": 6.0},
+    "rest endpoint": {"backend-architect": 10.0, "engineering": 6.0},
+    "web service": {"backend-architect": 8.0, "engineering": 5.0},
+    "endpoint": {"backend-architect": 7.0, "engineering": 5.0},
+    "webhook": {"backend-architect": 7.0, "engineering": 5.0},
+
+    # Debugging
+    "fix a bug": {"omega-engineer": 10.0, "engineering": 6.0},
+    "debug": {"omega-engineer": 9.0, "engineering": 6.0},
+    "debugging": {"omega-engineer": 9.0, "engineering": 6.0},
+    "bug fix": {"omega-engineer": 9.0, "engineering": 6.0},
+    "traceback": {"omega-engineer": 8.0, "engineering": 5.0},
+
+    # Website building
+    "make a website": {"frontend": 10.0, "engineering": 5.0},
+    "build a website": {"frontend": 10.0, "engineering": 5.0},
+    "create a website": {"frontend": 10.0, "engineering": 5.0},
+    "landing page": {"frontend": 9.0, "marketing": 5.0},
+    "web app": {"frontend": 8.0, "engineering": 5.0},
+    "website": {"frontend": 8.0, "engineering": 4.0},
+
+    # Email
+    "send email": {"email-intelligence": 10.0, "engineering": 4.0},
+    "write email": {"email-intelligence": 9.0, "creative-writing": 5.0},
+    "draft email": {"email-intelligence": 9.0, "creative-writing": 5.0},
+    "compose email": {"email-intelligence": 9.0},
+
+    # Web search / research
+    "search the web": {"journalism-research": 10.0},
+    "web search": {"journalism-research": 10.0},
+    "latest news": {"journalism-research": 9.0},
+    "research": {"journalism-research": 7.0, "brainiac": 6.0},
+
+    # Data analysis
+    "analyze data": {"data": 9.0},
+    "analyse data": {"data": 9.0},
+    "data analysis": {"data": 10.0},
+    "data visualization": {"data": 9.0},
+    "dashboard": {"data": 8.0},
 }
 
 

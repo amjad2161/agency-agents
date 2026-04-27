@@ -267,7 +267,14 @@ agency init slug --name N --category C     # scaffold new persona
 agency doctor                              # full environment health check
 agency hud                                 # launch GRAVIS HUD dashboard
 agency amjad <subcommand>                  # Amjad-specific orchestration
+agency chat [--session ID] [--mode MODE]   # interactive REPL with soul filter
 ```
+
+**`agency chat` REPL features:**
+- Shows bilingual Jerusalem-time greeting on start (`ערב טוב, Amjad. Good evening. 22:14 IST.`)
+- Built-in commands: `!skills`, `!route <text>`, `exit/quit/bye`
+- All output passed through `filter_response()` — strips forbidden phrases before display
+- Clean Ctrl+C → farewell message → exit
 
 **`jarvis` CLI** (argparse, jarvis_cli_commands.py):
 ```
@@ -282,7 +289,8 @@ jarvis stop                            # informational (use SIGTERM directly)
 ```
 
 ### 8. Memory & Learning
-- **Vector memory**: semantic search over past interactions
+- **Vector memory**: real TF-IDF + cosine similarity with SQLite backing (`vector_memory.py`), `upsert/search/delete`, `index_lessons()` bulk ingest
+- **Amjad profile**: full owner identity in `amjad_memory.py` — name, email, timezone (`Asia/Jerusalem`), location (Israel), preferred language (Hebrew), technical language (English); persists to `runtime/data/jarvis_preferences.json`
 - **Lessons ledger**: extracted lessons written to `jarvis/history.json`
 - **`self-learner` module**: automatically extracts patterns from every turn
 - **`curiosity-engine` module**: proactively explores adjacent knowledge
@@ -294,7 +302,18 @@ jarvis stop                            # informational (use SIGTERM directly)
 - Complex tasks → `claude-opus-4-7` (executor, production output)
 - Very complex → escalates automatically based on complexity classification
 
-### 10. Production Quality Guarantees
+### 10. JARVIS Soul Filter
+`filter_response()` in `runtime/agency/jarvis_soul.py` — applied to every outbound response:
+- Strips `"as an AI"`, `"I am an AI"`, `"as a language model"` → replaces with `"as JARVIS"`
+- Strips `"I cannot"` → `"JARVIS does not"`, `"I can't"` → `"JARVIS won't"`
+- Strips feelings disclaimers: `"I don't have feelings..."`, `"I don't have emotions..."`
+- Strips apologetic openers: `"I'm sorry, but..."`, `"I apologize..."`
+- Strips hollow filler openers: `"Great!"`, `"Absolutely!"`, `"Certainly!"`, `"Of course!"`
+- Strips motivational closers: `"Hope this helps!"`, `"Feel free to ask"`, `"Let me know if you need help"`
+- `has_forbidden_phrase()` available for audit/testing
+- Jerusalem timezone (`Asia/Jerusalem` via `zoneinfo`) for all greeting timestamps
+
+### 11. Production Quality Guarantees
 From the Supreme Operational Directives:
 - Zero artificial limitations: no "I can't" unless physically impossible
 - Evidence over assertion: every recommendation backed by code, data, or reasoning
@@ -327,40 +346,4 @@ agency/
 ├── engineering/               # 38 engineering specialist agents
 ├── marketing/                 # 30 marketing agents
 ├── game-development/          # 20 game dev agents
-├── design/ sales/ support/    # remaining category dirs
-├── runtime/
-│   └── agency/
-│       ├── jarvis_brain.py    # SupremeJarvisBrain: loads + routes modules
-│       ├── skills.py          # SkillRegistry: loads all 324 agents
-│       ├── cli.py             # agency CLI (Click)
-│       ├── planner.py         # intent → NEXT: step decomposition
-│       ├── executor.py        # step execution + self_heal
-│       ├── server.py          # HTTP control server :8765
-│       └── tools.py           # web_fetch, shell, file I/O, computer use
-├── jarvis_cli_commands.py     # jarvis CLI (argparse)
-├── supreme_main.py            # JarvisOrchestrator 9-step boot
-├── supreme_interface.py       # SupremeREPL terminal interface
-├── unified_ai_system/
-│   └── core/
-│       └── supreme_brainiac.py # SupremeBrainCore async directive engine
-└── aios/                      # AIOS microservice layer (API, schemas, services)
-```
-
----
-
-## Numbers
-
-| Metric | Value |
-|--------|-------|
-| JARVIS domain modules | **117** |
-| Total specialist agents | **324** |
-| Agent categories | **16** |
-| Routing accuracy | **10/10** |
-| KEYWORD_SLUG_BOOST entries | **80+** |
-| unified_prompt() size | **~76,000 chars** |
-| ThreadPoolExecutor workers | **8** |
-| Control server port | **8765** |
-| Core test suite | **22 passed, 0 failed** |
-| Parallel execution model | ThreadPoolExecutor (sync) + asyncio (SupremeBrainCore) |
-| Default executor model | `claude-opus-4-7` |
-| Default planner model | `claude-haiku-4-5` |
+�

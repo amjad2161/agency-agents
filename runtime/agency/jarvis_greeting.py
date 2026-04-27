@@ -1,12 +1,13 @@
-"""JARVIS Greeting Module — startup banner and farewell messages.
+"""JARVIS Greeting Module — startup banner, farewell, and time-aware bilingual greetings.
 
-Generates the console greeting shown when JARVIS boots, including
-subsystem health status. Also provides contextual farewell lines.
+All timestamps use Asia/Jerusalem (Israel Standard Time / IDT) via zoneinfo.
+Falls back to UTC if the timezone data is unavailable.
 
 Usage::
 
-    from agency.jarvis_greeting import get_startup_banner, get_farewell
-    print(get_startup_banner({"systems_ok": 12, "systems_total": 12}))
+    from agency.jarvis_greeting import get_startup_banner, get_greeting, get_farewell
+    print(get_startup_banner())
+    print(get_greeting())          # time-aware Hebrew/English
     print(get_farewell())
 """
 
@@ -17,20 +18,37 @@ from typing import Any
 
 from .jarvis_soul import JARVIS_SOUL
 
-# Box drawing characters (Unicode)
+# ---------------------------------------------------------------------------
+# Timezone helper
+# ---------------------------------------------------------------------------
+
+_TZ_NAME = "Asia/Jerusalem"
+
+
+def _jerusalem_now() -> datetime.datetime:
+    """Return current time in Asia/Jerusalem. Falls back to local if unavailable."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.datetime.now(tz=ZoneInfo(_TZ_NAME))
+    except Exception:
+        # tzdata not installed or Python < 3.9 — fall back to local time
+        return datetime.datetime.now()
+
+
+# ---------------------------------------------------------------------------
+# Box-drawing constants
+# ---------------------------------------------------------------------------
+
 _TL = "╔"
 _TR = "╗"
 _BL = "╚"
 _BR = "╝"
 _H = "═"
 _V = "║"
-
-_WIDTH = 50  # Inner content width (between the borders)
+_WIDTH = 50
 
 
 def _box_line(content: str, width: int = _WIDTH) -> str:
-    """Return a single bordered line, content centred/left-padded."""
-    # Pad content to width
     padded = f"  {content}"
     if len(padded) < width:
         padded = padded + " " * (width - len(padded))
@@ -51,6 +69,40 @@ def _separator(width: int = _WIDTH) -> str:
     return "╠" + _H * width + "╣"
 
 
+# ---------------------------------------------------------------------------
+# Time-aware greeting logic
+# ---------------------------------------------------------------------------
+
+def _time_period(hour: int) -> tuple[str, str]:
+    """Return (hebrew_greeting, english_period) for the given hour (0-23)."""
+    if 5 <= hour < 10:
+        return "בוקר טוב", "Good morning"
+    if 10 <= hour < 13:
+        return "שלום", "Good day"
+    if 13 <= hour < 17:
+        return "אחר הצהריים טוב", "Good afternoon"
+    if 17 <= hour < 21:
+        return "ערב טוב", "Good evening"
+    # night: 21-24, 0-5
+    return "לילה טוב", "Good night"
+
+
+def get_greeting(owner: str = "Amjad") -> str:
+    """Return a time-aware bilingual greeting.
+
+    Hebrew primary, English secondary. Includes Jerusalem local time.
+    """
+    now = _jerusalem_now()
+    hebrew, english = _time_period(now.hour)
+    time_str = now.strftime("%H:%M")
+    tz_label = "IST" if now.utcoffset() is not None else "local"
+    return f"{hebrew}, {owner}. {english}. {time_str} {tz_label}. מוכן."
+
+
+# ---------------------------------------------------------------------------
+# Startup banner
+# ---------------------------------------------------------------------------
+
 def get_startup_banner(status: dict[str, Any] | None = None) -> str:
     """Return a multi-line JARVIS startup banner string.
 
@@ -58,10 +110,10 @@ def get_startup_banner(status: dict[str, Any] | None = None) -> str:
     ----------
     status:
         Optional dict with keys:
-        - ``"mode"``         : current persona mode (str)
-        - ``"systems_ok"``   : count of healthy subsystems (int)
-        - ``"systems_total"``  : total subsystem count (int)
-        - ``"subsystems"``   : dict of name → {"healthy": bool} (optional)
+        - ``"mode"``          : current persona mode (str)
+        - ``"systems_ok"``    : count of healthy subsystems (int)
+        - ``"systems_total"`` : total subsystem count (int)
+        - ``"subsystems"``    : dict of name → {"healthy": bool} (optional)
 
     Returns
     -------
@@ -74,20 +126,28 @@ def get_startup_banner(status: dict[str, Any] | None = None) -> str:
     systems_total = status.get("systems_total", systems_ok)
     subsystems: dict[str, Any] = status.get("subsystems", {})
 
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = _jerusalem_now()
+    time_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        tz_name = str(now.tzinfo) if now.tzinfo else "local"
+    except Exception:
+        tz_name = "local"
+
+    hebrew, _ = _time_period(now.hour)
 
     lines: list[str] = [_top_border()]
-    lines.append(_box_line(f"J.A.R.V.I.S — Supreme Brainiac Active"))
-    lines.append(_box_line(f"Just A Rather Very Intelligent System"))
+    lines.append(_box_line("J.A.R.V.I.S — Supreme Brainiac Active"))
+    lines.append(_box_line("Just A Rather Very Intelligent System"))
     lines.append(_separator())
     lines.append(_box_line(f"Owner  : {JARVIS_SOUL['owner']}"))
     lines.append(_box_line(f"Mode   : {mode}"))
     lines.append(_box_line(f"Systems: {systems_ok}/{systems_total} online"))
-    lines.append(_box_line(f"Time   : {now}"))
+    lines.append(_box_line(f"Time   : {time_str} ({tz_name})"))
+    lines.append(_box_line(f"Greeting: {hebrew}, {JARVIS_SOUL['owner']}."))
 
     if subsystems:
         lines.append(_separator())
-        for name, info in list(subsystems.items())[:8]:  # cap at 8 lines
+        for name, info in list(subsystems.items())[:8]:
             healthy = info.get("healthy", False)
             marker = "✓" if healthy else "✗"
             detail = info.get("detail", "")
@@ -97,24 +157,24 @@ def get_startup_banner(status: dict[str, Any] | None = None) -> str:
             lines.append(f"{_V}{entry:<{_WIDTH}}{_V}")
 
     lines.append(_separator())
-    lines.append(_box_line(f"Mission: Total ownership of Amjad's digital life"))
+    lines.append(_box_line("Mission: Total ownership of Amjad's digital life"))
     lines.append(_bot_border())
 
     return "\n".join(lines)
 
 
-def get_farewell(owner: str = "Amjad") -> str:
-    """Return a JARVIS shutdown farewell message.
+# ---------------------------------------------------------------------------
+# Farewell + auxiliary messages
+# ---------------------------------------------------------------------------
 
-    Parameters
-    ----------
-    owner:
-        Name of the owner (default ``"Amjad"``).
-    """
-    now = datetime.datetime.now().strftime("%H:%M:%S")
+def get_farewell(owner: str = "Amjad") -> str:
+    """Return a JARVIS shutdown farewell message with Jerusalem local time."""
+    now = _jerusalem_now()
+    time_str = now.strftime("%H:%M:%S")
+    _, english = _time_period(now.hour)
     return (
-        f"[{now}] J.A.R.V.I.S — מערכות יורדות. "
-        f"נתראה, {owner}. "
+        f"[{time_str}] J.A.R.V.I.S — מערכות יורדות. "
+        f"נתראה, {owner}. {english}. "
         "All systems standby."
     )
 
@@ -129,5 +189,4 @@ def get_mode_transition_message(from_mode: str, to_mode: str) -> str:
 
 def get_alert_banner(message: str, level: str = "WARNING") -> str:
     """Return a compact single-line alert banner."""
-    level_tag = level.upper()
-    return f"[{_V} JARVIS/{level_tag} {_V}] {message}"
+    return f"[{_V} JARVIS/{level.upper()} {_V}] {message}"

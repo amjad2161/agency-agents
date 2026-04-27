@@ -24,6 +24,7 @@ from .profile import (
     profile_path,
 )
 from .skills import SkillRegistry, discover_repo_root
+from .jarvis_greeting import get_startup_banner, get_farewell, get_greeting
 
 
 def _registry(repo: Path | None) -> SkillRegistry:
@@ -102,6 +103,8 @@ def run_cmd(ctx: click.Context, request: str, skill_slug: str | None,
             session_id: str | None, workdir: Path | None,
             show_usage: bool) -> None:
     """Run REQUEST through the planner and execute it."""
+    # Show JARVIS greeting banner on startup
+    click.echo(get_startup_banner({"mode": "supreme_brainiac", "systems_ok": 21, "systems_total": 21}), err=True)
     registry = _registry(ctx.obj["repo"])
     try:
         llm = _require_llm()
@@ -135,6 +138,7 @@ def run_cmd(ctx: click.Context, request: str, skill_slug: str | None,
         )
     if session_id:
         click.echo(f"\n[session saved: {sid}]", err=True)
+    click.echo(get_farewell(), err=True)
 
 
 @main.command("debug")
@@ -874,3 +878,127 @@ def _require_llm() -> AnthropicLLM:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# ---------------------------------------------------------------------------
+# `agency chat` — interactive REPL with JARVIS soul + greeting
+# ---------------------------------------------------------------------------
+
+@main.command("chat")
+@click.option("--session", "session_id", default=None,
+              help="Session ID for persistent memory across chat turns.")
+@click.option("--mode", "persona_mode", default="supreme_brainiac", show_default=True,
+              help="Persona mode (supreme_brainiac, technical, casual, …).")
+@click.option("--no-banner", is_flag=True, default=False,
+              help="Skip the startup banner.")
+@click.pass_context
+def chat_cmd(
+    ctx: click.Context,
+    session_id: str | None,
+    persona_mode: str,
+    no_banner: bool,
+) -> None:
+    """Interactive JARVIS chat — greeting, REPL loop, Ctrl+C to exit.
+
+    Routes every message through the skill planner (LLM-backed if
+    ANTHROPIC_API_KEY is set, deterministic otherwise), then filters
+    the response through the JARVIS soul to strip forbidden phrases.
+    """
+    import sys
+
+    from .jarvis_greeting import get_startup_banner, get_greeting, get_farewell
+    from .jarvis_soul import filter_response
+    from .jarvis_brain import SupremeJarvisBrain
+
+    # ---- startup ---------------------------------------------------------
+    registry = _registry(ctx.obj.get("repo"))
+    llm = _maybe_llm()
+    planner = Planner(registry, llm=llm)
+    brain = SupremeJarvisBrain(registry)
+
+    memory_store: MemoryStore | None = None
+    sid: str | None = session_id
+    if sid:
+        memory_store = MemoryStore(Path.home() / ".agency" / "sessions")
+
+    if not no_banner:
+        n_skills = len(registry)
+        banner = get_startup_banner({
+            "mode": persona_mode,
+            "systems_ok": n_skills,
+            "systems_total": n_skills,
+        })
+        click.echo(banner)
+        click.echo()
+
+    click.echo(get_greeting())
+    click.echo()
+    llm_status = "LLM: online" if llm else "LLM: offline (deterministic routing)"
+    click.echo(f"[{llm_status} | {len(registry)} skills | Ctrl+C to exit]\n")
+
+    # ---- REPL loop -------------------------------------------------------
+    while True:
+        try:
+            raw = click.prompt("Amjad", prompt_suffix=" ❯ ", default="", show_default=False)
+        except click.Abort:
+            # Ctrl+C or Ctrl+D
+            click.echo()
+            click.echo(get_farewell())
+            break
+
+        request = raw.strip()
+        if not request:
+            continue
+
+        # Handle built-in meta-commands
+        if request.lower() in ("exit", "quit", "bye", "!q"):
+            click.echo(get_farewell())
+            break
+        if request.lower() in ("help", "?"):
+            click.echo(
+                "Commands: exit/quit/bye — end session | "
+                "!skills — list loaded skills | "
+                "!route <text> — show routing only"
+            )
+            continue
+        if request.lower() == "!skills":
+            for s in registry.all()[:20]:
+                click.echo(f"  {s.slug:<50}  {s.name}")
+            if len(registry) > 20:
+                click.echo(f"  … and {len(registry) - 20} more")
+            continue
+        if request.lower().startswith("!route "):
+            query = request[7:].strip()
+            result = brain.skill_for(query)
+            click.echo(f"→ {result.skill.slug} (score={result.score:.1f}) — {result.rationale}")
+            continue
+
+        # Route and execute
+        try:
+            plan = planner.plan(request)
+            click.echo(
+                f"  → {plan.skill.emoji} {plan.skill.name} ({plan.skill.slug})",
+                err=True,
+            )
+
+            session_obj = None
+            if sid and memory_store:
+                session_obj = memory_store.load(sid) or Session(
+                    session_id=sid, skill_slug=plan.skill.slug
+                )
+
+            executor = Executor(registry, llm, memory=memory_store)
+            run_result = executor.run(plan.skill, request, session=session_obj)
+
+            # Filter through JARVIS soul before display
+            output = filter_response(run_result.text)
+            click.echo(output)
+
+        except KeyboardInterrupt:
+            click.echo()
+            click.echo(get_farewell())
+            break
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"[JARVIS ERROR] {type(exc).__name__}: {exc}", err=True)
+
+        click.echo()

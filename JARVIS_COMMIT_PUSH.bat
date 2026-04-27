@@ -1,9 +1,9 @@
 @echo off
-title JARVIS — Commit + Push Fixed Files
+title JARVIS — Push to main
 color 0A
 echo.
 echo ============================================
-echo  J.A.R.V.I.S — Committing E2E Fixes
+echo  J.A.R.V.I.S — Push to main
 echo ============================================
 echo.
 
@@ -16,21 +16,31 @@ if exist ".git\refs\heads\main.lock" del /f ".git\refs\heads\main.lock" && echo 
 echo   Done.
 echo.
 
-echo [1] Git status...
-git status --short
+echo [1] Current status...
+git log --oneline -3
 echo.
 
-echo [2] Staging all changes...
-git add -A
+echo [2] Pushing commit ca313b5 to GitHub...
+git push origin HEAD:main
+if errorlevel 1 (
+    echo.
+    echo [WARN] Normal push failed. Trying force-with-lease...
+    git push --force-with-lease origin HEAD:main
+    if errorlevel 1 (
+        echo [ERROR] Push failed. Ensure git credentials are configured:
+        echo   git config --global credential.helper manager
+        echo   Then run: git push origin HEAD:main
+        pause
+        exit /b 1
+    )
+)
+
 echo.
-
-echo [3] Committing...
-git commit -m "feat(jarvis): SupremeJarvisBrain routing + React fix + setup scripts
-
-- jarvis_brain.py: add React/frontend keyword boosts to KEYWORD_SLUG_BOOST
-  (react, vue, angular, svelte, typescript, component, tailwind, vite, etc.)
-- planner.py: wire SupremeJarvisBrain.top_k() as primary skill router
-  (replaces naive registry.search; falls back on error)
-- amjad_memory.py: remove duplicate _singleton declaration (line 184)
-- JARVIS_SETUP.bat: one-click venv + pip install -e runtime[dev] + smoke test
-- JARVIS_START.bat: one-click
+echo ============================================
+echo  DONE. Commit ca313b5 pushed to main.
+echo  feat(jarvis): SupremeJarvisBrain routing + React fix + setup scripts
+echo ============================================
+echo.
+git log --oneline -5
+echo.
+pause
