@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -59,7 +59,9 @@ class CharacterState:
     current_mode: str = "supreme_brainiac"
     session_context: list[dict[str, Any]] = field(default_factory=list)
     owner_name: str = "Amjad"
-    active_since: datetime = field(default_factory=datetime.utcnow)
+    active_since: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
     total_interactions: int = 0
     expertise_history: dict[str, int] = field(default_factory=dict)
     mood: str = "focused"
@@ -152,7 +154,7 @@ class CharacterState:
 
     def uptime_seconds(self) -> float:
         """Seconds since active_since."""
-        return (datetime.utcnow() - self.active_since).total_seconds()
+        return (datetime.now(timezone.utc).replace(tzinfo=None) - self.active_since).total_seconds()
 
     def snapshot(self) -> dict[str, Any]:
         """Return a JSON-serialisable snapshot of current state."""
