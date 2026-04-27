@@ -169,7 +169,7 @@ class ManagedAgentBackend:
         except AttributeError:
             # Older SDK shape: stream method may live elsewhere; fall
             # back to a raw httpx call.
-            yield from self._stream_raw(sess_id, user_message)
+            yield from self._stream_raw(sess_id, user_message, images=images)
             return
 
         with stream_ctx as stream:
@@ -216,18 +216,24 @@ class ManagedAgentBackend:
         yield ManagedAgentEvent("stop", "stream_ended")
 
     def _stream_raw(self, sess_id: str,
-                    user_message: str) -> Iterator[ManagedAgentEvent]:
+                    user_message: str,
+                    images: list[str] | None = None) -> Iterator[ManagedAgentEvent]:
         """Fallback for older SDKs that don't expose `events.stream` as
         a context manager. Uses the underlying httpx client directly
         with manual SSE parsing.
         """
         c = self._get_client()
         # Send the user message
+        content: list[dict[str, Any]] = [{"type": "text", "text": user_message}]
+        if images:
+            from .executor import _image_content_block
+            for img in images:
+                content.append(_image_content_block(img))
         c.beta.sessions.events.send(
             sess_id,
             events=[{
                 "type": "user.message",
-                "content": [{"type": "text", "text": user_message}],
+                "content": content,
             }],
             extra_headers={"anthropic-beta": self.beta},
         )
