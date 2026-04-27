@@ -135,7 +135,8 @@ class ManagedAgentBackend:
     # ----- public API ---------------------------------------------
 
     def run(self, user_message: str,
-            session_id: str | None = None) -> Iterator[ManagedAgentEvent]:
+            session_id: str | None = None,
+            images: list[str] | None = None) -> Iterator[ManagedAgentEvent]:
         """Execute a single request through a managed session and yield
         normalized events as they arrive. The caller decides when to
         stop iterating; we always emit a final "stop" event before
@@ -172,11 +173,16 @@ class ManagedAgentBackend:
             return
 
         with stream_ctx as stream:
+            content: list[dict[str, Any]] = [{"type": "text", "text": user_message}]
+            if images:
+                from .executor import _image_content_block
+                for img in images:
+                    content.append(_image_content_block(img))
             c.beta.sessions.events.send(
                 sess_id,
                 events=[{
                     "type": "user.message",
-                    "content": [{"type": "text", "text": user_message}],
+                    "content": content,
                 }],
                 extra_headers={"anthropic-beta": self.beta},
             )

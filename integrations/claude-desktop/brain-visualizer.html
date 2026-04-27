@@ -286,11 +286,13 @@ function parseMemory(text) {
         else if (obj.type === 'relation') relations.push(obj);
       } catch { /* skip malformed */ }
     }
-    return { entities, relations };
+    if (entities.length || relations.length) return { entities, relations };
   }
   // Try plain JSON
   try {
     const obj = JSON.parse(trimmed);
+    if (obj.type === 'entity') return { entities: [obj], relations: [] };
+    if (obj.type === 'relation') return { entities: [], relations: [obj] };
     return {
       entities: obj.entities || [],
       relations: obj.relations || []

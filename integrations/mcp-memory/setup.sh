@@ -276,8 +276,8 @@ if [ -f "$CLAUDE_DESKTOP_PATH" ]; then
   CONFIG_FOUND=true
 fi
 
-if [ -f "$HOME/.config/claude/mcp.json" ]; then
-  echo "Found Claude Code MCP config at: ~/.config/claude/mcp.json"
+if [ -f "$HOME/.claude/mcp.json" ]; then
+  echo "Found Claude Code MCP config at: ~/.claude/mcp.json"
   CONFIG_FOUND=true
 fi
 

@@ -238,7 +238,8 @@ class Executor:
         return sub.run(sub_skill, request).text
 
     def _run_via_managed_agents(self, skill: Skill, user_message: str,
-                                session: Session | None) -> ExecutionResult:
+                                session: Session | None,
+                                images: list[str] | None = None) -> ExecutionResult:
         """Forward a request to Anthropic's hosted managed-agents
         infrastructure. Streams events back, normalizes them into our
         ExecutionEvent shape, and returns a regular ExecutionResult so
@@ -271,7 +272,7 @@ class Executor:
         text_parts: list[str] = []
         sess_id = session.session_id if session else None
         try:
-            for ev in backend.run(user_message, session_id=sess_id):
+            for ev in backend.run(user_message, session_id=sess_id, images=images):
                 if ev.kind == "text":
                     text_parts.append(ev.payload)
                     events.append(ExecutionEvent("text", ev.payload))
@@ -311,7 +312,7 @@ class Executor:
         from . import managed_agents as _ma
 
         if _ma.is_enabled():
-            return self._run_via_managed_agents(skill, user_message, session)
+            return self._run_via_managed_agents(skill, user_message, session, images=images)
 
         events: list[ExecutionEvent] = []
         text_parts: list[str] = []
@@ -398,7 +399,7 @@ class Executor:
         yields the buffered events.
         """
         if not hasattr(self.llm, "messages_stream"):
-            result = self.run(skill, user_message, session=session)
+            result = self.run(skill, user_message, session=session, images=images)
             yield from result.events
             return
 
