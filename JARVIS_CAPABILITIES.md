@@ -7,9 +7,9 @@
 
 ## What It Is
 
-JARVIS is an autonomous AI agent system with 117 domain modules and 324 specialist agents spread across 16 categories. It is not a chatbot. It is an orchestration engine that routes any request to the right expert module, executes multi-step plans autonomously, self-heals on failure, learns from every interaction, and writes production-quality output in every domain it covers.
+JARVIS is an autonomous AI agent system with **108 JARVIS domain modules** and **323 specialist agents across 16 categories** (numbers verified by `SkillRegistry.load()`). It is not a chatbot. It is an orchestration engine that routes any request to the right expert module, executes multi-step plans autonomously, self-heals on failure, learns from every interaction, and writes production-quality output in every domain it covers.
 
-The system has a personality (Amjad-Jarvis Unified Brain), a memory (vector store + lessons ledger), a reasoning layer (planner → executor → verifier loop), a control plane (HTTP server on port 8765), and a terminal REPL (`SupremeREPL`) that can run in fully autonomous mode without human checkpoints.
+The system has a personality (Amjad-Jarvis Unified Brain), a memory (vector store + lessons ledger + knowledge expansion), a reasoning layer (planner → executor → meta-reasoner loop), a control plane (HTTP server on port 8765), and a Click-based CLI (`agency`).
 
 ---
 
@@ -348,19 +348,46 @@ agency/
 
 ---
 
-## Numbers
+## Numbers (verified 2026-04-27)
 
-| Metric | Value |
-|--------|-------|
-| JARVIS domain modules | **117** |
-| Total specialist agents | **324** |
-| Agent categories | **16** |
-| Routing accuracy | **10/10** |
-| KEYWORD_SLUG_BOOST entries | **80+** |
-| unified_prompt() size | **~76,000 chars** |
-| ThreadPoolExecutor workers | **8** |
-| Control server port | **8765** |
-| Core test suite | **22 passed, 0 failed** |
-| Parallel execution model | ThreadPoolExecutor (sync) + asyncio (SupremeBrainCore) |
-| Default executor model | `claude-opus-4-7` |
-| Default planner model | `claude-haiku-4-5` |
+| Metric | Value | Source |
+|--------|-------|--------|
+| JARVIS domain modules | **108** | `SkillRegistry.load().by_category("jarvis")` |
+| Total specialist agents | **323** | `len(SkillRegistry.load())` |
+| Agent categories | **16** | `len(SkillRegistry.load().categories())` |
+| Routing accuracy (eval suite) | **10/10** | `agency.eval_harness.routing_suite()` |
+| KEYWORD_SLUG_BOOST entries | **97** | `len(KEYWORD_SLUG_BOOST)` |
+| Core test suite | **680 passed, 0 failed** | `pytest tests/ --ignore=tests/test_server.py --ignore=tests/test_spatial.py --ignore=tests/test_executor.py` |
+| Parallel execution model | ThreadPoolExecutor (sync) + asyncio (SupremeBrainCore) | `amjad_jarvis_meta_orchestrator.py`, `supreme_brainiac.py` |
+| ThreadPoolExecutor workers | **8** | `MetaOrchestratorConfig.max_parallel_agents` |
+| Control server port | **8765** | `agency/server.py` |
+| Default executor model | `claude-opus-4-7` | `agency/llm.py` |
+| Default planner model | `claude-haiku-4-5` | `agency/planner.py` |
+
+## Module Map (verified)
+
+| Capability | Module | Public surface |
+|------------|--------|----------------|
+| Skill registry | `agency.skills` | `SkillRegistry.load()` → 323 skills |
+| Deterministic routing | `agency.jarvis_brain` | `SupremeJarvisBrain.skill_for()` |
+| LLM-aware routing | `agency.planner` | `Planner.plan()` |
+| Step execution + self-heal | `agency.executor` | `Executor.run()` |
+| Meta-orchestration | `agency.amjad_jarvis_meta_orchestrator` | `AmjadJarvisMetaOrchestrator` |
+| Async directive engine | `agency.supreme_brainiac` | `SupremeBrainCore` |
+| Boot entrypoint | `agency.supreme_main` | `main()` → `BootedSystem` |
+| Composite handle | `agency.unified_bridge` | `UnifiedBridge` + `.status()` |
+| Domain experts | `agency.experts` | 8 experts: clinician, contracts_law, mathematics, physics, psychology_cbt, economics, chemistry, neuroscience |
+| Cost-aware routing | `agency.cost_router` | `CostAwareRouter.recommend()` |
+| Eval harness | `agency.eval_harness` | `EvalSuite.run()` |
+| Self-learning | `agency.self_learner_engine` | `SelfLearnerEngine` |
+| Meta-reasoning | `agency.meta_reasoner` | `MetaReasoningEngine` |
+| Capability evolution | `agency.capability_evolver` | `CapabilityEvolver` |
+| Context memory | `agency.context_manager` | `ContextManager` |
+| Autonomous loop | `agency.autonomous_loop` | `AutonomousLoop` |
+| Knowledge expansion | `agency.knowledge_expansion` | `KnowledgeExpansion` |
+| Multimodal | `agency.multimodal` | `MultimodalProcessor` |
+| Vector memory | `agency.vector_memory` | `VectorMemory` |
+| Lessons ledger | `agency.lessons` | persistence helpers |
+| Tools | `agency.tools` | `web_fetch`, `shell`, file I/O |
+| Control server | `agency.server` | HTTP `:8765` |
+| CLI | `agency.cli` | `agency` (Click) |

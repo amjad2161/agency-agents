@@ -108,8 +108,26 @@ class AutonomousLoop:
         self._runs_path.parent.mkdir(parents=True, exist_ok=True)
         self._executors: dict[str, ActionExecutor] = {}
         self._lock = threading.Lock()
+        self._active_runs = 0
 
     # ── public API ────────────────────────────────────────────────────────────
+
+    @property
+    def is_running(self) -> bool:
+        """True while at least one ``run()`` call is in flight."""
+        return self._active_runs > 0
+
+    @property
+    def max_iterations(self) -> int:
+        return self._max_iterations
+
+    @property
+    def runs_path(self) -> Path:
+        return self._runs_path
+
+    def registered_executors(self) -> list[str]:
+        """Names of every registered action executor."""
+        return list(self._executors.keys())
 
     def register_executor(self, name: str, fn: ActionExecutor) -> None:
         """Register an action executor callable under *name*."""
@@ -131,6 +149,8 @@ class AutonomousLoop:
 
         executor = self._executors.get(executor_name) or self._executors.get("default")
 
+        with self._lock:
+            self._active_runs += 1
         try:
             for i in range(self._max_iterations):
                 if self._stop_event.is_set():
@@ -172,6 +192,9 @@ class AutonomousLoop:
             run.status = LoopStatus.ERROR
             run.error = str(exc)
             log.error("autonomous_loop: error — %s", exc)
+        finally:
+            with self._lock:
+                self._active_runs = max(0, self._active_runs - 1)
 
         run.ended_at = time.time()
         self._persist(run)

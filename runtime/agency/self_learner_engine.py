@@ -70,6 +70,20 @@ class SelfLearnerEngine:
         self._lessons: list[Lesson] | None = None
 
     # ------------------------------------------------------------------
+    # Public read-only accessors
+    # ------------------------------------------------------------------
+
+    @property
+    def lessons(self) -> list[Lesson]:
+        """All recorded lessons (loaded lazily from disk)."""
+        return list(self._load())
+
+    @property
+    def lessons_path(self) -> Path:
+        """Filesystem path of the lessons ledger."""
+        return self._path
+
+    # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
 

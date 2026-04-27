@@ -20,10 +20,13 @@ if TYPE_CHECKING:
     from .autonomous_loop import AutonomousLoop
     from .capability_evolver import CapabilityEvolver
     from .context_manager import ContextManager
+    from .jarvis_brain import SupremeJarvisBrain
     from .knowledge_expansion import KnowledgeExpansion
     from .meta_reasoner import MetaReasoningEngine
     from .multimodal import MultimodalProcessor
     from .self_learner_engine import SelfLearnerEngine
+    from .supreme_brainiac import SupremeBrainCore
+    from .unified_bridge import UnifiedBridge
 
 
 # ---- Singletons -----------------------------------------------------------
@@ -39,7 +42,9 @@ _context_manager: "ContextManager | None" = None
 _autonomous_loop: "AutonomousLoop | None" = None
 _knowledge_expansion: "KnowledgeExpansion | None" = None
 _multimodal_processor: "MultimodalProcessor | None" = None
-_unified_bridge: "object | None" = None
+_unified_bridge: "UnifiedBridge | None" = None
+_jarvis_brain: "SupremeJarvisBrain | None" = None
+_supreme_brainiac: "SupremeBrainCore | None" = None
 
 
 def get_self_learner() -> "SelfLearnerEngine":
@@ -104,7 +109,7 @@ def get_multimodal_processor() -> "MultimodalProcessor":
     return _multimodal_processor
 
 
-def get_unified_bridge() -> object:
+def get_unified_bridge() -> "UnifiedBridge":
     """Composite bridge that exposes every capability through one
     handle — useful for callers that want a single `bridge.something`
     surface without juggling seven imports.
@@ -115,26 +120,28 @@ def get_unified_bridge() -> object:
     if _unified_bridge is not None:
         return _unified_bridge
 
-    class _UnifiedBridge:
-        def __init__(self) -> None:
-            self.self_learner = get_self_learner()
-            self.meta_reasoner = get_meta_reasoner()
-            self.capability_evolver = get_capability_evolver()
-            self.context_manager = get_context_manager()
-            self.autonomous_loop = get_autonomous_loop()
-            self.knowledge_expansion = get_knowledge_expansion()
-            self.multimodal = get_multimodal_processor()
+    from .unified_bridge import UnifiedBridge
 
-        def __repr__(self) -> str:
-            return (
-                "<UnifiedBridge "
-                "self_learner+meta_reasoner+capability_evolver"
-                "+context_manager+autonomous_loop+knowledge_expansion"
-                "+multimodal>"
-            )
-
-    _unified_bridge = _UnifiedBridge()
+    _unified_bridge = UnifiedBridge()
     return _unified_bridge
+
+
+def get_jarvis_brain() -> "SupremeJarvisBrain":
+    """Lazy singleton for the deterministic SupremeJarvisBrain router."""
+    global _jarvis_brain
+    if _jarvis_brain is None:
+        from .jarvis_brain import SupremeJarvisBrain
+        _jarvis_brain = SupremeJarvisBrain()
+    return _jarvis_brain
+
+
+def get_supreme_brainiac() -> "SupremeBrainCore":
+    """Lazy singleton for the async directive engine."""
+    global _supreme_brainiac
+    if _supreme_brainiac is None:
+        from .supreme_brainiac import SupremeBrainCore
+        _supreme_brainiac = SupremeBrainCore()
+    return _supreme_brainiac
 
 
 __all__ = [
@@ -147,4 +154,6 @@ __all__ = [
     "get_knowledge_expansion",
     "get_multimodal_processor",
     "get_unified_bridge",
+    "get_jarvis_brain",
+    "get_supreme_brainiac",
 ]

@@ -100,6 +100,25 @@ class MultimodalProcessor:
         self._ocr = ocr_backend
         self._transcription = transcription_backend
 
+    # ── introspection ─────────────────────────────────────────────────────────
+
+    def available_backends(self) -> list[str]:
+        """Names of pluggable backends currently wired in.
+
+        Useful for ``status()`` / health checks: tells callers which
+        modalities can actually be extracted to text without a
+        fallback.
+        """
+        backends: list[str] = []
+        if self._ocr is not None:
+            backends.append("ocr")
+        if self._transcription is not None:
+            backends.append("transcription")
+        return backends
+
+    def has_backend(self, name: str) -> bool:
+        return name in self.available_backends()
+
     # ── factory methods ───────────────────────────────────────────────────────
 
     def from_text(self, text: str, source: str = "direct") -> MultimodalPayload:

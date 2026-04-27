@@ -159,6 +159,20 @@ class KnowledgeExpansion:
     def list_domains(self) -> list[str]:
         return list({c.domain for c in self._chunks})
 
+    def entry_count(self) -> int:
+        """Number of stored knowledge chunks."""
+        return len(self._chunks)
+
+    def list_sources(self) -> list[str]:
+        """Distinct source URIs / file paths across stored chunks."""
+        return list({c.source for c in self._chunks})
+
+    def clear(self) -> int:
+        """Drop every stored chunk. Returns the number removed."""
+        n = len(self._chunks)
+        self._chunks.clear()
+        return n
+
     def stats(self) -> dict[str, Any]:
         return {
             "total_chunks": len(self._chunks),
