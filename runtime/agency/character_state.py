@@ -223,4 +223,19 @@ class CharacterState:
         return _DEFAULT_STATE_PATH
 
 
-__all__ = ["CharacterState", "VALID_MODES", "VALID_MOODS"]
+# ---------------------------------------------------------------------------
+# Process-level singleton
+# ---------------------------------------------------------------------------
+
+_singleton: "CharacterState | None" = None
+
+
+def get_character_state(state_path: "Path | str | None" = None) -> "CharacterState":
+    """Return (or create) the process-level CharacterState singleton."""
+    return CharacterState.get_instance(state_path=state_path)
+
+
+def reset_character_state() -> None:
+    """Reset the singleton (for testing)."""
+    global _singleton
+    _singleton = None

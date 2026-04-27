@@ -120,6 +120,15 @@ class PersonaEngine:
         self._prefs: dict[str, Any] = {}
         self._load_prefs()
 
+    @staticmethod
+    def _resolve_prefs_path() -> "Path":
+        import os
+        env = os.environ.get("JARVIS_PREFS_PATH")
+        if env:
+            return Path(env)
+        return _DEFAULT_PREFS_PATH
+
+
     # ------------------------------------------------------------------
     # System prompts
     # ------------------------------------------------------------------
@@ -301,14 +310,25 @@ class PersonaEngine:
                 encoding="utf-8",
             )
         except Exception:
-            pass
-
-    @staticmethod
-    def _resolve_prefs_path() -> Path:
-        env = os.environ.get("JARVIS_PREFS_PATH")
-        if env:
-            return Path(env)
-        return _DEFAULT_PREFS_PATH
+            pass  # Non-fatal — prefs simply won't persist
 
 
-__all__ = ["PersonaEngine"]
+# ---------------------------------------------------------------------------
+# Process-level singleton
+# ---------------------------------------------------------------------------
+
+_singleton: "PersonaEngine | None" = None
+
+
+def get_persona_engine() -> "PersonaEngine":
+    """Return (or create) the process-level PersonaEngine singleton."""
+    global _singleton
+    if _singleton is None:
+        _singleton = PersonaEngine()
+    return _singleton
+
+
+def reset_persona_engine() -> None:
+    """Reset the singleton (for testing)."""
+    global _singleton
+    _singleton = None

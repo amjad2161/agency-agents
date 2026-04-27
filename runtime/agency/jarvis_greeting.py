@@ -131,11 +131,3 @@ def get_alert_banner(message: str, level: str = "WARNING") -> str:
     """Return a compact single-line alert banner."""
     level_tag = level.upper()
     return f"[{_V} JARVIS/{level_tag} {_V}] {message}"
-
-
-__all__ = [
-    "get_startup_banner",
-    "get_farewell",
-    "get_mode_transition_message",
-    "get_alert_banner",
-]

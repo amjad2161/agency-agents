@@ -183,6 +183,12 @@ class AmjadMemory:
 # Process-level singleton
 _singleton: AmjadMemory | None = None
 
+# ---------------------------------------------------------------------------
+# Process-level singleton
+# ---------------------------------------------------------------------------
+
+_singleton: AmjadMemory | None = None
+
 
 def get_amjad_memory(prefs_path: Path | str | None = None) -> AmjadMemory:
     """Return (or create) the process-level AmjadMemory singleton."""
@@ -192,4 +198,7 @@ def get_amjad_memory(prefs_path: Path | str | None = None) -> AmjadMemory:
     return _singleton
 
 
-__all__ = ["AmjadMemory", "get_amjad_memory"]
+def reset_amjad_memory() -> None:
+    """Reset the singleton (for testing)."""
+    global _singleton
+    _singleton = None

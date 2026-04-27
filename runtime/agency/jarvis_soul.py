@@ -117,6 +117,7 @@ def get_communication_style(mode: str) -> str:
     return styles.get(mode, styles["default"])
 
 
+
 __all__ = [
     "JARVIS_SOUL",
     "get_soul",

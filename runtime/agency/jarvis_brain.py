@@ -399,18 +399,15 @@ def _bigrams(tokens: list[str]) -> list[str]:
 _global_brain: SupremeJarvisBrain | None = None
 
 
-def get_brain(repo_root: Path | None = None) -> SupremeJarvisBrain:
-    """Lazy global SupremeJarvisBrain. Loads the registry once."""
+def get_brain() -> SupremeJarvisBrain:
+    """Return the global singleton, creating it if needed."""
     global _global_brain
     if _global_brain is None:
-        registry = SkillRegistry.load(repo_root) if repo_root else SkillRegistry.load()
-        _global_brain = SupremeJarvisBrain(registry)
+        _global_brain = SupremeJarvisBrain()
     return _global_brain
 
 
-__all__ = [
-    "SupremeJarvisBrain",
-    "RouteResult",
-    "KEYWORD_SLUG_BOOST",
-    "get_brain",
-]
+def reset_brain() -> None:
+    """Reset the global singleton (useful for testing)."""
+    global _global_brain
+    _global_brain = None

@@ -162,14 +162,5 @@ class CostAwareRouter:
         return self._spend_so_far
 
     def reset_spend(self) -> None:
+        """Reset the running spend counter to zero."""
         self._spend_so_far = 0.0
-
-
-__all__ = [
-    "ModelTier",
-    "DEFAULT_TIERS",
-    "MIN_CAPABILITY",
-    "RouteDecision",
-    "CostBudgetExceeded",
-    "CostAwareRouter",
-]

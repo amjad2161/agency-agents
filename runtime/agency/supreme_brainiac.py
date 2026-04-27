@@ -354,21 +354,29 @@ _global_core: SupremeBrainCore | None = None
 
 
 def get_brainiac() -> SupremeBrainCore:
+    """Return the global singleton, creating it if needed."""
     global _global_core
     if _global_core is None:
         _global_core = SupremeBrainCore()
     return _global_core
 
 
+def reset_brainiac() -> None:
+    """Reset the global singleton (useful for testing)."""
+    global _global_core
+    _global_core = None
+
+
 __all__ = [
     "Complexity",
     "ComplexityClassifier",
-    "ModelRouter",
+    "EVOLUTION_INCREMENT",
     "ModelRoute",
+    "ModelRouter",
     "Task",
     "TaskStatus",
     "CoreStatus",
     "SupremeBrainCore",
-    "EVOLUTION_INCREMENT",
     "get_brainiac",
+    "reset_brainiac",
 ]

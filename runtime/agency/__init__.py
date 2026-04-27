@@ -183,7 +183,6 @@ __all__ = [
     "get_persona_engine",
     "get_character_state",
     "get_amjad_memory",
-    "get_self_learner",
     "get_meta_reasoner",
     "get_capability_evolver",
     "get_context_manager",

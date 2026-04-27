@@ -272,19 +272,7 @@ ROUTING_SUITE_CASES: tuple[dict[str, Any], ...] = (
 )
 
 
+
 def routing_suite() -> EvalSuite:
-    """Pre-built suite for the SupremeJarvisBrain router."""
-    return EvalSuite.from_dict_list("supreme_brain_routing", list(ROUTING_SUITE_CASES))
-
-
-__all__ = [
-    "EvalCase",
-    "CaseResult",
-    "Report",
-    "EvalSuite",
-    "check_substring",
-    "check_regex",
-    "check_routing_slug",
-    "ROUTING_SUITE_CASES",
-    "routing_suite",
-]
+    """Pre-built 10-case suite for the SupremeJarvisBrain router."""
+    return EvalSuite.from_dict_list("routing_suite", list(ROUTING_SUITE_CASES))
