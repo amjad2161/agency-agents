@@ -542,6 +542,104 @@ def serve_cmd(ctx: click.Context, host: str, port: int) -> None:
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
+@main.command("hud")
+@click.option("--host", default="127.0.0.1")
+@click.option("--port", default=8765, type=int)
+@click.option("--no-browser", is_flag=True,
+              help="Don't auto-open the browser.")
+@click.pass_context
+def hud_cmd(ctx: click.Context, host: str, port: int, no_browser: bool) -> None:
+    """Launch the GRAVIS HUD — same as `agency serve` but opens
+    a browser at the chat URL after the server binds the port."""
+    try:
+        import uvicorn
+    except ImportError as e:
+        raise click.ClickException("uvicorn not installed. Install runtime deps.") from e
+    from .server import build_app
+
+    repo = ctx.obj["repo"]
+    app = build_app(repo)
+    url = f"http://{host}:{port}"
+    click.echo(f"GRAVIS HUD launching on {url}")
+
+    if not no_browser:
+        # Spawn a one-shot thread that polls the port and opens the
+        # browser only once the server is actually listening — avoids
+        # the "site can't be reached" race.
+        import socket
+        import threading
+        import time
+        import webbrowser
+
+        def _open_when_ready() -> None:
+            for _ in range(40):  # ~10s budget @ 250ms each
+                time.sleep(0.25)
+                try:
+                    with socket.create_connection((host, port), timeout=0.5):
+                        webbrowser.open(url)
+                        return
+                except OSError:
+                    continue
+
+        threading.Thread(target=_open_when_ready, daemon=True).start()
+
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+@main.command("evolve")
+@click.option("--rewrite/--bench-only", default=True,
+              help="If --bench-only, only measure timings; don't ask the "
+                   "LLM to rewrite slow tools. Default: --rewrite.")
+@click.option("--dry-run", is_flag=True,
+              help="Generate rewrites but don't replace files on disk.")
+@click.pass_context
+def evolve_cmd(ctx: click.Context, rewrite: bool, dry_run: bool) -> None:
+    """Benchmark every tool under ~/.agency/tools/ and rewrite the slow ones.
+
+    Walks each *.py file with a BENCH list, runs its run() function 3
+    times per case, and (with --rewrite) asks the LLM to produce a
+    faster version. Replaces the file only if the new version both
+    passes BENCH and is at least as fast as the original at the median.
+    Original is backed up to <name>.py.bak.<timestamp>.
+    """
+    from .daemons.tool_evolver import evolve_all, tools_dir
+
+    d = tools_dir()
+    if not d.is_dir():
+        click.echo(f"No tools directory at {d}.")
+        click.echo(f"Create one and drop *.py files with run(input) + BENCH "
+                   f"defined to enable evolution.")
+        return
+
+    llm = None
+    if rewrite:
+        try:
+            llm = _require_llm()
+        except LLMError as e:
+            click.echo(f"--rewrite requested but no LLM available: {e}",
+                       err=True)
+            click.echo("Falling back to bench-only.", err=True)
+            llm = None
+
+    found = 0
+    for report in evolve_all(llm=llm, dry_run=dry_run):
+        found += 1
+        line = f"  {report.path.name:30s}  median={report.median_elapsed_s*1000:7.1f}ms"
+        if report.skipped_reason:
+            click.echo(f"{line}  · skipped: {report.skipped_reason}")
+        elif report.rewrite_succeeded:
+            tag = "(dry-run)" if dry_run else "REWROTE"
+            click.echo(f"{line}  · {tag} ({report.rewrite_diff_lines:+d} lines)")
+        elif report.rewrite_attempted:
+            click.echo(f"{line}  · rewrite attempted but not applied")
+        elif report.is_slow:
+            click.echo(f"{line}  · slow but rewrite disabled")
+        else:
+            click.echo(f"{line}  · ok")
+    if found == 0:
+        click.echo(f"No *.py tool files found in {d}.")
+
+
 # Wire the Amjad-Jarvis subcommand group into the main CLI as `agency amjad …`.
 # The group lives in its own module so the orchestrator-specific code stays
 # isolated from the core CLI; this just gives it a stable entry point.

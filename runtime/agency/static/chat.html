@@ -1,0 +1,1506 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>JARVIS · Agency Runtime</title>
+  <style>
+    /* ============================================================
+       GRAVIS-style HUD chat for the Agency Runtime
+       — dark holographic, cyan glow, glassmorphism panels,
+         code-rain background, voice + text input,
+         streaming typewriter, live skill sidebar.
+       ============================================================ */
+    :root {
+      --bg-deep: #03070f;
+      --bg-mid: #050b1a;
+      --bg-glass: rgba(12, 26, 52, 0.45);
+      --bg-glass-strong: rgba(8, 18, 38, 0.78);
+      --cyan: #4fe3ff;
+      --cyan-soft: rgba(79, 227, 255, 0.55);
+      --cyan-glow: rgba(79, 227, 255, 0.18);
+      --green: #6cff9a;
+      --amber: #ffb14f;
+      --magenta: #ff66c4;
+      --text: #e3f0ff;
+      --muted: #6ba0c8;
+      --line: rgba(79, 227, 255, 0.22);
+      --shadow: 0 0 24px rgba(79, 227, 255, 0.18);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: 'Rajdhani', 'Inter', -apple-system, system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(ellipse at 80% -10%, rgba(79, 227, 255, 0.10), transparent 60%),
+        radial-gradient(ellipse at -10% 110%, rgba(255, 102, 196, 0.08), transparent 55%),
+        var(--bg-deep);
+      overflow: hidden;
+      letter-spacing: 0.01em;
+    }
+
+    /* ----- code rain ------------------------------------------ */
+    #rain {
+      position: fixed; inset: 0; z-index: 0;
+      pointer-events: none; opacity: 0.22;
+    }
+
+    /* ----- scan-lines ----------------------------------------- */
+    body::after {
+      content: ''; position: fixed; inset: 0; z-index: 100;
+      background: repeating-linear-gradient(
+        to bottom, transparent 0, transparent 2px,
+        rgba(79, 227, 255, 0.025) 2px, rgba(79, 227, 255, 0.025) 3px);
+      pointer-events: none;
+    }
+
+    /* ----- layout --------------------------------------------- */
+    #app {
+      position: relative; z-index: 2;
+      display: grid;
+      grid-template-columns: 240px 1fr 320px;
+      grid-template-rows: 56px 1fr 80px;
+      grid-template-areas:
+        "header header header"
+        "sidebar main panel"
+        "sidebar input panel";
+      height: 100vh;
+      gap: 1px;
+      background: var(--line);
+    }
+
+    /* ----- header --------------------------------------------- */
+    #header {
+      grid-area: header;
+      background: var(--bg-glass-strong);
+      backdrop-filter: blur(18px);
+      display: flex; align-items: center;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--line);
+    }
+    #brand {
+      font-family: 'Orbitron', 'Rajdhani', sans-serif;
+      font-weight: 700; font-size: 18px;
+      letter-spacing: 0.32em;
+      color: var(--cyan);
+      text-shadow: 0 0 12px var(--cyan-glow);
+    }
+    #brand-sub {
+      margin-left: 12px; font-size: 10px; letter-spacing: 0.4em;
+      color: var(--muted); text-transform: uppercase;
+    }
+    #header-right {
+      margin-left: auto; display: flex; gap: 18px; align-items: center;
+      font-size: 13px; color: var(--muted);
+    }
+    .badge {
+      padding: 4px 10px; border: 1px solid var(--line);
+      border-radius: 4px; font-size: 11px; letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    .badge.trust-yolo {
+      color: var(--magenta); border-color: var(--magenta);
+      box-shadow: 0 0 12px rgba(255, 102, 196, 0.35);
+      animation: pulse-magenta 2s ease-in-out infinite;
+    }
+    .badge.trust-on-my-machine { color: var(--amber); border-color: var(--amber); }
+    .badge.trust-off { color: var(--muted); }
+    @keyframes pulse-magenta {
+      0%, 100% { box-shadow: 0 0 12px rgba(255, 102, 196, 0.35); }
+      50%      { box-shadow: 0 0 22px rgba(255, 102, 196, 0.65); }
+    }
+    #clock { font-family: 'JetBrains Mono', monospace; color: var(--cyan); font-size: 14px; }
+    .live-status {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      letter-spacing: 0.18em; text-transform: uppercase;
+    }
+    .live-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: currentColor; box-shadow: 0 0 6px currentColor;
+    }
+    .live-status.idle      { color: var(--muted); }
+    .live-status.thinking  { color: var(--cyan); animation: pulse-cyan 1.4s ease-in-out infinite; }
+    .live-status.tool      { color: var(--amber); }
+    .live-status.speaking  { color: var(--magenta); animation: pulse-magenta 1.2s ease-in-out infinite; }
+    .live-status.error     { color: #ff6363; }
+    @keyframes pulse-cyan {
+      0%, 100% { opacity: 0.85; } 50% { opacity: 1; text-shadow: 0 0 8px var(--cyan); }
+    }
+
+    /* voice waveform — shown during TTS */
+    #waveform {
+      position: fixed; bottom: 92px; right: 18px;
+      display: none; gap: 3px; align-items: flex-end;
+      height: 32px; padding: 4px 10px;
+      background: var(--bg-glass-strong); backdrop-filter: blur(10px);
+      border: 1px solid var(--magenta);
+      border-radius: 6px; z-index: 30;
+      box-shadow: 0 0 16px rgba(255, 102, 196, 0.4);
+    }
+    #waveform.on { display: flex; }
+    #waveform .bar {
+      width: 3px; background: var(--magenta);
+      box-shadow: 0 0 4px var(--magenta);
+      animation: wave 800ms ease-in-out infinite;
+    }
+    #waveform .bar:nth-child(1) { animation-delay: 0ms;   }
+    #waveform .bar:nth-child(2) { animation-delay: 80ms;  }
+    #waveform .bar:nth-child(3) { animation-delay: 160ms; }
+    #waveform .bar:nth-child(4) { animation-delay: 240ms; }
+    #waveform .bar:nth-child(5) { animation-delay: 320ms; }
+    #waveform .bar:nth-child(6) { animation-delay: 400ms; }
+    #waveform .bar:nth-child(7) { animation-delay: 480ms; }
+    @keyframes wave {
+      0%, 100% { height: 6px; opacity: 0.55; }
+      50%      { height: 24px; opacity: 1; }
+    }
+
+    /* image rendering inside agent message bodies */
+    .msg-body img.tool-image {
+      max-width: 360px; max-height: 360px;
+      margin: 8px 0; border-radius: 4px;
+      border: 1px solid var(--cyan-soft);
+      box-shadow: 0 0 12px var(--cyan-glow);
+    }
+
+    /* ----- sidebar -------------------------------------------- */
+    #sidebar {
+      grid-area: sidebar;
+      background: var(--bg-glass);
+      backdrop-filter: blur(14px);
+      padding: 18px 12px;
+      overflow-y: auto;
+      border-right: 1px solid var(--line);
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; border-radius: 6px;
+      cursor: pointer; transition: background 120ms;
+      font-size: 14px; color: var(--text);
+    }
+    .nav-item:hover { background: rgba(79, 227, 255, 0.07); }
+    .nav-item.active {
+      background: rgba(79, 227, 255, 0.12);
+      box-shadow: inset 2px 0 var(--cyan);
+    }
+    .nav-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      box-shadow: 0 0 8px currentColor;
+    }
+    .dot-home { color: #ff6363; background: #ff6363; }
+    .dot-skills { color: var(--amber); background: var(--amber); }
+    .dot-memory { color: #ffd866; background: #ffd866; }
+    .dot-sessions { color: var(--green); background: var(--green); }
+    .dot-trust { color: var(--magenta); background: var(--magenta); }
+    .dot-settings { color: #fff; background: #fff; }
+    .dot-profile { color: #6cff9a; background: #6cff9a; }
+    .dot-mcp { color: #4fe3ff; background: #4fe3ff; }
+    #sidebar h4 {
+      font-size: 10px; letter-spacing: 0.3em; color: var(--muted);
+      margin: 22px 12px 8px; text-transform: uppercase; font-weight: 500;
+    }
+
+    /* ----- main / chat --------------------------------------- */
+    #main {
+      grid-area: main;
+      background: linear-gradient(180deg, transparent, rgba(79, 227, 255, 0.025));
+      overflow-y: auto;
+      padding: 28px 36px;
+      position: relative;
+    }
+    #greeting {
+      max-width: 640px;
+      margin: 18vh auto 0;
+      text-align: center;
+    }
+    #greeting h1 {
+      font-family: 'Orbitron', sans-serif; font-weight: 600;
+      font-size: 28px; letter-spacing: 0.18em;
+      color: var(--cyan); text-shadow: 0 0 18px var(--cyan-glow);
+      margin: 0 0 12px;
+    }
+    #greeting p { color: var(--muted); font-size: 16px; line-height: 1.6; margin: 8px 0; }
+    .orb {
+      width: 220px; height: 220px;
+      margin: 0 auto 26px;
+      position: relative;
+    }
+    .orb::before, .orb::after {
+      content: ''; position: absolute; inset: 0;
+      border-radius: 50%;
+      border: 1px solid var(--cyan-soft);
+      animation: spin-slow 8s linear infinite;
+    }
+    .orb::after { inset: 22px; border-color: rgba(79, 227, 255, 0.3);
+                   animation-direction: reverse; animation-duration: 12s; }
+    .orb-core {
+      position: absolute; inset: 60px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(79, 227, 255, 0.55),
+                                  rgba(79, 227, 255, 0.10) 60%, transparent);
+      box-shadow: 0 0 60px rgba(79, 227, 255, 0.55);
+      animation: pulse-orb 3.2s ease-in-out infinite;
+    }
+    @keyframes spin-slow { to { transform: rotate(360deg); } }
+    @keyframes pulse-orb {
+      0%, 100% { transform: scale(1); opacity: 0.8; }
+      50%      { transform: scale(1.06); opacity: 1; }
+    }
+
+    .msg { margin: 0 0 22px; max-width: 720px; }
+    .msg.you { margin-left: auto; }
+    .msg-meta {
+      font-size: 11px; color: var(--muted);
+      letter-spacing: 0.2em; text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .msg.you .msg-meta { text-align: right; }
+    .msg-body {
+      background: var(--bg-glass);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 18px;
+      box-shadow: var(--shadow);
+      white-space: pre-wrap; word-wrap: break-word;
+      font-size: 15px; line-height: 1.6;
+    }
+    .msg.you .msg-body {
+      background: rgba(79, 227, 255, 0.08);
+      border-color: var(--cyan-soft);
+    }
+    .msg.tool {
+      max-width: 720px;
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      color: var(--amber); margin: 8px 0;
+      padding: 6px 12px; border-left: 2px solid var(--amber);
+      background: rgba(255, 177, 79, 0.06);
+    }
+    .msg.tool.error { color: #ff6363; border-color: #ff6363;
+                       background: rgba(255, 99, 99, 0.06); }
+    .typing::after {
+      content: '▍'; color: var(--cyan);
+      animation: blink 1s infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* ----- input bar ----------------------------------------- */
+    #inputbar {
+      grid-area: input;
+      background: var(--bg-glass-strong); backdrop-filter: blur(16px);
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 18px; border-top: 1px solid var(--line);
+    }
+    #tts {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 1px solid var(--cyan-soft);
+      background: rgba(79, 227, 255, 0.04);
+      color: var(--cyan); cursor: pointer; flex-shrink: 0;
+      display: grid; place-items: center; font-size: 14px;
+      transition: all 200ms;
+    }
+    #tts:hover { background: rgba(79, 227, 255, 0.12); }
+    #tts.on {
+      background: var(--cyan); color: var(--bg-deep);
+      box-shadow: 0 0 16px var(--cyan);
+    }
+    #mic {
+      width: 44px; height: 44px; border-radius: 50%;
+      border: 1px solid var(--cyan-soft);
+      background: rgba(79, 227, 255, 0.08);
+      color: var(--cyan); cursor: pointer; flex-shrink: 0;
+      display: grid; place-items: center; font-size: 20px;
+      box-shadow: 0 0 12px var(--cyan-glow);
+      transition: all 200ms;
+    }
+    #mic:hover { background: rgba(79, 227, 255, 0.15); }
+    #mic.listening {
+      background: var(--magenta); color: #fff;
+      box-shadow: 0 0 24px rgba(255, 102, 196, 0.6);
+      animation: pulse-magenta 1.4s infinite;
+    }
+    #msg {
+      flex: 1; background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--line); border-radius: 6px;
+      padding: 12px 16px; color: var(--text);
+      font: inherit; font-size: 15px;
+      outline: none;
+    }
+    #msg:focus { border-color: var(--cyan); box-shadow: 0 0 12px var(--cyan-glow); }
+    #img-attach {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 1px solid var(--cyan-soft);
+      background: rgba(79, 227, 255, 0.04);
+      color: var(--cyan); cursor: pointer; flex-shrink: 0;
+      display: grid; place-items: center; font-size: 14px;
+      transition: all 200ms;
+    }
+    #img-attach:hover { background: rgba(79, 227, 255, 0.12); }
+    #img-attach.has-attachments {
+      background: var(--green); color: var(--bg-deep);
+      box-shadow: 0 0 12px var(--green);
+    }
+    #attachments {
+      position: absolute; bottom: 88px; right: 18px;
+      display: flex; gap: 6px; max-width: calc(100% - 36px);
+      flex-wrap: wrap-reverse;
+      z-index: 12;
+    }
+    .attachment {
+      position: relative;
+      width: 64px; height: 64px;
+      border: 1px solid var(--cyan-soft); border-radius: 4px;
+      overflow: hidden;
+      box-shadow: 0 0 8px var(--cyan-glow);
+    }
+    .attachment img { width: 100%; height: 100%; object-fit: cover; }
+    .attachment .remove {
+      position: absolute; top: 0; right: 0;
+      background: rgba(0, 0, 0, 0.7); color: #fff; border: 0;
+      width: 18px; height: 18px; cursor: pointer; font-size: 11px;
+      line-height: 1; padding: 0;
+    }
+    body.drag-over::before {
+      content: 'DROP IMAGE TO ATTACH';
+      position: fixed; inset: 16px; z-index: 200;
+      border: 2px dashed var(--cyan); border-radius: 12px;
+      display: grid; place-items: center;
+      font-family: 'Orbitron', sans-serif; font-size: 22px;
+      letter-spacing: 0.3em; color: var(--cyan);
+      background: rgba(79, 227, 255, 0.08);
+      pointer-events: none;
+    }
+    #send {
+      background: var(--cyan); color: var(--bg-deep);
+      border: 0; padding: 10px 22px; border-radius: 6px;
+      font: inherit; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; cursor: pointer;
+      box-shadow: 0 0 16px var(--cyan-glow);
+      transition: all 150ms;
+    }
+    #send:hover { background: #6ef0ff; box-shadow: 0 0 24px var(--cyan); }
+    #send:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+    /* ----- right panel (skills / sessions) ------------------- */
+    #panel {
+      grid-area: panel;
+      background: var(--bg-glass); backdrop-filter: blur(14px);
+      border-left: 1px solid var(--line);
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .panel-title {
+      font-family: 'Orbitron', sans-serif; font-size: 11px;
+      letter-spacing: 0.32em; color: var(--cyan);
+      margin: 0 0 12px; text-transform: uppercase;
+    }
+    #skill-search {
+      width: 100%; background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--line); border-radius: 4px;
+      color: var(--text); padding: 8px 10px; font: inherit; font-size: 13px;
+      margin-bottom: 12px; outline: none;
+    }
+    #skill-search:focus { border-color: var(--cyan); }
+    .skill-card {
+      display: flex; gap: 10px; align-items: center;
+      padding: 8px 10px; border-radius: 4px;
+      cursor: pointer; font-size: 13px;
+      border-left: 2px solid transparent;
+      transition: background 120ms;
+    }
+    .skill-card:hover {
+      background: rgba(79, 227, 255, 0.06);
+      border-left-color: var(--cyan);
+    }
+    .skill-card.active {
+      background: rgba(79, 227, 255, 0.14);
+      border-left-color: var(--cyan);
+    }
+    .skill-emoji { font-size: 16px; }
+    .skill-name { flex: 1; color: var(--text); }
+    .skill-cat {
+      font-size: 9px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.18em;
+    }
+    .cat-section { margin-bottom: 18px; }
+    .cat-header {
+      font-size: 10px; color: var(--cyan); letter-spacing: 0.3em;
+      padding: 4px 10px; margin-bottom: 4px;
+      text-transform: uppercase; opacity: 0.8;
+    }
+
+    /* status line */
+    #status {
+      position: fixed; bottom: 86px; left: 252px;
+      font-size: 11px; color: var(--muted); letter-spacing: 0.2em;
+      text-transform: uppercase; z-index: 5;
+    }
+
+    /* ----- modal overlays for sidebar tabs ----------------- */
+    #modal {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(3, 7, 15, 0.78);
+      backdrop-filter: blur(8px);
+      display: none; align-items: center; justify-content: center;
+      padding: 60px 40px;
+    }
+    #modal.open { display: flex; }
+    .modal-card {
+      background: var(--bg-glass-strong); backdrop-filter: blur(20px);
+      border: 1px solid var(--cyan-soft);
+      border-radius: 8px;
+      box-shadow: 0 0 40px var(--cyan-glow);
+      width: 100%; max-width: 760px; max-height: 80vh;
+      display: flex; flex-direction: column;
+    }
+    .modal-head {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 18px; border-bottom: 1px solid var(--line);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 13px; letter-spacing: 0.28em;
+      color: var(--cyan); text-transform: uppercase;
+    }
+    .modal-close {
+      margin-left: auto; background: transparent;
+      border: 1px solid var(--line); color: var(--cyan);
+      padding: 4px 10px; border-radius: 4px; cursor: pointer;
+      font-size: 13px;
+    }
+    .modal-close:hover { background: rgba(79, 227, 255, 0.08); }
+    .modal-body {
+      padding: 18px; overflow-y: auto; flex: 1;
+      font-size: 14px; line-height: 1.6;
+    }
+    .modal-body pre, .modal-body textarea {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--line); border-radius: 4px;
+      padding: 12px; color: var(--text);
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      width: 100%; box-sizing: border-box;
+      white-space: pre-wrap; word-wrap: break-word;
+    }
+    .modal-body textarea { resize: vertical; min-height: 80px; }
+    .trust-mode-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px; margin: 12px 0;
+    }
+    .trust-mode-card {
+      padding: 12px; border: 1px solid var(--line); border-radius: 6px;
+      cursor: pointer; transition: all 150ms;
+      text-align: center;
+    }
+    .trust-mode-card:hover { background: rgba(79, 227, 255, 0.06); }
+    .trust-mode-card.active {
+      border-color: var(--cyan);
+      box-shadow: 0 0 14px var(--cyan-glow);
+    }
+    .trust-mode-card .name {
+      font-family: 'Orbitron', sans-serif; font-size: 13px;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .trust-mode-card .desc {
+      font-size: 11px; color: var(--muted);
+    }
+    .trust-mode-card[data-mode="off"] .name { color: var(--muted); }
+    .trust-mode-card[data-mode="on-my-machine"] .name { color: var(--amber); }
+    .trust-mode-card[data-mode="yolo"] .name { color: var(--magenta); }
+    .modal-actions {
+      display: flex; gap: 10px; justify-content: flex-end;
+      padding: 12px 18px; border-top: 1px solid var(--line);
+    }
+    .btn {
+      background: transparent; border: 1px solid var(--cyan);
+      color: var(--cyan); padding: 8px 16px; border-radius: 4px;
+      font: inherit; font-size: 13px; cursor: pointer;
+      letter-spacing: 0.12em; text-transform: uppercase;
+    }
+    .btn.primary { background: var(--cyan); color: var(--bg-deep); }
+    .btn:hover { box-shadow: 0 0 12px var(--cyan-glow); }
+    .session-row {
+      display: flex; gap: 10px; padding: 8px 12px;
+      border-bottom: 1px solid var(--line);
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    }
+    .session-row .id { color: var(--cyan); flex: 1; }
+    .session-row .ts { color: var(--muted); }
+
+    /* ----- webcam hologram ---------------------------------- */
+    #cam-hologram {
+      position: fixed; bottom: 90px; left: 252px;
+      width: 180px; height: 130px;
+      border: 1px solid var(--cyan-soft); border-radius: 8px;
+      overflow: hidden; opacity: 0.85;
+      box-shadow: 0 0 24px var(--cyan-glow);
+      display: none; z-index: 30;
+      background: var(--bg-deep);
+    }
+    #cam-hologram.on { display: block; }
+    #cam-hologram video {
+      width: 100%; height: 100%; object-fit: cover;
+      transform: scaleX(-1);
+      filter: hue-rotate(165deg) saturate(2) brightness(0.9) contrast(1.2);
+    }
+    #cam-hologram .scan {
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(
+        to bottom, transparent 0, transparent 2px,
+        rgba(79, 227, 255, 0.08) 2px, rgba(79, 227, 255, 0.08) 3px);
+      pointer-events: none;
+    }
+    #cam-toggle {
+      position: fixed; bottom: 230px; left: 252px;
+      background: var(--bg-glass-strong); border: 1px solid var(--cyan-soft);
+      color: var(--cyan); padding: 6px 12px; border-radius: 4px;
+      font-size: 11px; letter-spacing: 0.2em; cursor: pointer;
+      text-transform: uppercase; z-index: 31;
+    }
+    #cam-toggle:hover { background: rgba(79, 227, 255, 0.1); }
+
+    /* responsive collapse */
+    @media (max-width: 1024px) {
+      #app { grid-template-columns: 200px 1fr; grid-template-areas:
+        "header header" "sidebar main" "sidebar input"; }
+      #panel { display: none; }
+    }
+    @media (max-width: 720px) {
+      #app { grid-template-columns: 1fr; grid-template-areas:
+        "header" "main" "input"; }
+      #sidebar { display: none; }
+    }
+  </style>
+</head>
+<body dir="auto">
+  <canvas id="rain"></canvas>
+
+  <div id="app">
+
+    <header id="header">
+      <div>
+        <span id="brand">JARVIS</span>
+        <span id="brand-sub">Agency Runtime</span>
+      </div>
+      <div id="header-right">
+        <span id="trust-badge" class="badge trust-off">trust: off</span>
+        <span id="skills-count">0 specialists</span>
+        <span id="live-status" class="live-status idle">
+          <span class="live-dot"></span><span id="live-text">idle</span>
+        </span>
+        <span id="clock">--:--:--</span>
+      </div>
+    </header>
+
+    <nav id="sidebar">
+      <h4>Workspace</h4>
+      <div class="nav-item active" data-view="home">
+        <span class="nav-dot dot-home"></span><span>Home</span>
+      </div>
+      <div class="nav-item" data-view="skills">
+        <span class="nav-dot dot-skills"></span><span>Specialists</span>
+      </div>
+      <div class="nav-item" data-view="memory">
+        <span class="nav-dot dot-memory"></span><span>Memory</span>
+      </div>
+      <div class="nav-item" data-view="sessions">
+        <span class="nav-dot dot-sessions"></span><span>Sessions</span>
+      </div>
+      <div class="nav-item" data-view="profile">
+        <span class="nav-dot dot-profile"></span><span>Profile</span>
+      </div>
+      <h4>System</h4>
+      <div class="nav-item" data-view="trust">
+        <span class="nav-dot dot-trust"></span><span>Trust mode</span>
+      </div>
+      <div class="nav-item" data-view="mcp">
+        <span class="nav-dot dot-mcp"></span><span>MCP servers</span>
+      </div>
+      <div class="nav-item" data-view="settings">
+        <span class="nav-dot dot-settings"></span><span>Settings</span>
+      </div>
+    </nav>
+
+    <main id="main">
+      <div id="greeting">
+        <div class="orb"><div class="orb-core"></div></div>
+        <h1>HELLO.</h1>
+        <p>I'm <strong>JARVIS</strong> — your Agency runtime.</p>
+        <p>Speak or type. I'll route to the right specialist of <span id="greeting-skills">…</span>.</p>
+      </div>
+      <div id="log"></div>
+    </main>
+
+    <div id="status"></div>
+
+    <form id="inputbar" autocomplete="off" onsubmit="return false;">
+      <button id="mic" type="button" title="Voice input">🎙</button>
+      <button id="tts" type="button" title="Toggle voice output">🔇</button>
+      <button id="img-attach" type="button" title="Attach image (or paste / drag onto window)">📎</button>
+      <input id="img-file" type="file" accept="image/*" multiple style="display:none;" />
+      <input id="msg" type="text" placeholder="Speak, type, or paste/drag an image — Cmd/Ctrl+K to focus" />
+      <button id="send" type="submit">Send</button>
+    </form>
+
+    <button id="cam-toggle" title="Webcam hologram">CAM ▸</button>
+    <div id="cam-hologram">
+      <video id="cam-video" autoplay muted playsinline></video>
+      <div class="scan"></div>
+    </div>
+
+    <div id="waveform">
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      <div class="bar"></div>
+    </div>
+
+    <div id="attachments"></div>
+
+    <div id="modal" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <span id="modal-title">·</span>
+          <button class="modal-close" data-action="close">CLOSE</button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+        <div class="modal-actions" id="modal-actions"></div>
+      </div>
+    </div>
+
+    <aside id="panel">
+      <div class="panel-title">Specialists</div>
+      <input id="skill-search" placeholder="Filter…" />
+      <div id="skills-list"></div>
+    </aside>
+
+  </div>
+
+<script>
+/* ===========================================================
+   GRAVIS HUD — front-end logic
+   =========================================================== */
+const $ = (id) => document.getElementById(id);
+const log = $('log');
+const status = $('status');
+const skillsCount = $('skills-count');
+const trustBadge = $('trust-badge');
+const greetingSkills = $('greeting-skills');
+
+const state = {
+  skills: [],
+  // Default to jarvis-brainiac so meta-questions ("what are you", "tell
+  // me about yourself") don't get auto-routed to a domain specialist
+  // (e.g. Anthropologist) which would describe ITS scope, not the
+  // system's. The user can clear this by clicking the active card again.
+  selectedSkill: localStorage.getItem('jarvis_skill') || 'jarvis-brainiac',
+  sessionId: localStorage.getItem('jarvis_session') || null,
+  history: [],
+};
+
+/* ----- code rain --------------------------------------------- */
+(function rain() {
+  const c = $('rain'), ctx = c.getContext('2d');
+  function resize() {
+    c.width = window.innerWidth;
+    c.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン01';
+  const fontSize = 14;
+  const cols = () => Math.floor(c.width / fontSize);
+  let drops = Array(cols()).fill(0);
+
+  setInterval(() => {
+    if (drops.length !== cols()) drops = Array(cols()).fill(0);
+    ctx.fillStyle = 'rgba(3, 7, 15, 0.10)';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.font = fontSize + 'px JetBrains Mono, monospace';
+    for (let i = 0; i < drops.length; i++) {
+      const ch = chars[Math.floor(Math.random() * chars.length)];
+      ctx.fillStyle = Math.random() < 0.05 ? '#aef0ff' : '#1d6f8e';
+      ctx.fillText(ch, i * fontSize, drops[i] * fontSize);
+      if (drops[i] * fontSize > c.height && Math.random() > 0.97) drops[i] = 0;
+      drops[i]++;
+    }
+  }, 70);
+})();
+
+/* ----- clock ------------------------------------------------- */
+setInterval(() => {
+  const d = new Date();
+  $('clock').textContent = d.toTimeString().slice(0, 8);
+}, 1000);
+
+/* ----- skill loading ----------------------------------------- */
+async function loadSkills() {
+  const r = await fetch('/api/skills');
+  const data = await r.json();
+  state.skills = data.skills;
+  skillsCount.textContent = data.count + ' specialists';
+  greetingSkills.textContent = data.count + ' specialists';
+  renderSkills();
+}
+
+function renderSkills(filter = '') {
+  const list = $('skills-list');
+  list.innerHTML = '';
+  const f = filter.toLowerCase().trim();
+  const filtered = f
+    ? state.skills.filter(s =>
+        s.name.toLowerCase().includes(f) ||
+        s.slug.toLowerCase().includes(f) ||
+        (s.description || '').toLowerCase().includes(f))
+    : state.skills;
+
+  // group by category
+  const byCat = {};
+  for (const s of filtered) {
+    (byCat[s.category] = byCat[s.category] || []).push(s);
+  }
+  const cats = Object.keys(byCat).sort();
+  for (const cat of cats) {
+    const sec = document.createElement('div');
+    sec.className = 'cat-section';
+    sec.innerHTML = `<div class="cat-header">${cat} · ${byCat[cat].length}</div>`;
+    for (const s of byCat[cat]) {
+      const card = document.createElement('div');
+      card.className = 'skill-card' + (state.selectedSkill === s.slug ? ' active' : '');
+      card.innerHTML = `
+        <span class="skill-emoji">${s.emoji || '🤖'}</span>
+        <span class="skill-name">${s.name}</span>
+        <span class="skill-cat">${s.slug.split('-')[0]}</span>`;
+      card.addEventListener('click', () => {
+        state.selectedSkill = state.selectedSkill === s.slug ? null : s.slug;
+        if (state.selectedSkill) localStorage.setItem('jarvis_skill', state.selectedSkill);
+        else localStorage.removeItem('jarvis_skill');
+        renderSkills(filter);
+        setStatus(state.selectedSkill ? `Routing to: ${s.slug}` : 'Auto-route');
+      });
+      sec.appendChild(card);
+    }
+    list.appendChild(sec);
+  }
+}
+
+$('skill-search').addEventListener('input', e => renderSkills(e.target.value));
+
+/* ----- trust mode badge -------------------------------------- */
+async function loadHealth() {
+  try {
+    const r = await fetch('/api/health');
+    if (!r.ok) return;
+    const h = await r.json();
+    // health endpoint doesn't directly expose trust mode in the response;
+    // we infer it from the doctor / trust CLI not the API. Fall back
+    // to a static value here. The badge updates on each chat run too.
+  } catch (e) { /* ignore */ }
+}
+
+/* ----- streaming chat ---------------------------------------- */
+function setStatus(s) { status.textContent = s; }
+
+/* live status pill in the header — kind ∈ idle/thinking/tool/speaking/error */
+function setLive(kind, text) {
+  const el = $('live-status');
+  el.className = 'live-status ' + (kind || 'idle');
+  $('live-text').textContent = text || kind || 'idle';
+}
+function hideGreeting() { $('greeting').style.display = 'none'; }
+
+function appendUserMsg(text, imageUrls = []) {
+  hideGreeting();
+  const div = document.createElement('div');
+  div.className = 'msg you';
+  div.innerHTML = `<div class="msg-meta">YOU · ${new Date().toLocaleTimeString()}</div>
+                   <div class="msg-body"></div>`;
+  const body = div.querySelector('.msg-body');
+  body.textContent = text;
+  if (imageUrls.length) {
+    const wrap = document.createElement('div');
+    wrap.style.display = 'flex'; wrap.style.gap = '6px';
+    wrap.style.marginTop = text ? '10px' : '0';
+    wrap.style.flexWrap = 'wrap';
+    for (const u of imageUrls) {
+      const img = document.createElement('img');
+      img.src = u; img.alt = 'attachment';
+      img.style.maxWidth = '160px'; img.style.maxHeight = '160px';
+      img.style.borderRadius = '4px';
+      img.style.border = '1px solid var(--cyan-soft)';
+      wrap.appendChild(img);
+    }
+    body.appendChild(wrap);
+  }
+  log.appendChild(div);
+  log.parentElement.scrollTop = log.parentElement.scrollHeight;
+}
+
+function startAgentMsg(skillName, slug) {
+  const div = document.createElement('div');
+  div.className = 'msg agent';
+  div.innerHTML = `<div class="msg-meta">${skillName.toUpperCase()} · ${slug}</div>
+                   <div class="msg-body typing"></div>`;
+  log.appendChild(div);
+  log.parentElement.scrollTop = log.parentElement.scrollHeight;
+  return div.querySelector('.msg-body');
+}
+
+/* Tool result with image-aware rendering. If `content` looks like a
+   data URL or http(s) URL pointing at an image, render it inline.
+   Otherwise fall back to the truncated-text appendTool path. */
+function renderToolResult(data) {
+  const content = String(data.content || '');
+  const isImg = /^data:image\//.test(content) ||
+                /^https?:\/\/\S+\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(content);
+  if (isImg && !data.is_error) {
+    const div = document.createElement('div');
+    div.className = 'msg agent';
+    div.innerHTML = `<div class="msg-meta">[⚙ ${data.name}] image</div>
+                     <div class="msg-body"></div>`;
+    const img = document.createElement('img');
+    img.className = 'tool-image'; img.src = content; img.alt = data.name;
+    div.querySelector('.msg-body').appendChild(img);
+    log.appendChild(div);
+    log.parentElement.scrollTop = log.parentElement.scrollHeight;
+    return;
+  }
+  appendTool(data.name, data.is_error, content.slice(0, 240));
+}
+
+function appendTool(name, isError, content) {
+  const div = document.createElement('div');
+  div.className = 'msg tool' + (isError ? ' error' : '');
+  div.textContent = `[${isError ? '✗' : '⚙'} ${name}] ${String(content).slice(0, 240)}`;
+  log.appendChild(div);
+  log.parentElement.scrollTop = log.parentElement.scrollHeight;
+}
+
+function parseSSE(buf) {
+  const events = [];
+  let idx;
+  while ((idx = buf.indexOf('\n\n')) !== -1) {
+    const block = buf.slice(0, idx);
+    buf = buf.slice(idx + 2);
+    let event = 'message', data = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      else if (line.startsWith('data:')) data += line.slice(5).trim();
+    }
+    try { events.push({ event, data: JSON.parse(data) }); }
+    catch { events.push({ event, data }); }
+  }
+  return [events, buf];
+}
+
+/* ============================================================
+   Image attachments — paste / drag-drop / file picker
+   ============================================================ */
+const attachments = []; // each entry: { dataUrl, name }
+
+function renderAttachments() {
+  const c = $('attachments');
+  c.innerHTML = '';
+  attachments.forEach((a, i) => {
+    const div = document.createElement('div');
+    div.className = 'attachment';
+    div.innerHTML = `<img src="${a.dataUrl}" alt="${a.name}" />
+                     <button class="remove" type="button" data-i="${i}" title="Remove">×</button>`;
+    c.appendChild(div);
+  });
+  $('img-attach').classList.toggle('has-attachments', attachments.length > 0);
+}
+
+function addAttachment(dataUrl, name = 'image') {
+  attachments.push({ dataUrl, name });
+  renderAttachments();
+}
+
+$('attachments').addEventListener('click', e => {
+  const btn = e.target.closest('button.remove');
+  if (!btn) return;
+  attachments.splice(Number(btn.dataset.i), 1);
+  renderAttachments();
+});
+
+$('img-attach').addEventListener('click', () => $('img-file').click());
+$('img-file').addEventListener('change', e => {
+  for (const f of e.target.files) addFileAsAttachment(f);
+  e.target.value = '';
+});
+
+function addFileAsAttachment(file) {
+  if (!file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = () => addAttachment(reader.result, file.name);
+  reader.readAsDataURL(file);
+}
+
+// Paste from clipboard
+document.addEventListener('paste', e => {
+  for (const item of e.clipboardData.items) {
+    if (item.type.startsWith('image/')) {
+      const f = item.getAsFile();
+      if (f) addFileAsAttachment(f);
+    }
+  }
+});
+
+// Drag-drop anywhere on the page
+document.addEventListener('dragover', e => {
+  if (Array.from(e.dataTransfer.types).includes('Files')) {
+    e.preventDefault(); document.body.classList.add('drag-over');
+  }
+});
+document.addEventListener('dragleave', e => {
+  if (e.target === document.body) document.body.classList.remove('drag-over');
+});
+document.addEventListener('drop', e => {
+  document.body.classList.remove('drag-over');
+  if (!e.dataTransfer.files.length) return;
+  e.preventDefault();
+  for (const f of e.dataTransfer.files) addFileAsAttachment(f);
+});
+
+async function send() {
+  const msg = $('msg').value.trim();
+  if (!msg && attachments.length === 0) return;
+  $('send').disabled = true;
+  $('msg').value = '';
+  appendUserMsg(msg, attachments.map(a => a.dataUrl));
+  setStatus('thinking…');
+  setLive('thinking', 'thinking');
+
+  let bodyEl = null;
+  let buf = '';
+  try {
+    const r = await fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json',
+                 'accept': 'text/event-stream' },
+      body: JSON.stringify({
+        message: msg,
+        skill: state.selectedSkill || null,
+        session_id: state.sessionId,
+        images: attachments.length ? attachments.map(a => a.dataUrl) : null,
+      }),
+    });
+    // Clear attachments now that they're in flight; if the request
+    // fails the user can re-attach (avoids silently re-sending on retry).
+    if (attachments.length) { attachments.length = 0; renderAttachments(); }
+    if (!r.ok) {
+      appendTool('http', true, `${r.status}: ${await r.text()}`);
+      return;
+    }
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let evs;
+      [evs, buf] = parseSSE(buf);
+      for (const ev of evs) {
+        if (ev.event === 'plan') {
+          const s = ev.data.skill;
+          bodyEl = startAgentMsg(`${s.emoji || '🤖'} ${s.name}`, s.slug);
+          setStatus(`→ ${s.slug}`);
+        } else if (ev.event === 'text_delta') {
+          if (bodyEl) {
+            bodyEl.classList.remove('typing');
+            bodyEl.textContent += ev.data;
+            bodyEl.classList.add('typing');
+            log.parentElement.scrollTop = log.parentElement.scrollHeight;
+            ttsPush(ev.data);
+          }
+        } else if (ev.event === 'tool_use') {
+          appendTool(ev.data.name, false,
+                     JSON.stringify(ev.data.input).slice(0, 120));
+          setLive('tool', `tool: ${ev.data.name}`);
+        } else if (ev.event === 'tool_result') {
+          renderToolResult(ev.data);
+          setLive('thinking', 'thinking');
+        } else if (ev.event === 'stop') {
+          if (bodyEl) bodyEl.classList.remove('typing');
+          ttsEnd();
+        } else if (ev.event === 'error') {
+          appendTool('error', true, ev.data.message || ev.data);
+          if (bodyEl) bodyEl.classList.remove('typing');
+          setLive('error', 'error');
+        } else if (ev.event === 'done') {
+          setStatus('done');
+          setLive('idle', 'idle');
+          ttsEnd();
+        }
+      }
+    }
+  } catch (e) {
+    appendTool('network', true, String(e));
+  } finally {
+    $('send').disabled = false;
+    if (bodyEl) bodyEl.classList.remove('typing');
+    $('msg').focus();
+  }
+}
+
+$('send').addEventListener('click', send);
+$('msg').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault(); $('msg').focus();
+  }
+});
+
+/* ----- voice input (Web Speech API) -------------------------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const mic = $('mic');
+if (SR) {
+  const rec = new SR();
+  rec.continuous = false; rec.interimResults = false;
+  rec.lang = (navigator.language || 'en-US');
+  let listening = false;
+  mic.addEventListener('click', () => {
+    if (listening) { rec.stop(); return; }
+    try { rec.start(); listening = true; mic.classList.add('listening'); }
+    catch { /* already running */ }
+  });
+  rec.onresult = e => {
+    const text = e.results[0][0].transcript;
+    $('msg').value = text;
+    listening = false; mic.classList.remove('listening');
+    send();
+  };
+  rec.onend   = () => { listening = false; mic.classList.remove('listening'); };
+  rec.onerror = () => { listening = false; mic.classList.remove('listening'); };
+} else {
+  mic.title = 'Voice input not supported in this browser';
+  mic.style.opacity = '0.4';
+  mic.style.cursor = 'not-allowed';
+}
+
+/* ----- session id persistence -------------------------------- */
+if (!state.sessionId) {
+  state.sessionId = 's_' + Math.random().toString(36).slice(2, 10);
+  localStorage.setItem('jarvis_session', state.sessionId);
+}
+
+/* ----- skills graph (sidebar nav) ---------------------------- */
+async function showSkillsGraph() {
+  try {
+    const r = await fetch('/api/skills/graph');
+    if (!r.ok) return;
+    const g = await r.json();
+    hideGreeting();
+    const div = document.createElement('div');
+    div.className = 'msg agent';
+    div.innerHTML = `<div class="msg-meta">SYSTEM · skills graph</div>
+                     <div class="msg-body"></div>`;
+    const body = div.querySelector('.msg-body');
+    body.textContent =
+      `Total: ${g.total_skills} specialists across ${g.categories.length} categories.\n\n` +
+      g.categories.map(c => `· ${c.name}: ${c.count}`).join('\n');
+    log.appendChild(div);
+  } catch (e) { /* ignore */ }
+}
+
+/* ============================================================
+   modal + sidebar tabs (Memory / Trust / Sessions / Settings)
+   ============================================================ */
+
+const modal = $('modal');
+const modalBody = $('modal-body');
+const modalTitle = $('modal-title');
+const modalActions = $('modal-actions');
+
+function openModal(title, bodyHTML, actionsHTML = '') {
+  modalTitle.textContent = title;
+  modalBody.innerHTML = bodyHTML;
+  modalActions.innerHTML = actionsHTML;
+  modal.classList.add('open');
+}
+function closeModal() { modal.classList.remove('open'); }
+
+modal.addEventListener('click', e => {
+  if (e.target.dataset.action === 'close' || e.target === modal) closeModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+/* ----- Memory tab (lessons.md) ------------------------------ */
+async function showMemory() {
+  openModal('Memory · lessons journal', '<em>loading…</em>');
+  try {
+    const r = await fetch('/api/lessons');
+    const data = await r.json();
+    modalBody.innerHTML = `
+      <div style="color:var(--muted);font-size:11px;margin-bottom:8px;
+                   letter-spacing:.2em;text-transform:uppercase;">
+        ${data.path}
+        ${data.exists ? `· ${data.size_bytes} bytes` : '· (none yet)'}
+      </div>
+      <pre>${data.text ? escapeHtml(data.text) : '(empty — append your first lesson below)'}</pre>
+      <div style="margin-top:12px;font-size:11px;color:var(--muted);
+                   letter-spacing:.2em;text-transform:uppercase;">Append</div>
+      <textarea id="lesson-text" placeholder="One concrete thing the agent should remember about this work…"></textarea>
+    `;
+    modalActions.innerHTML = `
+      <button class="btn" data-action="close">cancel</button>
+      <button class="btn primary" id="lesson-save">append</button>
+    `;
+    $('lesson-save').addEventListener('click', async () => {
+      const text = $('lesson-text').value.trim();
+      if (!text) return;
+      const resp = await fetch('/api/lessons', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (resp.ok) showMemory();
+      else alert('Failed: ' + (await resp.text()));
+    });
+  } catch (e) {
+    modalBody.textContent = 'Error: ' + e;
+  }
+}
+
+/* ----- Trust tab (mode switcher) ---------------------------- */
+async function showTrust() {
+  openModal('Trust mode', '<em>loading…</em>');
+  try {
+    const r = await fetch('/api/trust');
+    const data = await r.json();
+    const modes = [
+      { id: 'off',           desc: 'Conservative. Allowlists, sandboxes, opt-ins. CI/Docker default.' },
+      { id: 'on-my-machine', desc: 'Personal box. Shell on, denylisted. Workdir lifted. Metadata still blocked.' },
+      { id: 'yolo',          desc: 'Full reach. No denylist. No sandbox. No SSRF block. No metadata block.' },
+    ];
+    const cards = modes.map(m => `
+      <div class="trust-mode-card ${data.mode === m.id ? 'active' : ''}" data-mode="${m.id}">
+        <div class="name">${m.id}</div>
+        <div class="desc">${m.desc}</div>
+      </div>`).join('');
+    const gateRows = Object.entries(data.gate || {})
+      .map(([k, v]) => `<tr><td style="padding:2px 12px;color:var(--muted);">${k}</td>
+                          <td style="font-family:JetBrains Mono,monospace;color:var(--cyan);">${v}</td></tr>`)
+      .join('');
+    modalBody.innerHTML = `
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">
+        Active: <strong style="color:var(--cyan);">${data.mode}</strong>
+        · config: ${data.config_present ? '<span style="color:var(--green)">file present</span>' : '<span style="color:var(--muted)">(env-var only)</span>'}
+        · ${data.config_file}
+      </div>
+      <div class="trust-mode-grid">${cards}</div>
+      <table style="border-collapse:collapse;font-size:12px;margin-top:14px;">${gateRows}</table>
+    `;
+    modalActions.innerHTML = '<button class="btn" data-action="close">close</button>';
+    document.querySelectorAll('.trust-mode-card').forEach(card => {
+      card.addEventListener('click', async () => {
+        const mode = card.dataset.mode;
+        const resp = await fetch('/api/trust', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode }),
+        });
+        if (resp.ok) {
+          await showTrust();
+          // Update header badge.
+          updateTrustBadge(mode);
+        } else {
+          alert('Failed: ' + (await resp.text()));
+        }
+      });
+    });
+  } catch (e) {
+    modalBody.textContent = 'Error: ' + e;
+  }
+}
+
+/* ----- Sessions tab ---------------------------------------- */
+async function showSessions() {
+  openModal('Sessions', '<em>loading…</em>');
+  try {
+    const r = await fetch('/api/sessions');
+    const data = await r.json();
+    const rows = (data.sessions || []).map(s => {
+      const dt = new Date(s.modified * 1000).toLocaleString();
+      return `<div class="session-row">
+        <span class="id">${s.id}</span>
+        <span class="ts">${dt}</span>
+        <span style="color:var(--muted);">${s.size_bytes} B</span>
+        <button class="btn" style="font-size:10px;padding:2px 8px;"
+                onclick="exportSession('${s.id}')">export</button>
+      </div>`;
+    }).join('') || '<div style="color:var(--muted);">No saved sessions yet.</div>';
+    modalBody.innerHTML = `
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;
+                   letter-spacing:.2em;text-transform:uppercase;">${data.path}</div>
+      ${rows}
+    `;
+    modalActions.innerHTML = '<button class="btn" data-action="close">close</button>';
+  } catch (e) {
+    modalBody.textContent = 'Error: ' + e;
+  }
+}
+
+function updateTrustBadge(mode) {
+  trustBadge.className = 'badge trust-' + mode;
+  trustBadge.textContent = 'trust: ' + mode;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ----- nav wiring (replaces stub) --------------------------- */
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+    const view = el.dataset.view;
+    if (view === 'home') closeModal();
+    if (view === 'skills') showSkillsGraph();
+    if (view === 'memory') showMemory();
+    if (view === 'sessions') showSessions();
+    if (view === 'trust') showTrust();
+    if (view === 'profile') showProfile();
+    if (view === 'mcp') showMCP();
+    if (view === 'settings') showSettings();
+  });
+});
+
+// Make export accessible from inline onclick="" in the sessions table.
+window.exportSession = exportSession;
+
+/* ----- Profile tab (~/.agency/profile.md) ------------------- */
+async function showProfile() {
+  openModal('Profile · always-on context', '<em>loading…</em>');
+  try {
+    const r = await fetch('/api/profile');
+    const data = await r.json();
+    modalBody.innerHTML = `
+      <div style="color:var(--muted);font-size:11px;margin-bottom:8px;
+                   letter-spacing:.2em;text-transform:uppercase;">
+        ${data.path}
+        ${data.exists ? `· ${data.size_bytes} bytes` : '· (none yet)'}
+      </div>
+      <textarea id="profile-text" style="min-height:280px;">${escapeHtml(data.text)}</textarea>
+      <div style="margin-top:10px;color:var(--muted);font-size:12px;">
+        This text is sent as background context to <em>every</em> agent run
+        — keep it tight. Empty body deletes the file.
+      </div>
+    `;
+    modalActions.innerHTML = `
+      <button class="btn" data-action="close">cancel</button>
+      <button class="btn primary" id="profile-save">save</button>
+    `;
+    $('profile-save').addEventListener('click', async () => {
+      const text = $('profile-text').value;
+      const resp = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (resp.ok) {
+        setStatus('profile saved');
+        closeModal();
+      } else alert('Failed: ' + (await resp.text()));
+    });
+  } catch (e) {
+    modalBody.textContent = 'Error: ' + e;
+  }
+}
+
+/* ----- MCP servers tab -------------------------------------- */
+async function showMCP() {
+  openModal('MCP servers', '<em>loading…</em>');
+  try {
+    const r = await fetch('/api/mcp');
+    const data = await r.json();
+    let body = '';
+    if (!data.configured) {
+      body = `<div style="color:var(--muted);">
+        ${data.note || 'No MCP servers configured.'}
+      </div>
+      <pre style="margin-top:14px;">export AGENCY_MCP_SERVERS='[
+  {"type": "url", "name": "github",
+   "url": "https://api.githubcopilot.com/mcp/"}
+]'</pre>`;
+    } else if (data.parse_error) {
+      body = `<div style="color:#ff6363;">Parse error: ${escapeHtml(data.parse_error)}</div>`;
+    } else {
+      body = (data.servers || []).map(s => `
+        <div style="padding:10px 12px;border:1px solid var(--line);
+                    border-radius:4px;margin-bottom:8px;">
+          <div style="color:var(--cyan);font-family:JetBrains Mono,monospace;
+                       font-size:13px;">${escapeHtml(s.name || '(unnamed)')}</div>
+          <pre style="margin-top:8px;">${escapeHtml(JSON.stringify(s, null, 2))}</pre>
+        </div>`).join('');
+      if (!body) body = '<div style="color:var(--muted);">No servers in list.</div>';
+    }
+    modalBody.innerHTML = `
+      <div style="color:var(--muted);font-size:11px;margin-bottom:10px;
+                   letter-spacing:.2em;text-transform:uppercase;">
+        Configured via <code>AGENCY_MCP_SERVERS</code> env var
+      </div>
+      ${body}
+    `;
+    modalActions.innerHTML = '<button class="btn" data-action="close">close</button>';
+  } catch (e) {
+    modalBody.textContent = 'Error: ' + e;
+  }
+}
+
+/* ----- Sessions tab — with export button on each row -------- */
+async function exportSession(id) {
+  try {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(id)}/export`);
+    if (!r.ok) { alert('Export failed: ' + (await r.text())); return; }
+    const data = await r.json();
+    // Trigger a download.
+    const blob = new Blob([data.markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `session-${id}.md`;
+    document.body.appendChild(a); a.click();
+    a.remove(); URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Export failed: ' + e);
+  }
+}
+
+/* ----- Settings tab ---------------------------------------- */
+function showSettings() {
+  openModal('Settings', `
+    <div style="font-size:13px;line-height:1.8;">
+      <div><strong>Session ID:</strong> <code>${state.sessionId}</code>
+        <button class="btn" id="reset-session" style="margin-left:10px;font-size:11px;">reset</button></div>
+      <div><strong>Selected skill:</strong> <code>${state.selectedSkill || '(auto-route)'}</code></div>
+      <div><strong>Voice output (TTS):</strong> <code>${ttsEnabled ? 'on' : 'off'}</code></div>
+      <div><strong>Webcam hologram:</strong> <code>${camOn ? 'on' : 'off'}</code></div>
+      <hr style="border-color:var(--line);margin:14px 0;">
+      <div style="color:var(--muted);">
+        Trust mode and lessons are managed in their own tabs.
+        Profile (~/.agency/profile.md) is best edited from the CLI:
+        <code>agency profile edit</code>.
+      </div>
+    </div>
+  `, '<button class="btn" data-action="close">close</button>');
+  $('reset-session').addEventListener('click', () => {
+    state.sessionId = 's_' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem('jarvis_session', state.sessionId);
+    showSettings();
+  });
+}
+
+/* ============================================================
+   TTS — speak agent text as it streams
+   ============================================================ */
+let ttsEnabled = localStorage.getItem('jarvis_tts') === '1';
+const tts = $('tts');
+function updateTtsBtn() {
+  tts.classList.toggle('on', ttsEnabled);
+  tts.textContent = ttsEnabled ? '🔊' : '🔇';
+  tts.title = ttsEnabled ? 'Voice output: ON (click to mute)' : 'Voice output: OFF (click to unmute)';
+}
+tts.addEventListener('click', () => {
+  ttsEnabled = !ttsEnabled;
+  localStorage.setItem('jarvis_tts', ttsEnabled ? '1' : '0');
+  updateTtsBtn();
+  if (!ttsEnabled) window.speechSynthesis.cancel();
+});
+updateTtsBtn();
+
+let ttsBuffer = '';
+function ttsFlush(force = false) {
+  if (!ttsEnabled || !window.speechSynthesis) return;
+  // Speak in sentence-ish chunks: flush whenever we hit a `.`, `!`, `?`,
+  // `\n\n`, or on `force=true`. Keeps the speech from clipping mid-word.
+  while (true) {
+    const idx = ttsBuffer.search(/[.!?]\s|\n\n/);
+    if (idx === -1 && !force) break;
+    let chunk;
+    if (idx === -1) {
+      chunk = ttsBuffer; ttsBuffer = '';
+      if (!chunk.trim()) return;
+    } else {
+      chunk = ttsBuffer.slice(0, idx + 1);
+      ttsBuffer = ttsBuffer.slice(idx + 1);
+    }
+    if (!chunk.trim()) continue;
+    const u = new SpeechSynthesisUtterance(chunk);
+    u.rate = 1.0; u.pitch = 0.9; u.volume = 0.85;
+    u.onstart = () => {
+      $('waveform').classList.add('on');
+      setLive('speaking', 'speaking');
+    };
+    u.onend = () => {
+      // Hide waveform only when nothing's queued. SpeechSynthesis
+      // queues utterances internally, so check `speaking` after a tick.
+      setTimeout(() => {
+        if (!window.speechSynthesis.speaking) {
+          $('waveform').classList.remove('on');
+        }
+      }, 50);
+    };
+    window.speechSynthesis.speak(u);
+    if (idx === -1) break;
+  }
+}
+function ttsPush(text) { ttsBuffer += text; ttsFlush(); }
+function ttsEnd() { ttsFlush(true); }
+
+/* ============================================================
+   Webcam hologram (the GRAVIS look)
+   ============================================================ */
+let camOn = false;
+let camStream = null;
+const camToggle = $('cam-toggle');
+const camHologram = $('cam-hologram');
+const camVideo = $('cam-video');
+
+camToggle.addEventListener('click', async () => {
+  if (camOn) {
+    camStream && camStream.getTracks().forEach(t => t.stop());
+    camStream = null;
+    camHologram.classList.remove('on');
+    camOn = false;
+    camToggle.textContent = 'CAM ▸';
+    return;
+  }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 320, height: 240 }, audio: false,
+    });
+    camVideo.srcObject = camStream;
+    camHologram.classList.add('on');
+    camOn = true;
+    camToggle.textContent = 'CAM ◾';
+  } catch (e) {
+    alert('Webcam access denied: ' + e.message);
+  }
+});
+
+/* ----- boot -------------------------------------------------- */
+loadSkills();
+loadHealth();
+
+/* Single boot fetch — pulls trust mode + key counts from /api/dashboard
+   so we don't fan out 5 separate requests on initial paint. */
+fetch('/api/dashboard').then(r => r.json()).then(d => {
+  updateTrustBadge(d.trust_mode);
+  if (d.trust_mode === 'yolo') {
+    setLive('idle', `yolo · ${d.skills_total} specialists`);
+  } else {
+    setLive('idle', `${d.trust_mode} · ${d.skills_total} specialists`);
+  }
+}).catch(() => {});
+
+$('msg').focus();
+</script>
+</body>
+</html>

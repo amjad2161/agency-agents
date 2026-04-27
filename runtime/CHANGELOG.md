@@ -4,6 +4,122 @@ All notable changes to the agency runtime, newest first.
 
 ## Unreleased
 
+### Added (round 4 — HUD polish)
+- **`GET /api/dashboard`** — single endpoint that returns trust mode +
+  skills count + categories + profile/lessons presence + recent
+  sessions (top 5) + user-tool list + MCP server count + computer-use
+  flag + API-key-set flag in one snapshot. The HUD calls it on boot
+  instead of fanning out 5+ requests.
+- **HUD: live status pill** in the header — `idle / thinking / tool /
+  speaking / error` with a colored pulse dot. Updates live as the SSE
+  stream emits events.
+- **HUD: voice waveform animation.** When TTS speaks, a 7-bar magenta
+  waveform appears bottom-right and animates at sub-second cadence.
+  Auto-hides when `speechSynthesis.speaking` is false (handles the
+  internal queue cleanly).
+- **HUD: image-aware tool results.** When a tool returns a `data:image`
+  URL or an http(s) URL ending in a known image extension, render the
+  image inline (max 360×360, cyan border + glow) instead of the
+  truncated-text fallback. Multimodal *output* completes the multimodal
+  loop (PR #28 added input).
+
+### Added (round 3)
+- **Proactive Tool Evolution daemon.** New `agency.daemons.tool_evolver`
+  walks `~/.agency/tools/*.py`, runs each tool's `BENCH` suite (3
+  reps per case), and asks the LLM to rewrite the slow ones. The
+  rewrite is benched against the same suite and the file is replaced
+  ONLY if the new version both passes BENCH and is faster at the
+  median. Original is backed up to `<name>.py.bak.<timestamp>` first.
+  New CLI: `agency evolve` (`--rewrite`/`--bench-only`, `--dry-run`).
+  Threshold: `AGENCY_EVOLVE_SLOW_S` (default 0.5s).
+- **Image input in the HUD.** Multimodal user turns: paste from
+  clipboard, drag-drop onto the page, or click 📎. Attached images
+  appear as a thumbnail bar above the input bar. Sent through
+  `RunRequest.images` as data URLs or http(s) URLs; the executor
+  converts each to an Anthropic API image content block (base64 or
+  url source). User message bubble shows the attached images
+  alongside the text.
+
+### Added (HUD round 2)
+- **`GET /api/profile`, `POST /api/profile`** — read and replace
+  `~/.agency/profile.md` from the HUD. Empty body deletes the file.
+- **`GET /api/mcp`** — return the parsed `AGENCY_MCP_SERVERS` config
+  with secrets (`authorization`, `api_key`, `token`, `secret`,
+  `password`) redacted before serialization.
+- **`GET /api/sessions/{id}/export`** — render a saved session as a
+  self-contained markdown transcript. Path-traversal-safe (rejects
+  any id with `/`, `\`, or `..`).
+- **HUD: Profile + MCP tabs.** Sidebar gets two new dots — Profile
+  (green) and MCP servers (cyan). Profile tab is a textarea editor;
+  MCP tab lists configured servers (with redacted secrets) or shows
+  a copy-paste example if none are configured.
+- **HUD: per-row Export button** on the Sessions tab, downloads the
+  rendered markdown as `session-<id>.md`.
+- **`agency hud` CLI** — alias for `serve` that polls the port via
+  `socket.create_connection` and opens the browser only after the
+  server is actually listening (avoids the "site can't be reached"
+  race). `--no-browser` skips the open.
+
+### Added (HUD interactivity)
+- **`GET /api/lessons`, `POST /api/lessons`** — read the cross-session
+  lessons journal and append a timestamped entry. Powers the HUD's
+  Memory tab.
+- **`GET /api/trust`, `POST /api/trust`** — snapshot of the active
+  trust gate, and persist a new mode to `~/.agency/trust.conf`.
+  Powers the HUD's Trust tab; switching modes from the UI updates
+  the in-process env var so subsequent calls in the same server
+  process see the new mode without restart.
+- **`GET /api/sessions`** — list recent saved sessions under
+  `~/.agency/sessions/` (id, size, modified time). Powers the HUD's
+  Sessions tab.
+- **HUD: TTS voice output.** Toggle button (🔊/🔇) in the input bar.
+  When on, streams agent text deltas through `SpeechSynthesisUtterance`
+  in sentence-boundary chunks so speech doesn't clip mid-word.
+  Persists preference to `localStorage`.
+- **HUD: webcam hologram.** Optional cyan-shifted webcam preview in
+  the bottom-left corner with a scan-line overlay. Toggle button
+  starts/stops the `getUserMedia` stream cleanly.
+- **HUD: functional sidebar tabs.** Memory / Trust / Sessions /
+  Settings now open real modal overlays backed by the new endpoints
+  (read journal + append; switch trust mode; list sessions; reset
+  session ID). Memory shows the journal contents; Trust offers a
+  3-card grid for off / on-my-machine / yolo; Sessions lists
+  recent saves.
+
+### Added
+- **GRAVIS-style HUD chat UI.** New `runtime/agency/static/chat.html`
+  replaces the inline `_CHAT_HTML`. Dark holographic layout, code-rain
+  background, glassmorphism panels, animated AI orb, sidebar with all
+  306+ specialists categorized + searchable, voice input via Web Speech
+  API, terminal typewriter for streaming responses, live trust-mode
+  badge, code-rain canvas. server.py serves it from disk; the inline
+  HTML stays as a developer-mode fallback.
+- **`/api/skills/graph` endpoint.** Returns total counts, per-category
+  breakdown with top slugs, and a heuristic "delegation hubs" list
+  (skills with `core` / `brainiac` / `elder` / `omega` / `orchestrator`
+  / `master` in their slug). Powers the HUD's specialist sidebar.
+- **Vector memory (`agency/vector_memory.py`).** Pure-stdlib TF-IDF
+  similarity store backed by SQLite (no external embedding model
+  required, swap one in via `set_embedder()`). Persists to
+  `~/.agency/vector_memory.db` (override with `AGENCY_VECTOR_DB`).
+  `index_lessons()` splits a `lessons.md` body on `## ` headers and
+  upserts each entry. Used to give the agent fast similarity lookups
+  on past lessons instead of a linear text scan.
+- **Process supervisor (`agency/supervisor.py`).** `run_supervised()`
+  wraps `subprocess.Popen` with timeout (default + hard-cap via
+  `AGENCY_PROCESS_HARD_TIMEOUT`), optional memory limit (psutil),
+  SIGTERM→SIGKILL escalation, partial-output capture on kill, and
+  a structured `crash_dump` field the next LLM turn can read. Powers
+  the kernel-level self-heal loop: agent writes code → supervisor
+  runs → if killed, agent reads the dump and rewrites.
+- **Managed Agents backend (`agency/managed_agents.py`).** Optional
+  alternative LLM/runner that delegates a request to Anthropic's
+  hosted `managed-agents-2026-04-01` infrastructure (creates an
+  agent, environment, session; streams events back). Activate via
+  `AGENCY_BACKEND=managed_agents`. Useful when local trust mode is
+  `off` but the user still wants the model to run code in a
+  sandboxed container.
+
 ### Fixed
 - **Installer hardening (Windows).** Multiple real bugs that could
   silently break the install flow:

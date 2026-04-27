@@ -200,3 +200,11 @@ def test_double_verbose_flag_enables_debug(runner, no_api_key):
     # Either the in-test stream caught it, or stderr did — the level being DEBUG
     # is what guarantees the record was admitted by the logger.
     assert agency_logger.isEnabledFor(logging.DEBUG)
+
+
+def test_hud_command_help(runner):
+    """`agency hud --help` should describe itself + accept --no-browser."""
+    r = runner.invoke(main, ["hud", "--help"])
+    assert r.exit_code == 0
+    assert "GRAVIS HUD" in r.output or "HUD" in r.output
+    assert "--no-browser" in r.output

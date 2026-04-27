@@ -25,10 +25,26 @@ class RunRequest(BaseModel):
     message: str
     skill: str | None = None
     session_id: str | None = None
+    # Optional: list of image URLs OR base64 data URLs
+    # ("data:image/png;base64,...") to attach to the user turn.
+    # Anthropic API accepts both shapes natively in image content blocks.
+    images: list[str] | None = None
 
 
 class PlanRequestBody(BaseModel):
     message: str
+
+
+class LessonAppend(BaseModel):
+    text: str
+
+
+class TrustSet(BaseModel):
+    mode: str
+
+
+class ProfileWrite(BaseModel):
+    text: str
 
 
 def build_app(repo: Path | None = None) -> FastAPI:
@@ -38,9 +54,18 @@ def build_app(repo: Path | None = None) -> FastAPI:
 
     app = FastAPI(title="Agency Runtime", version="0.1.0")
 
+    # Locate the chat HUD asset (separate file under static/ — keeps
+    # server.py focused on routing instead of inlining ~700 lines of
+    # HTML/CSS/JS). Falls back to the embedded _CHAT_HTML constant if
+    # the file is missing (developer-mode fallback).
+    _chat_html_path = Path(__file__).parent / "static" / "chat.html"
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
-        return _CHAT_HTML
+        try:
+            return _chat_html_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return _CHAT_HTML
 
     @app.get("/api/version")
     def version_endpoint() -> dict[str, str]:
@@ -133,6 +158,316 @@ def build_app(repo: Path | None = None) -> FastAPI:
             ],
         }
 
+    @app.get("/api/dashboard")
+    def dashboard() -> dict[str, Any]:
+        """One-shot snapshot of everything a Home tab cares about.
+
+        Returns the active trust mode, persona/tool counts, profile +
+        lessons + MCP presence flags, last-N saved sessions, and
+        whether the API key is configured. Replaces 5+ separate fetch
+        calls the HUD would otherwise need on initial paint.
+        """
+        import os as _os
+        from .lessons import lessons_path, load_lessons_text
+        from .profile import profile_path, load_profile_text
+        from .trust import current as trust_current, gate as trust_gate
+
+        skills = registry.all()
+        cats: dict[str, int] = {}
+        for s in skills:
+            cats[s.category] = cats.get(s.category, 0) + 1
+
+        # recent sessions (top 5)
+        sess_dir = Path.home() / ".agency" / "sessions"
+        recent_sessions = []
+        if sess_dir.is_dir():
+            for f in sorted(sess_dir.glob("*.jsonl"),
+                            key=lambda p: p.stat().st_mtime, reverse=True)[:5]:
+                try:
+                    recent_sessions.append({
+                        "id": f.stem,
+                        "modified": f.stat().st_mtime,
+                        "size_bytes": f.stat().st_size,
+                    })
+                except OSError:
+                    continue
+
+        # tools in the user's tools dir (for the tool-evolver)
+        tools_dir = Path(_os.environ.get(
+            "AGENCY_TOOLS_DIR",
+            str(Path.home() / ".agency" / "tools"),
+        ))
+        user_tools = (
+            sorted(p.name for p in tools_dir.glob("*.py")
+                   if p.name != "__init__.py" and not p.name.startswith("."))
+            if tools_dir.is_dir() else []
+        )
+
+        # MCP servers (parsed count, not contents)
+        mcp_count = 0
+        mcp_raw = _os.environ.get("AGENCY_MCP_SERVERS", "").strip()
+        if mcp_raw:
+            try:
+                parsed = json.loads(mcp_raw)
+                if isinstance(parsed, list):
+                    mcp_count = len(parsed)
+            except json.JSONDecodeError:
+                pass
+
+        return {
+            "trust_mode": trust_current().value,
+            "trust_yolo_active": trust_gate().mode.value == "yolo",
+            "api_key_set": bool(_os.environ.get("ANTHROPIC_API_KEY")),
+            "skills_total": len(skills),
+            "skills_categories": [
+                {"name": k, "count": v} for k, v in sorted(cats.items())
+            ],
+            "profile_present": bool(load_profile_text()),
+            "profile_size_bytes": (profile_path().stat().st_size
+                                    if profile_path().is_file() else 0),
+            "lessons_present": bool(load_lessons_text()),
+            "lessons_size_bytes": (lessons_path().stat().st_size
+                                    if lessons_path().is_file() else 0),
+            "sessions_recent": recent_sessions,
+            "user_tools": user_tools,
+            "mcp_servers_count": mcp_count,
+            "computer_use": (_os.environ.get("AGENCY_ENABLE_COMPUTER_USE", "")
+                              .strip().lower() in ("1", "true", "yes", "on")),
+        }
+
+    @app.get("/api/skills/graph")
+    def skills_graph() -> dict[str, Any]:
+        """Compact category + relationship view for the HUD sidebar.
+
+        Returns:
+          - total_skills: int
+          - categories: [{name, count, top_slugs: [...]}]
+          - delegation_hubs: slugs that other skills are most likely to
+            delegate to (currently a heuristic: anything with `core`,
+            `master`, `orchestrator`, `omega` in the slug — the
+            registry doesn't carry explicit delegation edges yet).
+        """
+        skills = registry.all()
+        cats: dict[str, list[Any]] = {}
+        for s in skills:
+            cats.setdefault(s.category, []).append(s)
+
+        hub_keywords = ("core", "brainiac", "elder", "omega",
+                        "orchestrator", "master", "research-director",
+                        "goal-decomposer")
+        hubs = [
+            {"slug": s.slug, "name": s.name, "emoji": s.emoji,
+             "category": s.category}
+            for s in skills
+            if any(k in s.slug.lower() for k in hub_keywords)
+        ][:20]
+
+        return {
+            "total_skills": len(skills),
+            "categories": [
+                {
+                    "name": cat,
+                    "count": len(items),
+                    "top_slugs": [s.slug for s in items[:5]],
+                }
+                for cat, items in sorted(cats.items())
+            ],
+            "delegation_hubs": hubs,
+        }
+
+    @app.get("/api/lessons")
+    def lessons_get() -> dict[str, Any]:
+        """Return the cross-session lessons journal contents."""
+        from .lessons import lessons_path, load_lessons_text
+        text = load_lessons_text() or ""
+        p = lessons_path()
+        return {
+            "path": str(p),
+            "exists": p.exists() and p.is_file(),
+            "size_bytes": (p.stat().st_size if p.exists() and p.is_file() else 0),
+            "text": text,
+        }
+
+    @app.post("/api/lessons")
+    def lessons_append(body: LessonAppend) -> dict[str, Any]:
+        """Append a single timestamped lesson entry."""
+        from datetime import datetime, timezone
+        from .lessons import ensure_default_lessons
+
+        line = (body.text or "").strip()
+        if not line:
+            raise HTTPException(400, "text cannot be empty")
+        p = ensure_default_lessons()
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        with p.open("a", encoding="utf-8") as f:
+            f.write(f"\n## {stamp} · note from HUD\n\n{line}\n")
+        return {"appended": True, "path": str(p), "timestamp": stamp}
+
+    @app.get("/api/trust")
+    def trust_get() -> dict[str, Any]:
+        """Snapshot of the active trust gate."""
+        from dataclasses import asdict
+        from .trust import current, gate, trust_conf_path
+        g = gate()
+        return {
+            "mode": current().value,
+            "gate": {k: v for k, v in asdict(g).items() if k != "mode"},
+            "config_file": str(trust_conf_path()),
+            "config_present": trust_conf_path().exists(),
+        }
+
+    @app.post("/api/trust")
+    def trust_set(body: TrustSet) -> dict[str, Any]:
+        """Persist the trust mode to ~/.agency/trust.conf so subsequent
+        runs pick it up without an env var."""
+        from .trust import trust_conf_path
+
+        mode = (body.mode or "").strip().lower()
+        if mode not in ("off", "on-my-machine", "yolo"):
+            raise HTTPException(400,
+                f"unrecognized mode: {body.mode!r}. "
+                "Choose off | on-my-machine | yolo.")
+        p = trust_conf_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(
+            f"# Agency trust mode for this machine.\n"
+            f"# Values: off | on-my-machine | yolo.\n"
+            f"{mode}\n",
+            encoding="utf-8",
+        )
+        # Refresh in-process env so subsequent calls in THIS server pick
+        # up the change without restart.
+        import os as _os
+        _os.environ["AGENCY_TRUST_MODE"] = mode
+        return {"mode": mode, "config_file": str(p), "applied": True}
+
+    @app.get("/api/sessions")
+    def sessions_list() -> dict[str, Any]:
+        """List recent saved sessions (filenames + last-modified time)."""
+        sess_dir = Path.home() / ".agency" / "sessions"
+        if not sess_dir.is_dir():
+            return {"path": str(sess_dir), "sessions": []}
+        sessions = []
+        for f in sorted(sess_dir.glob("*.jsonl"),
+                        key=lambda p: p.stat().st_mtime,
+                        reverse=True)[:50]:
+            try:
+                stat = f.stat()
+                sessions.append({
+                    "id": f.stem,
+                    "size_bytes": stat.st_size,
+                    "modified": stat.st_mtime,
+                })
+            except OSError:
+                continue
+        return {"path": str(sess_dir), "sessions": sessions}
+
+    @app.get("/api/sessions/{session_id}/export")
+    def session_export(session_id: str) -> dict[str, Any]:
+        """Export a saved session as a self-contained markdown transcript.
+
+        Reads the JSONL turns under ~/.agency/sessions/<id>.jsonl and
+        renders user/assistant messages as a single markdown blob the
+        user can save, paste into a doc, or share.
+        """
+        # Defensive: don't let arbitrary paths leak — only resolve under
+        # the sessions dir, no `..` allowed.
+        if not session_id or "/" in session_id or "\\" in session_id or ".." in session_id:
+            raise HTTPException(400, "invalid session id")
+        sess_dir = Path.home() / ".agency" / "sessions"
+        path = sess_dir / f"{session_id}.jsonl"
+        if not path.is_file():
+            raise HTTPException(404, f"session not found: {session_id}")
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError as e:
+            raise HTTPException(500, f"could not read session: {e}")
+        out = [f"# Session · {session_id}\n",
+               f"_{path}_\n"]
+        for raw in lines:
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                turn = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            role = turn.get("role", "?")
+            content = turn.get("content", turn.get("text", ""))
+            if isinstance(content, list):
+                content = "\n".join(
+                    str(b.get("text", b)) if isinstance(b, dict) else str(b)
+                    for b in content
+                )
+            out.append(f"\n## {role}\n\n{content}\n")
+        return {
+            "session_id": session_id,
+            "markdown": "\n".join(out),
+            "size_bytes": path.stat().st_size,
+        }
+
+    @app.get("/api/profile")
+    def profile_get() -> dict[str, Any]:
+        """Return the always-on user profile contents."""
+        from .profile import load_profile_text, profile_path
+        text = load_profile_text() or ""
+        p = profile_path()
+        return {
+            "path": str(p),
+            "exists": p.exists() and p.is_file(),
+            "size_bytes": (p.stat().st_size if p.exists() and p.is_file() else 0),
+            "text": text,
+        }
+
+    @app.post("/api/profile")
+    def profile_write(body: ProfileWrite) -> dict[str, Any]:
+        """Replace the entire profile body. Empty text deletes the file."""
+        from .profile import profile_path
+        p = profile_path()
+        text = body.text or ""
+        if not text.strip():
+            if p.exists():
+                p.unlink()
+            return {"deleted": True, "path": str(p)}
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+        return {"saved": True, "path": str(p), "size_bytes": p.stat().st_size}
+
+    @app.get("/api/mcp")
+    def mcp_list() -> dict[str, Any]:
+        """Return the configured MCP servers from `AGENCY_MCP_SERVERS`.
+
+        Reflects what the runtime would forward to Anthropic on the
+        `mcp-client-2025-11-20` beta. Doesn't make a network call —
+        just shows the parsed config.
+        """
+        import os as _os
+        raw = _os.environ.get("AGENCY_MCP_SERVERS", "").strip()
+        if not raw:
+            return {"configured": False, "servers": [],
+                    "note": "Set AGENCY_MCP_SERVERS to a JSON list to enable."}
+        try:
+            servers = json.loads(raw)
+        except json.JSONDecodeError as e:
+            return {"configured": True, "servers": [], "parse_error": str(e)}
+        if not isinstance(servers, list):
+            return {"configured": True, "servers": [],
+                    "parse_error": "AGENCY_MCP_SERVERS must be a JSON list"}
+        # Strip any field that smells like a secret before returning.
+        safe = []
+        for s in servers:
+            if not isinstance(s, dict):
+                continue
+            redacted = {k: v for k, v in s.items()
+                        if k.lower() not in ("authorization", "api_key", "token",
+                                              "secret", "password")}
+            for k in s:
+                if k.lower() in ("authorization", "api_key", "token", "secret",
+                                  "password"):
+                    redacted[k] = "(redacted)"
+            safe.append(redacted)
+        return {"configured": True, "servers": safe}
+
     @app.post("/api/plan")
     def plan_endpoint(body: PlanRequestBody) -> dict[str, Any]:
         llm = _maybe_llm()
@@ -151,7 +486,13 @@ def build_app(repo: Path | None = None) -> FastAPI:
         except LLMError as e:
             raise HTTPException(503, str(e))
         planner = Planner(registry, llm=llm)
-        plan = planner.plan(body.message, hint_slug=body.skill)
+        try:
+            # Planner.plan raises ValueError for an unknown hint slug.
+            # Surface as 400 (bad input from the client) instead of letting
+            # FastAPI render the default 500.
+            plan = planner.plan(body.message, hint_slug=body.skill)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
         session: Session | None = None
         if body.session_id:
@@ -167,7 +508,7 @@ def build_app(repo: Path | None = None) -> FastAPI:
                 "rationale": plan.rationale,
             })
             try:
-                for event in executor.stream(plan.skill, body.message, session=session):
+                for event in executor.stream(plan.skill, body.message, session=session, images=body.images):
                     yield _sse(event.kind, event.payload)
             except Exception as e:  # noqa: BLE001 - surface to the client
                 yield _sse("error", {"message": str(e)})
@@ -182,7 +523,10 @@ def build_app(repo: Path | None = None) -> FastAPI:
         except LLMError as e:
             raise HTTPException(503, str(e))
         planner = Planner(registry, llm=llm)
-        plan = planner.plan(body.message, hint_slug=body.skill)
+        try:
+            plan = planner.plan(body.message, hint_slug=body.skill)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
         session: Session | None = None
         if body.session_id:
@@ -191,7 +535,7 @@ def build_app(repo: Path | None = None) -> FastAPI:
             )
 
         executor = Executor(registry, llm, memory=memory)
-        result = executor.run(plan.skill, body.message, session=session)
+        result = executor.run(plan.skill, body.message, session=session, images=body.images)
         return {
             "skill": {"slug": plan.skill.slug, "name": plan.skill.name, "emoji": plan.skill.emoji},
             "rationale": plan.rationale,
