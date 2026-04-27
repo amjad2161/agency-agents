@@ -17,13 +17,26 @@ if TYPE_CHECKING:
     # Type-only imports so callers get autocomplete without paying the
     # import cost at runtime. The actual instances come from the
     # getters below.
+    from .aios_bridge import AIOSBridge
     from .autonomous_loop import AutonomousLoop
     from .capability_evolver import CapabilityEvolver
     from .context_manager import ContextManager
+    from .evals import EvalSuite
     from .knowledge_expansion import KnowledgeExpansion
+    from .llm_router import LLMRouter
     from .meta_reasoner import MetaReasoningEngine
+    from .multi_agent import AgentPool
     from .multimodal import MultimodalProcessor
+    from .prompt_optimizer import PromptCache
+    from .sandbox import SubprocessSandbox
     from .self_learner_engine import SelfLearnerEngine
+    from .semantic_router import SemanticRouter
+    from .streaming import SSEEmitter
+    from .tool_registry import ToolRegistry
+    from .tracing import Tracer
+    from .tui import JarvisConsole
+    from .unified_bridge import UnifiedBridge
+    from .vector_store import AgentMemory
 
 
 # ---- Singletons -----------------------------------------------------------
@@ -39,7 +52,18 @@ _context_manager: "ContextManager | None" = None
 _autonomous_loop: "AutonomousLoop | None" = None
 _knowledge_expansion: "KnowledgeExpansion | None" = None
 _multimodal_processor: "MultimodalProcessor | None" = None
-_unified_bridge: "object | None" = None
+_unified_bridge: "UnifiedBridge | None" = None
+_llm_router: "LLMRouter | None" = None
+_tracer: "Tracer | None" = None
+_vector_memory: "AgentMemory | None" = None
+_tool_registry: "ToolRegistry | None" = None
+_eval_suite: "EvalSuite | None" = None
+_semantic_router: "SemanticRouter | None" = None
+_prompt_cache: "PromptCache | None" = None
+_sandbox: "SubprocessSandbox | None" = None
+_console: "JarvisConsole | None" = None
+_agent_pool: "AgentPool | None" = None
+_aios_bridge: "AIOSBridge | None" = None
 
 
 def get_self_learner() -> "SelfLearnerEngine":
@@ -104,36 +128,124 @@ def get_multimodal_processor() -> "MultimodalProcessor":
     return _multimodal_processor
 
 
-def get_unified_bridge() -> object:
-    """Composite bridge that exposes every capability through one
-    handle — useful for callers that want a single `bridge.something`
-    surface without juggling seven imports.
+def get_llm_router() -> "LLMRouter":
+    global _llm_router
+    if _llm_router is None:
+        from .llm_router import default_router
+        _llm_router = default_router()
+    return _llm_router
 
-    The bridge is built lazily so importing the package is still cheap.
-    """
+
+def get_tracer_singleton() -> "Tracer":
+    global _tracer
+    if _tracer is None:
+        from .tracing import get_tracer as _gt
+        _tracer = _gt()
+    return _tracer
+
+
+def get_vector_store() -> "AgentMemory":
+    global _vector_memory
+    if _vector_memory is None:
+        from .vector_store import get_vector_store as _gv
+        _vector_memory = _gv("tfidf")
+    return _vector_memory
+
+
+def get_tool_registry() -> "ToolRegistry":
+    global _tool_registry
+    if _tool_registry is None:
+        from .tool_registry import get_registry as _gr
+        _tool_registry = _gr()
+    return _tool_registry
+
+
+def get_streaming() -> "SSEEmitter":
+    """``SSEEmitter`` is a stateless namespace — return the class itself."""
+    from .streaming import SSEEmitter
+    return SSEEmitter  # type: ignore[return-value]
+
+
+def get_evals() -> "EvalSuite":
+    global _eval_suite
+    if _eval_suite is None:
+        from .evals import EvalSuite
+        _eval_suite = EvalSuite()
+    return _eval_suite
+
+
+def get_semantic_router() -> "SemanticRouter":
+    global _semantic_router
+    if _semantic_router is None:
+        from .semantic_router import default_router as _ds
+        _semantic_router = _ds()
+    return _semantic_router
+
+
+def get_prompt_optimizer() -> "PromptCache":
+    global _prompt_cache
+    if _prompt_cache is None:
+        from .prompt_optimizer import PromptCache
+        _prompt_cache = PromptCache()
+    return _prompt_cache
+
+
+def get_sandbox() -> "SubprocessSandbox":
+    global _sandbox
+    if _sandbox is None:
+        from .sandbox import SubprocessSandbox
+        _sandbox = SubprocessSandbox()
+    return _sandbox
+
+
+def get_console() -> "JarvisConsole":
+    global _console
+    if _console is None:
+        from .tui import get_console as _gc
+        _console = _gc()
+    return _console
+
+
+def get_multi_agent() -> "AgentPool":
+    """Return a placeholder agent pool seeded with one no-op agent."""
+    global _agent_pool
+    if _agent_pool is None:
+        from .multi_agent import AgentPool
+        pool = AgentPool()
+        pool.add_agent("default", lambda x: x)
+        _agent_pool = pool
+    return _agent_pool
+
+
+def get_aios_bridge() -> "AIOSBridge":
+    global _aios_bridge
+    if _aios_bridge is None:
+        from .aios_bridge import AIOSBridge
+        _aios_bridge = AIOSBridge()
+    return _aios_bridge
+
+
+def get_unified_bridge() -> "UnifiedBridge":
+    """Fully wired bridge spanning every JARVIS subsystem."""
     global _unified_bridge
     if _unified_bridge is not None:
         return _unified_bridge
-
-    class _UnifiedBridge:
-        def __init__(self) -> None:
-            self.self_learner = get_self_learner()
-            self.meta_reasoner = get_meta_reasoner()
-            self.capability_evolver = get_capability_evolver()
-            self.context_manager = get_context_manager()
-            self.autonomous_loop = get_autonomous_loop()
-            self.knowledge_expansion = get_knowledge_expansion()
-            self.multimodal = get_multimodal_processor()
-
-        def __repr__(self) -> str:
-            return (
-                "<UnifiedBridge "
-                "self_learner+meta_reasoner+capability_evolver"
-                "+context_manager+autonomous_loop+knowledge_expansion"
-                "+multimodal>"
-            )
-
-    _unified_bridge = _UnifiedBridge()
+    from .unified_bridge import UnifiedBridge
+    _unified_bridge = UnifiedBridge(
+        llm_router=get_llm_router(),
+        semantic_router=get_semantic_router(),
+        memory=get_vector_store(),
+        tool_registry=get_tool_registry(),
+        tracer=get_tracer_singleton(),
+        eval_suite=get_evals(),
+        console=get_console(),
+        self_learner=get_self_learner(),
+        meta_reasoner=get_meta_reasoner(),
+        context_manager=get_context_manager(),
+        knowledge_expansion=get_knowledge_expansion(),
+        multimodal=get_multimodal_processor(),
+        aios_bridge=get_aios_bridge(),
+    )
     return _unified_bridge
 
 
@@ -147,4 +259,16 @@ __all__ = [
     "get_knowledge_expansion",
     "get_multimodal_processor",
     "get_unified_bridge",
+    "get_llm_router",
+    "get_tracer_singleton",
+    "get_vector_store",
+    "get_tool_registry",
+    "get_streaming",
+    "get_evals",
+    "get_semantic_router",
+    "get_prompt_optimizer",
+    "get_sandbox",
+    "get_console",
+    "get_multi_agent",
+    "get_aios_bridge",
 ]
