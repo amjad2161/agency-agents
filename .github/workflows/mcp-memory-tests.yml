@@ -97,9 +97,11 @@ jobs:
           ./integrations/mcp-memory/setup.sh --help | grep -q -- "--advanced"
           ./integrations/mcp-memory/setup.sh --help | grep -q -- "--prewarm"
           ./integrations/mcp-memory/setup.sh --help | grep -q -- "--doctor"
+          ./integrations/mcp-memory/setup.sh --help | grep -q -- "--uninstall"
           ./integrations/claude-desktop/view-memory.sh --help | grep -q -- "--stats"
           ./integrations/claude-desktop/view-memory.sh --help | grep -q -- "--search"
           ./integrations/claude-desktop/view-memory.sh --help | grep -q -- "--backup"
+          ./integrations/claude-desktop/view-memory.sh --help | grep -q -- "--prune"
           echo "--help advertises new flags"
 
       - name: Smoke-test setup.sh (generic mode, no Node required)
@@ -235,3 +237,114 @@ jobs:
           else
             echo "  ✓ unknown option → non-zero exit"
           fi
+
+      - name: Smoke-test view-memory.sh --prune (dedupe + orphan removal)
+        run: |
+          # Memory with: duplicate Alice entity, duplicate observations,
+          # duplicate relation, and an orphan relation to non-existent "Ghost".
+          mkdir -p "$HOME/.claude-memory"
+          cat > "$HOME/.claude-memory/memory.json" <<'JSONL'
+          {"type":"entity","name":"Alice","entityType":"person","observations":["likes TS","likes TS","prefers vim"]}
+          {"type":"entity","name":"Alice","entityType":"person","observations":["likes TS","drinks coffee"]}
+          {"type":"entity","name":"Bob","entityType":"person","observations":["learning"]}
+          {"type":"relation","from":"Alice","to":"Bob","relationType":"colleague_of"}
+          {"type":"relation","from":"Alice","to":"Bob","relationType":"colleague_of"}
+          {"type":"relation","from":"Alice","to":"Ghost","relationType":"knows"}
+          JSONL
+          BEFORE_LINES=$(wc -l < "$HOME/.claude-memory/memory.json")
+
+          # Dry run must not modify the file
+          ./integrations/claude-desktop/view-memory.sh --prune --dry-run > /tmp/prune_dry.txt
+          grep -q "dry run" /tmp/prune_dry.txt
+          DRY_LINES=$(wc -l < "$HOME/.claude-memory/memory.json")
+          test "$DRY_LINES" -eq "$BEFORE_LINES"
+          echo "  ✓ --dry-run leaves file unchanged"
+
+          # Real prune
+          ./integrations/claude-desktop/view-memory.sh --prune
+          # Expect 2 entities + 1 relation = 3 lines
+          AFTER_LINES=$(wc -l < "$HOME/.claude-memory/memory.json")
+          test "$AFTER_LINES" -eq 3
+          echo "  ✓ pruned 6 → 3 lines"
+
+          # Pre-prune backup must exist
+          ls "$HOME/.claude-memory/backups/"memory-pre-prune-*.json >/dev/null
+          echo "  ✓ pre-prune backup created"
+
+          # The orphan relation to Ghost must be gone, and Alice merged
+          node - <<'EOF'
+          const fs = require('fs');
+          const lines = fs.readFileSync(process.env.HOME + '/.claude-memory/memory.json', 'utf8')
+            .split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const entities = lines.filter(o => o.type === 'entity');
+          const relations = lines.filter(o => o.type === 'relation');
+          if (entities.length !== 2) throw new Error('expected 2 entities, got ' + entities.length);
+          if (relations.length !== 1) throw new Error('expected 1 relation, got ' + relations.length);
+          if (relations.some(r => r.to === 'Ghost')) throw new Error('orphan relation not removed');
+          const alice = entities.find(e => e.name === 'Alice');
+          if (!alice) throw new Error('Alice missing');
+          // Observations should be merged + deduped: likes TS, prefers vim, drinks coffee
+          if (alice.observations.length !== 3) throw new Error('expected 3 obs, got ' + alice.observations.length);
+          if (new Set(alice.observations).size !== alice.observations.length) throw new Error('duplicate observations remain');
+          console.log('  ✓ semantic checks pass');
+          EOF
+
+      - name: Smoke-test setup.sh --uninstall (preserves user's other servers)
+        run: |
+          # Reinstall the advanced stack
+          ./integrations/mcp-memory/setup.sh --claude-desktop --advanced >/dev/null
+
+          # Add a user-defined server that must survive uninstall
+          node - <<'EOF'
+          const fs = require('fs');
+          const p = process.env.HOME + '/.config/Claude/claude_desktop_config.json';
+          const c = JSON.parse(fs.readFileSync(p, 'utf8'));
+          c.mcpServers['my-custom'] = { command: 'node', args: ['/x.js'] };
+          fs.writeFileSync(p, JSON.stringify(c, null, 2));
+          EOF
+
+          # Uninstall just memory
+          ./integrations/mcp-memory/setup.sh --uninstall
+          node - <<'EOF'
+          const fs = require('fs');
+          const c = JSON.parse(fs.readFileSync(process.env.HOME + '/.config/Claude/claude_desktop_config.json','utf8'));
+          if (c.mcpServers.memory) throw new Error('memory should be gone');
+          for (const k of ['sequential-thinking','filesystem','puppeteer','everything','my-custom']) {
+            if (!c.mcpServers[k]) throw new Error('lost ' + k);
+          }
+          console.log('  ✓ memory removed; advanced stack and my-custom preserved');
+          EOF
+
+          # Uninstall the full advanced stack
+          ./integrations/mcp-memory/setup.sh --uninstall --advanced
+          node - <<'EOF'
+          const fs = require('fs');
+          const c = JSON.parse(fs.readFileSync(process.env.HOME + '/.config/Claude/claude_desktop_config.json','utf8'));
+          for (const k of ['memory','sequential-thinking','filesystem','puppeteer','everything']) {
+            if (c.mcpServers[k]) throw new Error(k + ' should be gone');
+          }
+          if (!c.mcpServers['my-custom']) throw new Error('my-custom must be preserved');
+          if (Object.keys(c.mcpServers).length !== 1) throw new Error('expected exactly 1 remaining');
+          console.log('  ✓ full stack removed; my-custom preserved');
+          EOF
+
+          # Backup files must exist
+          ls "$HOME/.config/Claude/"claude_desktop_config.json.bak.* >/dev/null
+          echo "  ✓ pre-uninstall backups present"
+
+          # Round-trip: install → uninstall → install must be idempotent
+          ./integrations/mcp-memory/setup.sh --claude-desktop >/dev/null
+          ./integrations/mcp-memory/setup.sh --uninstall >/dev/null
+          ./integrations/mcp-memory/setup.sh --claude-desktop >/dev/null
+          node - <<'EOF'
+          const fs = require('fs');
+          const c = JSON.parse(fs.readFileSync(process.env.HOME + '/.config/Claude/claude_desktop_config.json','utf8'));
+          if (!c.mcpServers.memory) throw new Error('memory missing after re-install');
+          if (!c.mcpServers['my-custom']) throw new Error('my-custom lost across round-trip');
+          console.log('  ✓ install→uninstall→install round-trip idempotent');
+          EOF
+
+          # Uninstall when no config exists must succeed cleanly
+          rm -rf "$HOME/.config/Claude"
+          ./integrations/mcp-memory/setup.sh --uninstall
+          echo "  ✓ uninstall with no config → exit 0"

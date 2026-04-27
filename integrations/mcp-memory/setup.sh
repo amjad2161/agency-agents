@@ -19,6 +19,7 @@ CLAUDE_DESKTOP=false
 ADVANCED=false
 PREWARM=false
 DOCTOR=false
+UNINSTALL=false
 
 for arg in "$@"; do
   case "$arg" in
@@ -26,8 +27,9 @@ for arg in "$@"; do
     --advanced)       ADVANCED=true ;;
     --prewarm)        PREWARM=true ;;
     --doctor)         DOCTOR=true ;;
+    --uninstall)      UNINSTALL=true ;;
     -h|--help)
-      echo "Usage: $0 [--claude-desktop] [--advanced] [--prewarm] [--doctor]"
+      echo "Usage: $0 [--claude-desktop] [--advanced] [--prewarm] [--doctor] [--uninstall]"
       echo ""
       echo "  --claude-desktop   Patch the Claude Desktop config file with the memory server."
       echo "                     Config path is detected automatically per OS."
@@ -36,6 +38,9 @@ for arg in "$@"; do
       echo "  --prewarm          Pre-download MCP server packages so Claude Desktop boots"
       echo "                     instantly the first time. Speeds up cold starts."
       echo "  --doctor           Run a health check against your current setup and exit."
+      echo "  --uninstall        Remove the memory server from Claude Desktop config. With"
+      echo "                     --advanced, also remove the full Super-Brain stack. Other"
+      echo "                     mcpServers entries are preserved."
       exit 0
       ;;
   esac
@@ -230,6 +235,74 @@ NODEEOF
     echo "❌ One or more checks failed — see above."
   fi
   exit $STATUS
+fi
+
+# ---------------------------------------------------------------------------
+# 3c. --uninstall: remove memory (and optionally the Super-Brain stack)
+# ---------------------------------------------------------------------------
+
+if [ "$UNINSTALL" = true ]; then
+  CONFIG_FILE="$(_claude_desktop_config_path)"
+  if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Nothing to uninstall — no Claude Desktop config at:"
+    echo "  $CONFIG_FILE"
+    exit 0
+  fi
+
+  # Take a timestamped backup of the config before mutating it
+  TS=$(date -u +"%Y%m%dT%H%M%SZ")
+  BACKUP="$CONFIG_FILE.bak.$TS"
+  cp "$CONFIG_FILE" "$BACKUP"
+  echo "Backed up config → $BACKUP"
+
+  # Decide which servers to remove
+  if [ "$ADVANCED" = true ]; then
+    REMOVE_KEYS='["memory","sequential-thinking","filesystem","puppeteer","everything"]'
+    echo "Removing Super-Brain stack (memory, sequential-thinking, filesystem, puppeteer, everything)..."
+  else
+    REMOVE_KEYS='["memory"]'
+    echo "Removing memory server..."
+  fi
+
+  CONFIG_FILE="$CONFIG_FILE" REMOVE_KEYS="$REMOVE_KEYS" node - <<'NODEEOF'
+const fs = require('fs');
+const cfgPath = process.env.CONFIG_FILE;
+const remove = JSON.parse(process.env.REMOVE_KEYS);
+let cfg;
+try {
+  cfg = JSON.parse(fs.readFileSync(cfgPath,'utf8'));
+} catch (e) {
+  console.error('Config is not valid JSON; aborting uninstall to avoid data loss.');
+  console.error(e.message);
+  process.exit(1);
+}
+if (!cfg || typeof cfg !== 'object' || !cfg.mcpServers) {
+  console.log('No mcpServers section — nothing to do.');
+  process.exit(0);
+}
+const before = Object.keys(cfg.mcpServers).length;
+const removed = [];
+for (const k of remove) {
+  if (Object.prototype.hasOwnProperty.call(cfg.mcpServers, k)) {
+    delete cfg.mcpServers[k];
+    removed.push(k);
+  }
+}
+// Preserve all other entries; if mcpServers is now empty, leave it as {}
+fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
+const after = Object.keys(cfg.mcpServers).length;
+if (!removed.length) {
+  console.log('  (no matching servers were configured)');
+} else {
+  console.log('  ✓ removed: ' + removed.join(', '));
+}
+console.log('  ' + before + ' → ' + after + ' server(s) remain in config');
+NODEEOF
+
+  echo ""
+  echo "✅ Uninstall complete. Restart Claude Desktop to pick up the change."
+  echo "   To restore: cp \"$BACKUP\" \"$CONFIG_FILE\""
+  exit 0
 fi
 
 # ---------------------------------------------------------------------------

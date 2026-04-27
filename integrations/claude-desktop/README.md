@@ -119,6 +119,32 @@ Diagnose your install in one command:
 
 Verifies Node.js version, npm reachability, config file presence + JSON validity, lists configured MCP servers, flags the [PyPI-via-npx footgun](#-python-add-ons-uvx), and validates the memory file's JSONL format. Exits non-zero when anything is wrong, so it's safe to wire into your own scripts or CI.
 
+### 🧹 Maintenance: prune duplicates & orphans
+
+Memory grows over time. `--prune` deduplicates entities (merging their observations), deduplicates relations on (from, to, type), and drops relations that point at non-existent entities. A timestamped backup is taken automatically before any write.
+
+```bash
+# Preview what would change (no writes)
+./integrations/claude-desktop/view-memory.sh --prune --dry-run
+
+# Apply (auto-creates ~/.claude-memory/backups/memory-pre-prune-<UTC>.json first)
+./integrations/claude-desktop/view-memory.sh --prune
+```
+
+### 🗑 Uninstall
+
+Cleanly remove the integration. Other `mcpServers` entries are preserved; a timestamped `.bak.<UTC>` of the config is taken first.
+
+```bash
+# Remove just the memory server
+./integrations/mcp-memory/setup.sh --uninstall
+
+# Remove the full Super-Brain stack
+./integrations/mcp-memory/setup.sh --uninstall --advanced
+```
+
+The memory file itself (`~/.claude-memory/memory.json`) is left untouched — delete it manually if you want to forget everything Claude has learned.
+
 ---
 
 ## 📦 Manual Configuration

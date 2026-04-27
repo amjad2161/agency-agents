@@ -18,10 +18,12 @@ HTML="$SCRIPT_DIR/brain-visualizer.html"
 MEM="${MEMORY_FILE_PATH:-$HOME/.claude-memory/memory.json}"
 MEM="${MEM/#~/$HOME}"
 
+_utc_timestamp() { date -u +"%Y%m%dT%H%M%SZ"; }
+
 usage() {
   cat <<'USAGE'
 view-memory.sh -- Inspect Claude's memory: open the 3D Brain Visualizer,
-or query / back up the memory file from the command line.
+or query / back up / prune the memory file from the command line.
 
 Usage:
   view-memory.sh                # open visualizer (default)
@@ -29,6 +31,9 @@ Usage:
   view-memory.sh --types        # list entity types with counts
   view-memory.sh --search QUERY # text search across memory
   view-memory.sh --backup       # timestamped backup copy
+  view-memory.sh --prune        # dedupe entities/observations/relations,
+                                # drop orphan relations (auto-backs up first;
+                                # add --dry-run to preview)
   view-memory.sh --help
 
 Memory path is taken from $MEMORY_FILE_PATH or defaults to
@@ -176,11 +181,113 @@ case "${1:-}" in
     fi
     BACKUP_DIR="$(dirname "$MEM")/backups"
     mkdir -p "$BACKUP_DIR"
-    TS=$(date -u +"%Y%m%dT%H%M%SZ")
+    TS=$(_utc_timestamp)
     DEST="$BACKUP_DIR/memory-$TS.json"
     cp "$MEM" "$DEST"
     SIZE=$(wc -c < "$DEST" | tr -d ' ')
     echo "✓ Backed up $SIZE bytes → $DEST"
+    exit 0
+    ;;
+  --prune)
+    if [ ! -f "$MEM" ]; then
+      echo "Memory file not found: $MEM" >&2
+      exit 2
+    fi
+    DRY_RUN=false
+    if [ "${2:-}" = "--dry-run" ]; then
+      DRY_RUN=true
+      echo "(dry run — no changes will be written)"
+    fi
+    # Always back up before mutating
+    if [ "$DRY_RUN" = false ]; then
+      BACKUP_DIR="$(dirname "$MEM")/backups"
+      mkdir -p "$BACKUP_DIR"
+      TS=$(_utc_timestamp)
+      DEST="$BACKUP_DIR/memory-pre-prune-$TS.json"
+      cp "$MEM" "$DEST"
+      echo "✓ Pre-prune backup → $DEST"
+    fi
+    MEM_PATH="$MEM" DRY="$([ "$DRY_RUN" = true ] && echo 1 || echo 0)" node - <<'NODEEOF'
+const fs = require('fs');
+const path = process.env.MEM_PATH;
+const dry = process.env.DRY === '1';
+const text = fs.readFileSync(path, 'utf8');
+const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+
+const entitiesByName = new Map();
+const relations = [];
+let bad = 0;
+let rawEntityLines = 0;
+for (const l of lines) {
+  try {
+    const o = JSON.parse(l);
+    if (o.type === 'entity') {
+      rawEntityLines++;
+      // Last write wins on duplicate names; merge observations
+      if (entitiesByName.has(o.name)) {
+        const prev = entitiesByName.get(o.name);
+        const merged = new Set([...(prev.observations || []), ...(o.observations || [])]);
+        prev.observations = [...merged];
+        prev.entityType = o.entityType || prev.entityType;
+      } else {
+        o.observations = Array.isArray(o.observations) ? [...new Set(o.observations)] : [];
+        entitiesByName.set(o.name, o);
+      }
+    } else if (o.type === 'relation') {
+      relations.push(o);
+    }
+  } catch (_) { bad++; }
+}
+
+// Stats before
+const beforeEntities = entitiesByName.size;
+let beforeObs = 0;
+for (const e of entitiesByName.values()) beforeObs += (e.observations || []).length;
+const beforeRelations = relations.length;
+
+// Dedupe relations on (from, to, relationType)
+const relKey = r => r.from + '\u0000' + r.to + '\u0000' + r.relationType;
+const uniqueRels = new Map();
+for (const r of relations) uniqueRels.set(relKey(r), r);
+
+// Drop relations that point at unknown entities (orphans)
+const validRels = [];
+let orphans = 0;
+for (const r of uniqueRels.values()) {
+  if (entitiesByName.has(r.from) && entitiesByName.has(r.to)) {
+    validRels.push(r);
+  } else {
+    orphans++;
+  }
+}
+
+// Recompute observation count after dedupe (already deduped on insert/merge)
+let afterObs = 0;
+for (const e of entitiesByName.values()) afterObs += (e.observations || []).length;
+
+console.log('');
+console.log('🧹 Prune report');
+console.log('  Entities:     ' + beforeEntities + ' → ' + entitiesByName.size +
+            ' (deduped ' + Math.max(0, rawEntityLines - entitiesByName.size) + ')');
+console.log('  Observations: ' + beforeObs + ' → ' + afterObs);
+console.log('  Relations:    ' + beforeRelations + ' → ' + validRels.length +
+            ' (deduped ' + (beforeRelations - uniqueRels.size) + ', orphans ' + orphans + ')');
+if (bad) console.log('  Bad lines:    ' + bad + ' (will be dropped)');
+
+if (dry) {
+  console.log('');
+  console.log('(dry run — no file written)');
+  process.exit(0);
+}
+
+// Write back
+const out = [];
+for (const e of entitiesByName.values()) out.push(JSON.stringify(e));
+for (const r of validRels) out.push(JSON.stringify(r));
+fs.writeFileSync(path, out.join('\n') + '\n');
+console.log('');
+console.log('✓ Wrote ' + out.length + ' lines → ' + path);
+NODEEOF
     exit 0
     ;;
   ""|--open)
