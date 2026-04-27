@@ -12,20 +12,44 @@ By default, agents in The Agency start every session from scratch. Context is pa
 
 ## Setup
 
-You need an MCP server that provides memory tools: `remember`, `recall`, `rollback`, and `search`. Add it to your MCP client config (Claude Code, Cursor, etc.):
+### Claude Desktop (recommended for personal use)
+
+See the dedicated **[Claude Desktop Brain / Memory guide](../claude-desktop/README.md)** for step-by-step instructions and a ready-to-copy `claude_desktop_config.json`.
+
+Quick start:
+
+```bash
+# Auto-detects your OS and patches the Claude Desktop config
+./integrations/mcp-memory/setup.sh --claude-desktop
+```
+
+### Claude Code / Cursor / other MCP clients
+
+Add the memory server to your MCP client config:
 
 ```json
 {
   "mcpServers": {
     "memory": {
-      "command": "your-mcp-memory-server",
-      "args": []
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {
+        "MEMORY_FILE_PATH": "~/.claude-memory/memory.json"
+      }
     }
   }
 }
 ```
 
-Any MCP server that exposes `remember`, `recall`, `rollback`, and `search` tools will work. Check the [MCP ecosystem](https://modelcontextprotocol.io) for available implementations.
+| Client | Config path |
+|--------|------------|
+| Claude Code | `~/.claude/mcp.json` or project `.mcp.json` |
+| Cursor | `~/.cursor/mcp.json` or project `.cursor/mcp.json` |
+| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Claude Desktop (Linux) | `~/.config/Claude/claude_desktop_config.json` |
+| Claude Desktop (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` |
+
+Memory data is stored locally in `~/.claude-memory/memory.json` by default. Nothing leaves your machine.
 
 ## How to Add Memory to Any Agent
 

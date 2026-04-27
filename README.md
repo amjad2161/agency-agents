@@ -590,6 +590,44 @@ Each agent is designed with:
 
 ---
 
+## 🧠 Claude Desktop Brain / Memory
+
+Give Claude Desktop a **persistent local memory** that stores your project context, preferences, and decisions across every conversation — dramatically reducing repeated explanations and token usage.
+
+```bash
+# One-command setup (auto-detects macOS / Windows / Linux)
+./integrations/mcp-memory/setup.sh --claude-desktop
+```
+
+Or add it manually to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {
+        "MEMORY_FILE_PATH": "~/.claude-memory/memory.json"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop, then tell it what to remember:
+
+```
+Remember that I prefer TypeScript and my current project uses React 18 + Node 20.
+```
+
+✅ Memory is stored **100% locally** — nothing sent to any cloud service.
+
+> 📖 Full guide → [integrations/claude-desktop/README.md](integrations/claude-desktop/README.md)
+> 📄 Ready-to-copy config → [integrations/claude-desktop/claude_desktop_config.json](integrations/claude-desktop/claude_desktop_config.json)
+
+---
+
 ## 🔌 Multi-Tool Integrations
 
 The Agency works natively with Claude Code, and ships conversion + install scripts so you can use the same agents across every major agentic coding tool.

@@ -1,0 +1,81 @@
+name: MCP Memory Integration Tests
+
+on:
+  pull_request:
+    paths:
+      - "integrations/mcp-memory/**"
+      - "integrations/claude-desktop/**"
+      - ".github/workflows/mcp-memory-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "integrations/mcp-memory/**"
+      - "integrations/claude-desktop/**"
+      - ".github/workflows/mcp-memory-tests.yml"
+
+jobs:
+  validate:
+    name: Validate MCP memory integration
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON config files
+        run: |
+          echo "Checking integrations/claude-desktop/claude_desktop_config.json..."
+          node -e "JSON.parse(require('fs').readFileSync('integrations/claude-desktop/claude_desktop_config.json','utf8')); console.log('Valid JSON');"
+
+      - name: Check required keys in claude_desktop_config.json
+        run: |
+          node - <<'EOF'
+          const cfg = JSON.parse(require('fs').readFileSync('integrations/claude-desktop/claude_desktop_config.json','utf8'));
+          if (!cfg.mcpServers) throw new Error('Missing mcpServers key');
+          if (!cfg.mcpServers.memory) throw new Error('Missing mcpServers.memory key');
+          if (!cfg.mcpServers.memory.command) throw new Error('Missing command');
+          if (!Array.isArray(cfg.mcpServers.memory.args)) throw new Error('args must be an array');
+          console.log('Config structure OK');
+          EOF
+
+      - name: Check setup.sh is executable and has no syntax errors
+        run: |
+          chmod +x integrations/mcp-memory/setup.sh
+          bash -n integrations/mcp-memory/setup.sh
+          echo "setup.sh syntax OK"
+
+      - name: Smoke-test setup.sh (generic mode, no Node required)
+        run: |
+          # In generic mode the script only echoes information and checks for config files.
+          # Node IS available on the runner, so we just verify it exits 0.
+          ./integrations/mcp-memory/setup.sh
+          echo "setup.sh generic mode OK"
+
+      - name: Smoke-test setup.sh --claude-desktop (Linux path)
+        run: |
+          # Runs the Claude Desktop branch on Linux; creates ~/.config/Claude/claude_desktop_config.json
+          ./integrations/mcp-memory/setup.sh --claude-desktop
+          echo "setup.sh --claude-desktop OK"
+          echo "--- Generated config ---"
+          cat "$HOME/.config/Claude/claude_desktop_config.json"
+          echo ""
+          # Verify it's valid JSON with the expected structure
+          node - <<'EOF'
+          const path = process.env.HOME + '/.config/Claude/claude_desktop_config.json';
+          const cfg = JSON.parse(require('fs').readFileSync(path, 'utf8'));
+          if (!cfg.mcpServers || !cfg.mcpServers.memory) throw new Error('memory server missing from generated config');
+          console.log('Generated config is valid.');
+          EOF
+
+      - name: Smoke-test idempotency (re-run should not duplicate the entry)
+        run: |
+          # Second run should detect the entry and skip patching
+          ./integrations/mcp-memory/setup.sh --claude-desktop
+          node - <<'EOF'
+          const path = process.env.HOME + '/.config/Claude/claude_desktop_config.json';
+          const cfg = JSON.parse(require('fs').readFileSync(path, 'utf8'));
+          const keys = Object.keys(cfg.mcpServers);
+          if (keys.filter(k => k === 'memory').length !== 1) throw new Error('memory key duplicated');
+          console.log('Idempotency check passed.');
+          EOF
