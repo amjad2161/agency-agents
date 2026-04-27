@@ -8,7 +8,7 @@ drag in the whole runtime.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 __version__ = "0.1.0"
 
@@ -37,6 +37,14 @@ if TYPE_CHECKING:
     from .tui import JarvisConsole
     from .unified_bridge import UnifiedBridge
     from .vector_store import AgentMemory
+    from .experts.expert_chemistry import ChemistryExpert
+    from .experts.expert_clinician import ClinicianExpert
+    from .experts.expert_contracts_law import ContractsLawExpert
+    from .experts.expert_economics import EconomicsExpert
+    from .experts.expert_mathematics import MathematicsExpert
+    from .experts.expert_neuroscience import NeuroscienceExpert
+    from .experts.expert_physics import PhysicsExpert
+    from .experts.expert_psychology_cbt import PsychologyCBTExpert
 
 
 # ---- Singletons -----------------------------------------------------------
@@ -225,6 +233,62 @@ def get_aios_bridge() -> "AIOSBridge":
     return _aios_bridge
 
 
+# ---- Domain expert getters (each module owns its own singleton) ----
+
+def get_clinician() -> "ClinicianExpert":
+    from .experts.expert_clinician import get_expert
+    return get_expert()
+
+
+def get_contracts_law() -> "ContractsLawExpert":
+    from .experts.expert_contracts_law import get_expert
+    return get_expert()
+
+
+def get_mathematics() -> "MathematicsExpert":
+    from .experts.expert_mathematics import get_expert
+    return get_expert()
+
+
+def get_physics() -> "PhysicsExpert":
+    from .experts.expert_physics import get_expert
+    return get_expert()
+
+
+def get_psychology_cbt() -> "PsychologyCBTExpert":
+    from .experts.expert_psychology_cbt import get_expert
+    return get_expert()
+
+
+def get_economics() -> "EconomicsExpert":
+    from .experts.expert_economics import get_expert
+    return get_expert()
+
+
+def get_chemistry() -> "ChemistryExpert":
+    from .experts.expert_chemistry import get_expert
+    return get_expert()
+
+
+def get_neuroscience() -> "NeuroscienceExpert":
+    from .experts.expert_neuroscience import get_expert
+    return get_expert()
+
+
+def get_experts_dict() -> dict[str, Any]:
+    """Convenience: all 8 domain experts in a dict keyed by DOMAIN."""
+    return {
+        "clinician": get_clinician(),
+        "contracts_law": get_contracts_law(),
+        "mathematics": get_mathematics(),
+        "physics": get_physics(),
+        "psychology_cbt": get_psychology_cbt(),
+        "economics": get_economics(),
+        "chemistry": get_chemistry(),
+        "neuroscience": get_neuroscience(),
+    }
+
+
 def get_unified_bridge() -> "UnifiedBridge":
     """Fully wired bridge spanning every JARVIS subsystem."""
     global _unified_bridge
@@ -245,6 +309,7 @@ def get_unified_bridge() -> "UnifiedBridge":
         knowledge_expansion=get_knowledge_expansion(),
         multimodal=get_multimodal_processor(),
         aios_bridge=get_aios_bridge(),
+        experts=get_experts_dict(),
     )
     return _unified_bridge
 
@@ -271,4 +336,13 @@ __all__ = [
     "get_console",
     "get_multi_agent",
     "get_aios_bridge",
+    "get_clinician",
+    "get_contracts_law",
+    "get_mathematics",
+    "get_physics",
+    "get_psychology_cbt",
+    "get_economics",
+    "get_chemistry",
+    "get_neuroscience",
+    "get_experts_dict",
 ]

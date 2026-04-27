@@ -63,6 +63,7 @@ class UnifiedBridge:
         knowledge_expansion: Any | None = None,
         multimodal: Any | None = None,
         aios_bridge: AIOSBridge | None = None,
+        experts: dict[str, Any] | None = None,
         # Backwards-compat alias from the older bridge ctor.
         tools: ToolRegistry | None = None,
     ) -> None:
@@ -99,6 +100,24 @@ class UnifiedBridge:
             multimodal if multimodal is not None else self._lazy_multimodal()
         )
         self.aios_bridge = aios_bridge if aios_bridge is not None else AIOSBridge()
+        self.experts: dict[str, Any] = (
+            experts if experts is not None else self._lazy_experts()
+        )
+
+    # ------------------------------------------------------------------
+    def route_expert(self, request: str) -> tuple[str, float]:
+        """Pick best expert for a request via can_handle() scores."""
+        best_name = ""
+        best_score = 0.0
+        for name, expert in self.experts.items():
+            try:
+                score = float(expert.can_handle(request))
+            except Exception:
+                score = 0.0
+            if score > best_score:
+                best_score = score
+                best_name = name
+        return best_name, best_score
 
     # ------------------------------------------------------------------
     def process(
@@ -117,6 +136,37 @@ class UnifiedBridge:
                 domain, confidence = "unknown", 0.0
             span.metadata["domain"] = domain
             span.metadata["confidence"] = confidence
+
+            # 1b. Domain-expert routing. If a registered expert matches
+            # the request (or its DOMAIN matches the semantic route)
+            # invoke its analyze() and surface the result alongside the
+            # LLM response.
+            expert_name = ""
+            expert_confidence = 0.0
+            expert_result: Any = None
+            if self.experts:
+                # First try exact domain match against semantic route.
+                for name, expert in self.experts.items():
+                    if getattr(expert, "DOMAIN", "") == domain:
+                        expert_name = name
+                        try:
+                            expert_confidence = float(expert.can_handle(request))
+                        except Exception:
+                            expert_confidence = 0.0
+                        break
+                # Otherwise pick best by can_handle().
+                if not expert_name:
+                    expert_name, expert_confidence = self.route_expert(request)
+                if expert_name and expert_confidence > 0.0:
+                    try:
+                        expert_result = self.experts[expert_name].analyze(
+                            request, ctx,
+                        )
+                    except Exception as exc:
+                        log.warning("expert %s failed: %s", expert_name, exc)
+                        expert_result = None
+            span.metadata["expert"] = expert_name
+            span.metadata["expert_confidence"] = expert_confidence
 
             # 2. Memory recall.
             try:
@@ -212,6 +262,9 @@ class UnifiedBridge:
                 "recall_count": len(recalls),
                 "tool_outputs": tool_outputs,
                 "tool_result": next(iter(tool_outputs.values()), None),
+                "expert": expert_name or None,
+                "expert_confidence": expert_confidence,
+                "expert_result": expert_result,
             }
 
     # ------------------------------------------------------------------
@@ -256,6 +309,15 @@ class UnifiedBridge:
                 f"agents={len(self.aios_bridge.list_agents())}",
             ),
         ]
+        for name, expert in self.experts.items():
+            try:
+                expert_status = expert.status()
+                healthy = bool(expert_status.get("ok", False))
+                detail = f"v{expert_status.get('version', '?')}"
+            except Exception as exc:
+                healthy = False
+                detail = f"err: {exc}"
+            checks.append(_Status(f"expert.{name}", healthy, detail))
         # Flat keys preserve the legacy ``ub.status()['llm_router']``
         # access pattern used by older callers and tests.
         flat: dict[str, Any] = {
@@ -275,6 +337,12 @@ class UnifiedBridge:
             "self_learner": self.self_learner is not None,
             "meta_reasoner": self.meta_reasoner is not None,
             "context_manager": self.context_manager is not None,
+            "experts": {
+                name: (
+                    expert.status() if hasattr(expert, "status") else {"ok": False}
+                )
+                for name, expert in self.experts.items()
+            },
         }
         flat["ok"] = all(c.healthy for c in checks)
         flat["subsystems"] = {
@@ -321,6 +389,35 @@ class UnifiedBridge:
         except Exception as exc:
             log.warning("multimodal unavailable: %s", exc)
             return None
+
+    @staticmethod
+    def _lazy_experts() -> dict[str, Any]:
+        """Build the eight domain expert singletons.
+
+        Each expert is independently optional — a single import failure
+        only excludes that expert from the dict, never the whole bridge.
+        """
+        loaders = (
+            ("clinician", "expert_clinician"),
+            ("contracts_law", "expert_contracts_law"),
+            ("mathematics", "expert_mathematics"),
+            ("physics", "expert_physics"),
+            ("psychology_cbt", "expert_psychology_cbt"),
+            ("economics", "expert_economics"),
+            ("chemistry", "expert_chemistry"),
+            ("neuroscience", "expert_neuroscience"),
+        )
+        out: dict[str, Any] = {}
+        for name, module_name in loaders:
+            try:
+                module = __import__(
+                    f"runtime.agency.experts.{module_name}",
+                    fromlist=["get_expert"],
+                )
+                out[name] = module.get_expert()
+            except Exception as exc:
+                log.warning("expert %s unavailable: %s", name, exc)
+        return out
 
 
 __all__ = ["UnifiedBridge"]
