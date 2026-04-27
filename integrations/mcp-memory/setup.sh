@@ -7,7 +7,7 @@
 #   ./integrations/mcp-memory/setup.sh --claude-desktop      # memory only
 #   ./integrations/mcp-memory/setup.sh --claude-desktop --advanced
 #                                                            # memory + sequential-thinking
-#                                                            # + filesystem + fetch + time
+#                                                            # + filesystem + puppeteer + everything
 #   ./integrations/mcp-memory/setup.sh --prewarm             # pre-download MCP servers
 #                                                            # for faster cold starts
 #
