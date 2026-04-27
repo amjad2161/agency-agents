@@ -1,173 +1,224 @@
-"""Capability evolver.
+"""Capability evolver — tracks JARVIS domain proficiency and suggests growth areas.
 
-Tracks per-domain success/failure rates and surfaces "weakest"
-domains so the agent can focus learning effort where it lags.
-
-Storage: JSON at `~/.agency/capabilities.json` (override via
-`AGENCY_CAPABILITIES_JSON`). One object per domain slug. Atomic
-writes via tmp + rename so a crashed process never leaves a partial
-file.
-
-A `proficiency_score` in [0, 1] is computed from:
-  - Success ratio (60%)
-  - Average confidence over recent outcomes (30%)
-  - Volume bonus (10%, saturating around 50 requests)
-
-Volume matters because a 100% success rate over 2 requests is less
-trustworthy than 90% over 200.
+Maintains a proficiency ledger per domain slug. Every interaction updates
+the score. Low-performing domains surface as improvement candidates.
 """
 
 from __future__ import annotations
 
 import json
-import os
+import threading
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Any
 
+from .logging import get_logger
 
-DEFAULT_CAPABILITIES_JSON = "capabilities.json"
+DEFAULT_PROFILE_PATH = Path.home() / ".jarvis" / "capability_profile.json"
 
-
-def capabilities_json_path() -> Path:
-    override = os.environ.get("AGENCY_CAPABILITIES_JSON")
-    if override:
-        return Path(override).expanduser()
-    return Path.home() / ".agency" / DEFAULT_CAPABILITIES_JSON
+log = get_logger()
 
 
 @dataclass
 class DomainProfile:
-    """Per-domain proficiency state. Mutable — counters tick over time."""
+    """Proficiency record for one JARVIS domain."""
 
     slug: str
     total_requests: int = 0
     successful: int = 0
     failed: int = 0
     avg_confidence: float = 0.0
-    proficiency_score: float = 0.0
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "DomainProfile":
-        return cls(
-            slug=d["slug"],
-            total_requests=int(d.get("total_requests", 0)),
-            successful=int(d.get("successful", 0)),
-            failed=int(d.get("failed", 0)),
-            avg_confidence=float(d.get("avg_confidence", 0.0)),
-            proficiency_score=float(d.get("proficiency_score", 0.0)),
-        )
-
-
-def _compute_proficiency(p: DomainProfile) -> float:
-    if p.total_requests == 0:
-        return 0.0
-    success_ratio = p.successful / p.total_requests
-    volume_bonus = min(1.0, p.total_requests / 50.0)
-    return round(
-        0.6 * success_ratio + 0.3 * p.avg_confidence + 0.1 * volume_bonus,
-        4,
+    last_updated: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+    growth_notes: list[str] = field(default_factory=list)
+
+    @property
+    def success_rate(self) -> float:
+        if self.total_requests == 0:
+            return 0.0
+        return self.successful / self.total_requests
+
+    @property
+    def proficiency_score(self) -> float:
+        """0–1 composite score: success_rate * confidence * recency bonus."""
+        if self.total_requests == 0:
+            return 0.0
+        base = self.success_rate * 0.6 + self.avg_confidence * 0.4
+        # Recency bonus: up to +0.1 for active domains (>10 requests)
+        bonus = min(0.1, self.total_requests / 100.0)
+        return min(1.0, base + bonus)
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["success_rate"] = self.success_rate
+        d["proficiency_score"] = self.proficiency_score
+        return d
 
 
 class CapabilityEvolver:
-    """Per-domain proficiency tracker with persistent state."""
+    """Tracks per-domain proficiency and drives continuous improvement.
 
-    def __init__(self, path: Path | None = None) -> None:
-        self.path = path or capabilities_json_path()
-        self._profiles: dict[str, DomainProfile] = {}
-        self._loaded = False
+    Usage::
 
-    def _ensure_loaded(self) -> None:
-        if self._loaded:
-            return
-        if self.path.is_file():
+        evolver = CapabilityEvolver()
+        evolver.record_outcome("jarvis-engineering", success=True, confidence=0.9)
+        weak = evolver.weakest_domains(n=3)
+        strong = evolver.strongest_domains(n=5)
+        report = evolver.growth_report()
+    """
+
+    def __init__(self, profile_path: Path | None = None) -> None:
+        self._path = Path(profile_path or DEFAULT_PROFILE_PATH)
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
+        self._profiles: dict[str, DomainProfile] | None = None
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def _load(self) -> dict[str, DomainProfile]:
+        if self._profiles is not None:
+            return self._profiles
+        profiles: dict[str, DomainProfile] = {}
+        if self._path.exists():
             try:
-                raw = json.loads(self.path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                raw = {}
-            for slug, body in (raw or {}).items():
-                try:
-                    self._profiles[slug] = DomainProfile.from_dict(body)
-                except (KeyError, TypeError, ValueError):
-                    continue
-        self._loaded = True
+                raw = json.loads(self._path.read_text(encoding="utf-8"))
+                for slug, data in raw.items():
+                    # Remove computed fields before reconstruction
+                    data.pop("success_rate", None)
+                    data.pop("proficiency_score", None)
+                    profiles[slug] = DomainProfile(**data)
+            except Exception as exc:
+                log.warning("capability_evolver: failed to load profile — %s", exc)
+        self._profiles = profiles
+        return profiles
 
     def _save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        body = {slug: p.to_dict() for slug, p in self._profiles.items()}
-        tmp.write_text(json.dumps(body, indent=2, sort_keys=True), encoding="utf-8")
-        tmp.replace(self.path)
+        profiles = self._load()
+        data = {slug: p.to_dict() for slug, p in profiles.items()}
+        self._path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
-    # ----- write side -----
+    # ------------------------------------------------------------------
+    # Core API
+    # ------------------------------------------------------------------
 
     def record_outcome(
-        self, slug: str, *, success: bool, confidence: float
+        self,
+        domain_slug: str,
+        success: bool,
+        confidence: float = 0.7,
+        note: str | None = None,
     ) -> DomainProfile:
-        """Update the profile for `slug`. Persists immediately so a
-        crash between calls doesn't lose the increment."""
-        if not 0.0 <= confidence <= 1.0:
-            raise ValueError(f"confidence must be in [0,1], got {confidence}")
-        self._ensure_loaded()
-        prof = self._profiles.get(slug) or DomainProfile(slug=slug)
-        prev_total = prof.total_requests
-        prof.total_requests += 1
-        if success:
-            prof.successful += 1
-        else:
-            prof.failed += 1
-        # Running mean: avg_n = (avg_(n-1)*(n-1) + new)/n
-        prof.avg_confidence = (
-            (prof.avg_confidence * prev_total) + confidence
-        ) / prof.total_requests
-        prof.proficiency_score = _compute_proficiency(prof)
-        self._profiles[slug] = prof
-        self._save()
-        return prof
+        """Update proficiency for *domain_slug* based on interaction outcome."""
+        with self._lock:
+            profiles = self._load()
+            if domain_slug not in profiles:
+                profiles[domain_slug] = DomainProfile(slug=domain_slug)
 
-    # ----- read side -----
+            p = profiles[domain_slug]
+            p.total_requests += 1
+            if success:
+                p.successful += 1
+            else:
+                p.failed += 1
 
-    def get(self, slug: str) -> DomainProfile | None:
-        self._ensure_loaded()
-        return self._profiles.get(slug)
+            # Exponential moving average for confidence
+            alpha = 0.2
+            p.avg_confidence = alpha * confidence + (1 - alpha) * p.avg_confidence
+
+            p.last_updated = datetime.now(timezone.utc).isoformat()
+            if note:
+                p.growth_notes.append(f"[{p.last_updated[:10]}] {note}")
+                p.growth_notes = p.growth_notes[-20:]  # keep last 20
+
+            self._save()
+            log.debug(
+                "capability_evolver: updated %s — score=%.2f",
+                domain_slug,
+                p.proficiency_score,
+            )
+            return p
+
+    def get_profile(self, domain_slug: str) -> DomainProfile | None:
+        return self._load().get(domain_slug)
 
     def all_profiles(self) -> list[DomainProfile]:
-        self._ensure_loaded()
-        return list(self._profiles.values())
+        return list(self._load().values())
 
     def weakest_domains(self, n: int = 5) -> list[DomainProfile]:
-        """Return the `n` lowest-proficiency domains. Domains with no
-        data are excluded — you can't improve what you've never tried."""
-        self._ensure_loaded()
-        seen = [p for p in self._profiles.values() if p.total_requests > 0]
-        return sorted(seen, key=lambda p: p.proficiency_score)[:n]
+        """Return domains with lowest proficiency score (minimum 3 requests)."""
+        profiles = [p for p in self._load().values() if p.total_requests >= 3]
+        return sorted(profiles, key=lambda p: p.proficiency_score)[:n]
 
-    def growth_report(self) -> dict:
-        """Aggregate snapshot across all tracked domains."""
-        self._ensure_loaded()
-        profiles = list(self._profiles.values())
+    def strongest_domains(self, n: int = 5) -> list[DomainProfile]:
+        profiles = list(self._load().values())
+        return sorted(profiles, key=lambda p: p.proficiency_score, reverse=True)[:n]
+
+    def untrained_domains(self, all_slugs: list[str]) -> list[str]:
+        """Return slugs from *all_slugs* that have never been exercised."""
+        known = set(self._load().keys())
+        return [s for s in all_slugs if s not in known]
+
+    def suggest_improvement_targets(self, all_slugs: list[str]) -> list[str]:
+        """Return slugs that most need attention: untrained + weakest."""
+        untrained = self.untrained_domains(all_slugs)
+        weak = [p.slug for p in self.weakest_domains(n=5)]
+        # Deduplicate, untrained first
+        seen: set[str] = set()
+        result: list[str] = []
+        for slug in untrained + weak:
+            if slug not in seen:
+                seen.add(slug)
+                result.append(slug)
+        return result
+
+    def growth_report(self) -> str:
+        """Markdown report of capability landscape."""
+        profiles = self._load()
         if not profiles:
-            return {
-                "domains_tracked": 0,
-                "total_requests": 0,
-                "avg_proficiency": 0.0,
-                "weakest": [],
-                "strongest": [],
-            }
-        total = sum(p.total_requests for p in profiles)
-        avg = sum(p.proficiency_score for p in profiles) / len(profiles)
-        weakest = self.weakest_domains(3)
-        strongest = sorted(
-            profiles, key=lambda p: p.proficiency_score, reverse=True
-        )[:3]
-        return {
-            "domains_tracked": len(profiles),
-            "total_requests": total,
-            "avg_proficiency": round(avg, 4),
-            "weakest": [p.slug for p in weakest],
-            "strongest": [p.slug for p in strongest],
-        }
+            return "No capability data yet. Start routing requests to build the profile."
+
+        total = len(profiles)
+        total_requests = sum(p.total_requests for p in profiles.values())
+        avg_score = (
+            sum(p.proficiency_score for p in profiles.values()) / total
+            if total else 0.0
+        )
+        strong = self.strongest_domains(n=3)
+        weak = self.weakest_domains(n=3)
+
+        lines = [
+            "# JARVIS Capability Growth Report",
+            "",
+            f"**Domains tracked:** {total}",
+            f"**Total interactions:** {total_requests}",
+            f"**Average proficiency:** {avg_score:.1%}",
+            "",
+            "## Top Domains",
+            *[
+                f"- `{p.slug}`: {p.proficiency_score:.0%} "
+                f"({p.total_requests} requests, {p.success_rate:.0%} success)"
+                for p in strong
+            ],
+            "",
+            "## Domains Needing Attention",
+            *[
+                f"- `{p.slug}`: {p.proficiency_score:.0%} "
+                f"({p.total_requests} requests, {p.success_rate:.0%} success)"
+                for p in weak
+            ],
+        ]
+        return "\n".join(lines)
+
+    def reset_domain(self, domain_slug: str) -> bool:
+        """Reset proficiency for a domain. Returns True if it existed."""
+        with self._lock:
+            profiles = self._load()
+            if domain_slug in profiles:
+                del profiles[domain_slug]
+                self._save()
+                return True
+            return False

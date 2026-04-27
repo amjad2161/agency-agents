@@ -1,188 +1,314 @@
-"""Self-learning engine.
+"""Self-learning engine — extracts lessons from every interaction and improves JARVIS over time.
 
-Records interactions across sessions and surfaces high-confidence
-insights as routing corrections. Distinct from `lessons.py` (a free-text
-journal): this is structured, queryable, and machine-edited.
-
-Each `Lesson` captures one observation:
-  - When it happened
-  - What context produced it
-  - What outcome resulted (success / failure / partial)
-  - The insight learned
-  - Which domain slugs the insight applies to
-  - Confidence in the insight
-  - An optional routing correction the engine should apply
-
-Storage: JSONL at `~/.agency/lessons.jsonl` (override via
-`AGENCY_LESSONS_JSONL`). One record per line — append-only, easy to
-diff, easy to grep.
-
-The engine is intentionally not threaded: callers serialize writes via
-their own session loop. `record_interaction()` is O(1) (single append),
-`load_lessons()` is O(n) (full file read), `top_insights()` is
-O(n log n) (sort by confidence × recency).
+This module implements continuous learning without retraining:
+- Records lessons extracted from interactions
+- Tracks routing accuracy and suggests corrections
+- Builds a growing knowledge base of what works
+- Exports capability snapshots for backup/restore
 """
 
 from __future__ import annotations
 
 import json
-import os
-import time
+import re
+import threading
 from dataclasses import asdict, dataclass, field
+from datetime import timezone
+from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING, Any
+
+from .logging import get_logger
+
+if TYPE_CHECKING:
+    from .jarvis_brain import SupremeJarvisBrain
+
+DEFAULT_LESSONS_PATH = Path.home() / ".jarvis" / "learned_lessons.jsonl"
+
+log = get_logger()
 
 
-DEFAULT_LESSONS_JSONL = "lessons.jsonl"
-
-
-def lessons_jsonl_path() -> Path:
-    """Resolve the lessons-jsonl location. May not exist yet."""
-    override = os.environ.get("AGENCY_LESSONS_JSONL")
-    if override:
-        return Path(override).expanduser()
-    return Path.home() / ".agency" / DEFAULT_LESSONS_JSONL
-
-
-@dataclass(frozen=True)
+@dataclass
 class Lesson:
-    """One structured observation. Immutable — record once, never edit."""
+    """A single extracted lesson from an interaction."""
 
-    timestamp: float
-    context: str
-    outcome: str  # "success" | "failure" | "partial"
-    insight: str
-    applies_to: tuple[str, ...] = field(default_factory=tuple)
-    confidence: float = 0.5
-    routing_correction: str | None = None
+    timestamp: str
+    context: str          # brief description of what the request was about
+    outcome: str          # "success" | "partial" | "failure" | "correction"
+    insight: str          # the key thing learned
+    applies_to: list[str] = field(default_factory=list)  # domain slugs
+    confidence: float = 0.8
+    routing_correction: dict[str, str] | None = None  # {request_pattern: correct_slug}
 
-    def to_json(self) -> str:
-        d = asdict(self)
-        d["applies_to"] = list(self.applies_to)
-        return json.dumps(d, ensure_ascii=False)
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
     @classmethod
-    def from_json(cls, line: str) -> "Lesson":
-        d = json.loads(line)
-        d["applies_to"] = tuple(d.get("applies_to") or ())
+    def from_dict(cls, d: dict[str, Any]) -> "Lesson":
         return cls(**d)
 
 
 class SelfLearnerEngine:
-    """Append-only structured-lessons store with retrieval helpers."""
+    """Extracts lessons from interactions and continuously improves JARVIS.
 
-    def __init__(self, path: Path | None = None) -> None:
-        self.path = path or lessons_jsonl_path()
-        self._cache: list[Lesson] | None = None
+    Usage::
 
-    # ----- write side -----
+        engine = SelfLearnerEngine()
+        lesson = engine.record_interaction(
+            request="explain quantum tunneling",
+            response="...",
+            feedback="perfect depth",
+        )
+        lessons = engine.get_lessons_for_domain("jarvis-quantum-computing")
+        report = engine.summarize_growth()
+    """
+
+    def __init__(self, lessons_path: Path | None = None) -> None:
+        self._path = Path(lessons_path or DEFAULT_LESSONS_PATH)
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
+        self._lessons: list[Lesson] | None = None
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def _load(self) -> list[Lesson]:
+        if self._lessons is not None:
+            return self._lessons
+        lessons: list[Lesson] = []
+        if self._path.exists():
+            for line in self._path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line:
+                    try:
+                        lessons.append(Lesson.from_dict(json.loads(line)))
+                    except Exception:
+                        pass
+        self._lessons = lessons
+        return lessons
+
+    def _append(self, lesson: Lesson) -> None:
+        with self._lock:
+            lessons = self._load()
+            lessons.append(lesson)
+            with self._path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(lesson.to_dict()) + "\n")
+
+    # ------------------------------------------------------------------
+    # Core API
+    # ------------------------------------------------------------------
 
     def record_interaction(
         self,
-        *,
-        context: str,
-        outcome: str,
-        insight: str,
-        applies_to: Iterable[str] = (),
-        confidence: float = 0.5,
-        routing_correction: str | None = None,
+        request: str,
+        response: str,
+        feedback: str | None = None,
+        routed_to: str | None = None,
+        correct_slug: str | None = None,
     ) -> Lesson:
-        """Append a new lesson. Returns the persisted record."""
-        if outcome not in ("success", "failure", "partial"):
-            raise ValueError(
-                f"outcome must be success/failure/partial, got {outcome!r}"
-            )
-        if not 0.0 <= confidence <= 1.0:
-            raise ValueError(f"confidence must be in [0,1], got {confidence}")
+        """Analyze an interaction, extract a lesson, and persist it.
+
+        Args:
+            request: The user request.
+            response: JARVIS response (can be empty string for routing-only records).
+            feedback: Optional human feedback ("good", "wrong domain", etc.).
+            routed_to: Which domain slug was used.
+            correct_slug: If routing was wrong, what the correct slug was.
+
+        Returns:
+            The extracted Lesson dataclass.
+        """
+        outcome = self._infer_outcome(feedback, correct_slug, routed_to)
+        context = self._extract_context(request)
+        insight = self._extract_insight(request, response, feedback, outcome)
+        domains = self._infer_domains(request, routed_to, correct_slug)
+
+        routing_correction: dict[str, str] | None = None
+        if correct_slug and routed_to and correct_slug != routed_to:
+            routing_correction = {
+                "pattern": self._extract_key_terms(request),
+                "was": routed_to,
+                "should_be": correct_slug,
+            }
+
         lesson = Lesson(
-            timestamp=time.time(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             context=context,
             outcome=outcome,
             insight=insight,
-            applies_to=tuple(applies_to),
-            confidence=confidence,
+            applies_to=domains,
+            confidence=self._confidence_from_feedback(feedback),
             routing_correction=routing_correction,
         )
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as f:
-            f.write(lesson.to_json() + "\n")
-        if self._cache is not None:
-            self._cache.append(lesson)
+        self._append(lesson)
+        log.info("self_learner: recorded lesson — outcome=%s domain=%s", outcome, domains)
         return lesson
 
-    def save_lessons(self, lessons: Iterable[Lesson]) -> None:
-        """Replace the journal with `lessons` (atomic via tmp + rename)."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        with tmp.open("w", encoding="utf-8") as f:
-            for lesson in lessons:
-                f.write(lesson.to_json() + "\n")
-        tmp.replace(self.path)
-        self._cache = list(lessons)
+    def get_lessons_for_domain(self, domain_slug: str, limit: int = 10) -> list[Lesson]:
+        """Return most recent lessons relevant to the given Jarvis domain slug."""
+        lessons = self._load()
+        relevant = [
+            l for l in lessons
+            if domain_slug in l.applies_to or domain_slug in l.insight.lower()
+        ]
+        return list(reversed(relevant))[:limit]
 
-    # ----- read side -----
+    def get_routing_corrections(self) -> list[dict[str, str]]:
+        """Return all recorded routing corrections for use in improving slug_boosts."""
+        lessons = self._load()
+        return [
+            l.routing_correction
+            for l in lessons
+            if l.routing_correction is not None
+        ]
 
-    def load_lessons(self, *, refresh: bool = False) -> list[Lesson]:
-        """Return all stored lessons. Cached after first call."""
-        if self._cache is not None and not refresh:
-            return list(self._cache)
-        out: list[Lesson] = []
-        if self.path.is_file():
-            with self.path.open("r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        out.append(Lesson.from_json(line))
-                    except (ValueError, KeyError, TypeError):
-                        # Skip malformed rows rather than blow up the agent.
-                        continue
-        self._cache = out
-        return list(out)
+    def improve_routing_weights(self, brain: "SupremeJarvisBrain") -> dict[str, float]:
+        """Analyze past routing mistakes and suggest boost weight adjustments.
 
-    def top_insights(
-        self, n: int = 5, *, domain: str | None = None
-    ) -> list[Lesson]:
-        """Return up to `n` lessons ranked by confidence × recency.
-
-        If `domain` is given, only lessons whose `applies_to` contains it
-        are considered.
+        Returns a dict of {slug: adjustment_delta} — positive means boost this slug,
+        negative means it was getting too much weight.
         """
-        lessons = self.load_lessons()
-        if domain is not None:
-            lessons = [l for l in lessons if domain in l.applies_to]
+        corrections = self.get_routing_corrections()
+        adjustment: dict[str, float] = {}
+        for c in corrections:
+            was: str = c.get("was", "")
+            should: str = c.get("should_be", "")
+            if was and should and was != should:
+                # Decrease weight for the slug that was incorrectly chosen
+                adjustment[was] = adjustment.get(was, 0.0) - 1.0
+                # Increase weight for the slug that should have been chosen
+                adjustment[should] = adjustment.get(should, 0.0) + 1.0
+        return adjustment
+
+    def summarize_growth(self) -> str:
+        """Return a markdown narrative of how the system has improved over time."""
+        lessons = self._load()
         if not lessons:
-            return []
-        now = time.time()
+            return "No lessons recorded yet. Every interaction will teach JARVIS something new."
 
-        def score(l: Lesson) -> float:
-            age_days = max(0.0, (now - l.timestamp) / 86400.0)
-            # Half-life of ~30 days: fresh observations dominate, old
-            # ones decay but never vanish.
-            recency = 0.5 ** (age_days / 30.0)
-            return l.confidence * recency
+        total = len(lessons)
+        by_outcome: dict[str, int] = {}
+        by_domain: dict[str, int] = {}
+        corrections = 0
+        for l in lessons:
+            by_outcome[l.outcome] = by_outcome.get(l.outcome, 0) + 1
+            for d in l.applies_to:
+                by_domain[d] = by_domain.get(d, 0) + 1
+            if l.routing_correction:
+                corrections += 1
 
-        return sorted(lessons, key=score, reverse=True)[:n]
+        top_domains = sorted(by_domain.items(), key=lambda x: x[1], reverse=True)[:5]
+        successes = by_outcome.get("success", 0)
+        failures = by_outcome.get("failure", 0)
+        success_rate = (successes / total * 100) if total else 0
 
-    def apply_corrections(
-        self, domain: str, *, min_confidence: float = 0.7
+        lines = [
+            "# JARVIS Self-Learning Growth Report",
+            "",
+            f"**Total lessons learned:** {total}",
+            f"**Success rate:** {success_rate:.1f}%",
+            f"**Routing corrections applied:** {corrections}",
+            "",
+            "## Outcome Breakdown",
+            *[f"- {k}: {v}" for k, v in sorted(by_outcome.items())],
+            "",
+            "## Most Learned Domains",
+            *[f"- `{slug}`: {count} lessons" for slug, count in top_domains],
+            "",
+            "## Recent Insights",
+            *[f"- [{l.timestamp[:10]}] {l.insight}" for l in lessons[-5:]],
+        ]
+        return "\n".join(lines)
+
+    def export_knowledge_snapshot(self) -> dict[str, Any]:
+        """Full knowledge state export for backup/restore."""
+        lessons = self._load()
+        return {
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "total_lessons": len(lessons),
+            "lessons": [l.to_dict() for l in lessons],
+            "routing_corrections": self.get_routing_corrections(),
+            "summary": self.summarize_growth(),
+        }
+
+    def import_knowledge_snapshot(self, snapshot: dict[str, Any]) -> int:
+        """Import lessons from a snapshot. Returns number of lessons imported."""
+        imported = 0
+        for d in snapshot.get("lessons", []):
+            try:
+                lesson = Lesson.from_dict(d)
+                self._append(lesson)
+                imported += 1
+            except Exception:
+                pass
+        return imported
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _infer_outcome(
+        self,
+        feedback: str | None,
+        correct_slug: str | None,
+        routed_to: str | None,
+    ) -> str:
+        if correct_slug and routed_to and correct_slug != routed_to:
+            return "correction"
+        if feedback:
+            fb = feedback.lower()
+            if any(w in fb for w in ("wrong", "bad", "incorrect", "fail", "error")):
+                return "failure"
+            if any(w in fb for w in ("partial", "almost", "close")):
+                return "partial"
+        return "success"
+
+    def _extract_context(self, request: str) -> str:
+        words = request.strip().split()
+        return " ".join(words[:12]) + ("..." if len(words) > 12 else "")
+
+    def _extract_insight(
+        self,
+        request: str,
+        response: str,
+        feedback: str | None,
+        outcome: str,
+    ) -> str:
+        if outcome == "correction":
+            return f"Routing mistake on: '{self._extract_key_terms(request)}' — see routing_correction"
+        if feedback:
+            return f"User feedback: {feedback[:120]}"
+        key_terms = self._extract_key_terms(request)
+        return f"Handled request about [{key_terms}] successfully"
+
+    def _extract_key_terms(self, text: str) -> str:
+        words = re.findall(r'\b[a-z]{4,}\b', text.lower())
+        stopwords = {"that", "this", "with", "from", "have", "will", "about", "what"}
+        sig = [w for w in words if w not in stopwords][:5]
+        return " ".join(sig)
+
+    def _infer_domains(
+        self,
+        request: str,
+        routed_to: str | None,
+        correct_slug: str | None,
     ) -> list[str]:
-        """Return routing corrections worth applying for `domain`.
+        domains = []
+        if correct_slug:
+            domains.append(correct_slug)
+        elif routed_to:
+            domains.append(routed_to)
+        return domains
 
-        Pulls every high-confidence lesson tagged for `domain` that has a
-        `routing_correction`, dedupes preserving order, returns the list.
-        """
-        seen: set[str] = set()
-        out: list[str] = []
-        for l in self.load_lessons():
-            if domain not in l.applies_to:
-                continue
-            if l.confidence < min_confidence:
-                continue
-            corr = l.routing_correction
-            if not corr or corr in seen:
-                continue
-            seen.add(corr)
-            out.append(corr)
-        return out
+    def _confidence_from_feedback(self, feedback: str | None) -> float:
+        if not feedback:
+            return 0.7
+        fb = feedback.lower()
+        if any(w in fb for w in ("perfect", "excellent", "exactly")):
+            return 1.0
+        if any(w in fb for w in ("good", "right", "correct")):
+            return 0.9
+        if any(w in fb for w in ("partial", "almost")):
+            return 0.5
+        return 0.6

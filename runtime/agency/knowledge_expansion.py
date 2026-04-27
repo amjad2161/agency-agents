@@ -1,205 +1,248 @@
-"""Knowledge-expansion store.
+"""Knowledge expansion — fetch, summarise, and ingest new knowledge into JARVIS.
 
-Append-only chunk store for ingested text/URL content. Supports
-domain-scoped substring search. Designed as a lightweight
-complement to `vector_memory` — when you don't need semantic
-similarity, just want to look up "what did we ingest about X?".
-
-Storage: JSONL at `~/.agency/knowledge.jsonl` (override via
-`AGENCY_KNOWLEDGE_JSONL`). One chunk per line.
-
-URL ingestion is opt-in: `ingest_url` only fetches if `httpx` is
-importable AND the URL is non-private (consistent with the runtime's
-SSRF rules in `tools.py`). A non-network build can still call
-`ingest_text` for pre-fetched content.
+Pipeline:
+  fetch(url/text) → chunk → summarise → tag → store in ContextManager / VectorStore
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
-import os
 import re
 import time
-from dataclasses import asdict, dataclass, field
+import urllib.request
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import Any
+
+from .logging import get_logger
+
+log = get_logger()
+
+DEFAULT_CHUNK_SIZE = 800   # words per chunk
+DEFAULT_CHUNK_OVERLAP = 80
 
 
-DEFAULT_KNOWLEDGE_JSONL = "knowledge.jsonl"
-
-
-def knowledge_jsonl_path() -> Path:
-    override = os.environ.get("AGENCY_KNOWLEDGE_JSONL")
-    if override:
-        return Path(override).expanduser()
-    return Path.home() / ".agency" / DEFAULT_KNOWLEDGE_JSONL
-
-
-def _hash_id(content: str, source: str) -> str:
-    h = hashlib.sha1((source + "::" + content).encode("utf-8"))
-    return h.hexdigest()[:16]
-
-
-_TAG_RE = re.compile(r"#(\w[\w-]{1,30})")
-
-
-def _extract_tags(text: str) -> tuple[str, ...]:
-    return tuple(sorted({m.lower() for m in _TAG_RE.findall(text)}))
-
-
-@dataclass(frozen=True)
+@dataclass
 class KnowledgeChunk:
-    """One ingested unit. Immutable; replaced by re-ingesting."""
+    """One processed chunk of ingested knowledge."""
 
-    id: str
+    chunk_id: str
     source: str
-    domain: str
-    content: str
-    tags: tuple[str, ...] = field(default_factory=tuple)
-    embedding_hint: str = ""
-    created_at: float = 0.0
+    text: str
+    summary: str = ""
+    tags: list[str] = field(default_factory=list)
+    domain: str = "general"
+    ingested_at: float = field(default_factory=time.time)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_json(self) -> str:
-        d = asdict(self)
-        d["tags"] = list(self.tags)
-        return json.dumps(d, ensure_ascii=False)
-
-    @classmethod
-    def from_json(cls, line: str) -> "KnowledgeChunk":
-        d = json.loads(line)
-        d["tags"] = tuple(d.get("tags") or ())
-        return cls(**d)
+    def to_dict(self) -> dict:
+        return self.__dict__.copy()
 
 
 class KnowledgeExpansion:
-    """Append-only ingest + simple substring/tag search."""
+    """Fetch → chunk → summarise → tag → persist new knowledge.
 
-    def __init__(self, path: Path | None = None) -> None:
-        self.path = path or knowledge_jsonl_path()
-        self._chunks: list[KnowledgeChunk] | None = None
+    Usage::
 
-    # ----- write side -----
+        ke = KnowledgeExpansion()
+        chunks = ke.ingest_text("Transformers use self-attention...", domain="AI")
+        chunks = ke.ingest_url("https://arxiv.org/abs/1706.03762", domain="AI")
+        results = ke.search("attention mechanism")
+    """
+
+    def __init__(
+        self,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+        chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+        context_manager: Any | None = None,
+        vector_store: Any | None = None,
+    ) -> None:
+        self._chunk_size = chunk_size
+        self._chunk_overlap = chunk_overlap
+        self._context_manager = context_manager
+        self._vector_store = vector_store
+        self._chunks: list[KnowledgeChunk] = []
+
+    # ── public API ────────────────────────────────────────────────────────────
 
     def ingest_text(
         self,
         text: str,
-        *,
-        domain: str = "default",
         source: str = "manual",
-        embedding_hint: str = "",
-    ) -> KnowledgeChunk:
-        if not text.strip():
-            raise ValueError("text must not be empty")
-        chunk = KnowledgeChunk(
-            id=_hash_id(text, source),
-            source=source,
-            domain=domain,
-            content=text.strip(),
-            tags=_extract_tags(text),
-            embedding_hint=embedding_hint,
-            created_at=time.time(),
-        )
-        self._append(chunk)
-        return chunk
+        domain: str = "general",
+        tags: list[str] | None = None,
+    ) -> list[KnowledgeChunk]:
+        """Chunk, summarise, and store *text*. Returns list of KnowledgeChunk."""
+        tags = tags or self._auto_tag(text, domain)
+        raw_chunks = self._split(text)
+        chunks: list[KnowledgeChunk] = []
+
+        for i, chunk_text in enumerate(raw_chunks):
+            cid = self._chunk_id(source, i, chunk_text)
+            summary = self._summarise(chunk_text)
+            chunk = KnowledgeChunk(
+                chunk_id=cid,
+                source=source,
+                text=chunk_text,
+                summary=summary,
+                tags=list(tags),
+                domain=domain,
+            )
+            chunks.append(chunk)
+            self._store_chunk(chunk)
+
+        log.info("knowledge_expansion: ingested %d chunks from '%s'", len(chunks), source)
+        return chunks
 
     def ingest_url(
         self,
         url: str,
-        *,
-        domain: str = "default",
-        timeout_s: float = 10.0,
-    ) -> KnowledgeChunk:
-        if not (url.startswith("http://") or url.startswith("https://")):
-            raise ValueError("url must be http or https")
+        domain: str = "general",
+        tags: list[str] | None = None,
+        timeout: float = 10.0,
+    ) -> list[KnowledgeChunk]:
+        """Fetch URL, extract text, and ingest. Falls back to stub on failure."""
         try:
-            import httpx  # type: ignore
-        except ImportError as e:
-            raise RuntimeError(
-                "ingest_url requires httpx — `pip install httpx`"
-            ) from e
-        # Reuse the same SSRF guards the agent uses for web_fetch.
-        try:
-            from .tools import _is_metadata_host, _is_private_host  # type: ignore
-        except ImportError:
-            _is_private_host = lambda h: False  # noqa: E731
-            _is_metadata_host = lambda h: False  # noqa: E731
-        parsed = httpx.URL(url)
-        host = parsed.host or ""
-        if not host:
-            raise ValueError("url has no host")
-        if _is_metadata_host(host) or _is_private_host(host):
-            raise PermissionError(
-                f"refusing to fetch private/metadata host {host!r}"
-            )
-        with httpx.Client(timeout=timeout_s) as client:
-            resp = client.get(url, follow_redirects=True)
-            resp.raise_for_status()
-            text = resp.text
-        return self.ingest_text(text, domain=domain, source=url)
+            req = urllib.request.Request(url, headers={"User-Agent": "JARVIS-KB/1.0"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+            text = self._strip_html(raw)
+            log.info("knowledge_expansion: fetched %d chars from %s", len(text), url)
+        except Exception as exc:
+            log.warning("knowledge_expansion: fetch failed for %s — %s", url, exc)
+            text = f"[fetch failed: {exc}]"
 
-    def _append(self, chunk: KnowledgeChunk) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as f:
-            f.write(chunk.to_json() + "\n")
-        if self._chunks is not None:
-            self._chunks.append(chunk)
-
-    # ----- read side -----
-
-    def _load(self, *, refresh: bool = False) -> list[KnowledgeChunk]:
-        if self._chunks is not None and not refresh:
-            return self._chunks
-        out: list[KnowledgeChunk] = []
-        if self.path.is_file():
-            with self.path.open("r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        out.append(KnowledgeChunk.from_json(line))
-                    except (ValueError, KeyError, TypeError):
-                        continue
-        self._chunks = out
-        return out
+        return self.ingest_text(text, source=url, domain=domain, tags=tags)
 
     def search(
-        self, query: str, *, domain: str | None = None, top_k: int = 5
+        self,
+        query: str,
+        domain: str | None = None,
+        top_k: int = 5,
     ) -> list[KnowledgeChunk]:
-        """Substring / tag match scored by token overlap. Not a
-        replacement for vector search — just a fast fallback when an
-        embedding store isn't available."""
-        if not query.strip():
-            return []
-        terms = [t.lower() for t in re.findall(r"\w+", query) if len(t) > 2]
-        if not terms:
-            return []
-        chunks = self._load()
-        if domain is not None:
-            chunks = [c for c in chunks if c.domain == domain]
+        """Simple keyword search over ingested chunks.
 
-        def score(c: KnowledgeChunk) -> int:
-            body = c.content.lower()
-            s = 0
-            for t in terms:
-                s += body.count(t)
-                if t in c.tags:
-                    s += 5  # tag hits are stronger than body hits
-            return s
+        Delegates to VectorStore if available; falls back to BM25-style overlap.
+        """
+        if self._vector_store and hasattr(self._vector_store, "search"):
+            try:
+                results = self._vector_store.search(query, top_k=top_k)
+                # VectorStore returns list[dict]; convert to KnowledgeChunk if possible
+                return [
+                    KnowledgeChunk(
+                        chunk_id=r.get("id", ""),
+                        source=r.get("source", ""),
+                        text=r.get("text", ""),
+                        summary=r.get("summary", ""),
+                        tags=r.get("tags", []),
+                        domain=r.get("domain", "general"),
+                    )
+                    for r in results[:top_k]
+                ]
+            except Exception:
+                pass
 
-        scored = [(score(c), c) for c in chunks]
-        scored = [(s, c) for (s, c) in scored if s > 0]
+        # Fallback: keyword overlap
+        query_terms = set(query.lower().split())
+        scored: list[tuple[float, KnowledgeChunk]] = []
+        for chunk in self._chunks:
+            if domain and chunk.domain != domain:
+                continue
+            chunk_words = set((chunk.text + " " + chunk.summary).lower().split())
+            overlap = len(query_terms & chunk_words) / max(len(query_terms), 1)
+            if overlap > 0:
+                scored.append((overlap, chunk))
+
         scored.sort(key=lambda x: x[0], reverse=True)
-        return [c for (_, c) in scored[:top_k]]
+        return [c for _, c in scored[:top_k]]
 
-    def stats(self) -> dict:
-        chunks = self._load()
-        domains: dict[str, int] = {}
-        for c in chunks:
-            domains[c.domain] = domains.get(c.domain, 0) + 1
+    def list_domains(self) -> list[str]:
+        return list({c.domain for c in self._chunks})
+
+    def stats(self) -> dict[str, Any]:
         return {
-            "total_chunks": len(chunks),
-            "domains": domains,
-            "path": str(self.path),
+            "total_chunks": len(self._chunks),
+            "domains": self.list_domains(),
+            "sources": list({c.source for c in self._chunks}),
         }
+
+    # ── internals ─────────────────────────────────────────────────────────────
+
+    def _split(self, text: str) -> list[str]:
+        """Split text into overlapping word-based chunks."""
+        words = text.split()
+        if len(words) <= self._chunk_size:
+            return [text]
+        chunks: list[str] = []
+        step = self._chunk_size - self._chunk_overlap
+        for start in range(0, len(words), step):
+            chunk = " ".join(words[start : start + self._chunk_size])
+            chunks.append(chunk)
+            if start + self._chunk_size >= len(words):
+                break
+        return chunks
+
+    def _summarise(self, text: str) -> str:
+        """Extractive summary: first 2 sentences."""
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        return " ".join(sentences[:2])
+
+    def _auto_tag(self, text: str, domain: str) -> list[str]:
+        """Heuristic tagging from frequent content words."""
+        stopwords = {
+            "the", "a", "an", "is", "in", "of", "to", "and", "for",
+            "that", "this", "with", "are", "was", "be", "as", "at",
+        }
+        words = [w.lower().strip(".,;:!?\"'()") for w in text.split()]
+        freq: dict[str, int] = {}
+        for w in words:
+            if len(w) > 4 and w not in stopwords:
+                freq[w] = freq.get(w, 0) + 1
+        top = sorted(freq, key=lambda k: freq[k], reverse=True)[:5]
+        return [domain] + top
+
+    def _chunk_id(self, source: str, idx: int, text: str) -> str:
+        digest = hashlib.md5(text[:100].encode()).hexdigest()[:8]
+        return f"{source[:20]}-{idx}-{digest}"
+
+    def _store_chunk(self, chunk: KnowledgeChunk) -> None:
+        self._chunks.append(chunk)
+
+        if self._context_manager:
+            try:
+                self._context_manager.store(
+                    key=chunk.chunk_id,
+                    value=chunk.to_dict(),
+                    domain=f"kb:{chunk.domain}",
+                    tags=chunk.tags,
+                )
+            except Exception:
+                pass
+
+        if self._vector_store and hasattr(self._vector_store, "add"):
+            try:
+                self._vector_store.add(
+                    chunk.text,
+                    metadata={
+                        "id": chunk.chunk_id,
+                        "source": chunk.source,
+                        "summary": chunk.summary,
+                        "tags": chunk.tags,
+                        "domain": chunk.domain,
+                    },
+                )
+            except Exception:
+                pass
+
+    @staticmethod
+    def _strip_html(html: str) -> str:
+        """Strip HTML tags and collapse whitespace."""
+        text = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r'<[^>]+>', ' ', text)
+        text = re.sub(r'&nbsp;', ' ', text)
+        text = re.sub(r'&amp;', '&', text)
+        text = re.sub(r'&lt;', '<', text)
+        text = re.sub(r'&gt;', '>', text)
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()

@@ -665,40 +665,35 @@ except ImportError:
 
 
 @main.command("learn")
-@click.argument("insight")
-@click.option("--domain", "domains", multiple=True,
-              help="Domain slug this insight applies to (repeatable).")
-@click.option("--confidence", type=click.FloatRange(0.0, 1.0), default=0.7,
-              show_default=True, help="How sure you are. 0=guess, 1=proven.")
-@click.option("--outcome", default="success",
-              type=click.Choice(["success", "failure", "partial"],
-                                case_sensitive=False),
-              show_default=True)
-@click.option("--context", "context_text", default="manual entry",
-              show_default=True, help="Short context tag.")
-@click.option("--correction", "routing_correction", default=None,
-              help="Optional routing correction to apply when this domain "
-                   "comes up again.")
-def learn_cmd(insight: str, domains: tuple[str, ...], confidence: float,
-              outcome: str, context_text: str,
-              routing_correction: str | None) -> None:
-    """Record a structured lesson into ~/.agency/lessons.jsonl.
+@click.argument("request")
+@click.option("--response", default="",
+              help="What JARVIS replied. Empty = routing-only record.")
+@click.option("--feedback", default=None,
+              help="Optional human feedback ('good', 'wrong domain', etc.). "
+                   "Drives outcome + confidence inference.")
+@click.option("--routed-to", "routed_to", default=None,
+              help="Domain slug the request was routed to.")
+@click.option("--correct-slug", "correct_slug", default=None,
+              help="If routing was wrong, the slug it should have used.")
+def learn_cmd(request: str, response: str, feedback: str | None,
+              routed_to: str | None, correct_slug: str | None) -> None:
+    """Record a structured lesson into the lessons JSONL.
 
     Different from `agency lessons add`: that one writes free-text to
-    lessons.md. This one writes a typed `Lesson` row with confidence
-    and applies-to tags so the runtime can surface it later.
+    lessons.md. This one writes a typed `Lesson` row that the runtime
+    can surface later for routing corrections and growth reports.
     """
     from .self_learner_engine import SelfLearnerEngine
     engine = SelfLearnerEngine()
     lesson = engine.record_interaction(
-        context=context_text,
-        outcome=outcome.lower(),
-        insight=insight,
-        applies_to=tuple(domains),
-        confidence=confidence,
-        routing_correction=routing_correction,
+        request=request,
+        response=response,
+        feedback=feedback,
+        routed_to=routed_to,
+        correct_slug=correct_slug,
     )
-    click.echo(f"recorded lesson @ {lesson.timestamp:.0f}")
+    click.echo(f"recorded lesson @ {lesson.timestamp}")
+    click.echo(f"  context     : {lesson.context}")
     click.echo(f"  insight     : {lesson.insight}")
     click.echo(f"  outcome     : {lesson.outcome}")
     click.echo(f"  confidence  : {lesson.confidence:.2f}")
@@ -713,35 +708,28 @@ def learn_cmd(insight: str, domains: tuple[str, ...], confidence: float,
 @click.option("--iterations", type=click.IntRange(1, 32), default=5,
               show_default=True, help="Max ReAct loop iterations.")
 @click.option("--plan", "do_plan", is_flag=True, default=False,
-              help="Run plan_and_execute (reason + critique + refine) "
-                   "instead of plain reason.")
-@click.option("--threshold", type=click.FloatRange(0.0, 1.0), default=0.85,
-              show_default=True, help="Confidence at which to stop early.")
-def reason_cmd(goal: str, iterations: int, do_plan: bool,
-               threshold: float) -> None:
+              help="Emit a markdown execution plan instead of raw steps.")
+def reason_cmd(goal: str, iterations: int, do_plan: bool) -> None:
     """Run a multi-step reasoning loop against a goal.
 
-    Without an LLM wired in, the loop runs against the no-op executor
-    and terminates fast; useful for verifying the loop machinery. With
-    an LLM, callers should construct MetaReasoningEngine in their own
-    code — this command exposes the offline path.
+    Without an LLM wired in, the engine produces a deterministic
+    decomposition of the goal into thought / action / observation
+    triples. Useful for verifying the loop machinery and for offline
+    planning before a real LLM call.
     """
     from .meta_reasoner import MetaReasoningEngine
-    engine = MetaReasoningEngine(confidence_threshold=threshold)
+    engine = MetaReasoningEngine()
     if do_plan:
-        steps = engine.plan_and_execute(goal)
-    else:
-        steps = engine.reason(goal, max_iterations=iterations)
+        click.echo(engine.plan_and_execute(goal))
+        return
+    steps = engine.reason(goal, max_iterations=iterations)
     for s in steps:
+        action = s.action or "(no action)"
+        observation = (s.observation or "")[:120]
         click.echo(
-            f"  #{s.step_id} [{s.confidence:.2f}] {s.action}: "
-            f"{s.observation[:120]}"
+            f"  #{s.step_id} [{s.confidence:.2f}] {action}: {observation}"
         )
-    avg = engine.avg_confidence(steps)
-    click.echo(f"avg_confidence={avg:.3f} steps={len(steps)}")
-    crit = engine.critique(steps)
-    if crit:
-        click.echo(f"critique: {crit}")
+    click.echo(f"avg_confidence={engine.avg_confidence():.3f} steps={len(steps)}")
 
 
 @main.group("context", invoke_without_command=True)
@@ -825,29 +813,47 @@ def expand_cmd(source: str, domain: str, is_url: bool,
     with --url). With --search, treats SEARCH_QUERY as a substring/tag
     query and prints the top matches.
     """
-    from .knowledge_expansion import KnowledgeExpansion
-    ke = KnowledgeExpansion()
+    ke = _shared_knowledge_expansion()
     if search_query is not None:
         hits = ke.search(search_query, domain=domain, top_k=top_k)
         if not hits:
             click.echo("(no matches)")
             return
         for h in hits:
-            preview = h.content[:160].replace("\n", " ")
-            click.echo(f"[{h.id}] {h.source} :: {preview}")
+            preview = h.text[:160].replace("\n", " ")
+            click.echo(f"[{h.chunk_id}] {h.source} :: {preview}")
         return
     try:
         if is_url:
-            chunk = ke.ingest_url(source, domain=domain)
+            chunks = ke.ingest_url(source, domain=domain)
         else:
-            chunk = ke.ingest_text(source, domain=domain, source="cli")
+            chunks = ke.ingest_text(source, source="cli", domain=domain)
     except (ValueError, RuntimeError, PermissionError) as e:
         click.echo(f"ingest failed: {e}", err=True)
         sys.exit(1)
-    click.echo(f"ingested {chunk.id} ({len(chunk.content)} chars, "
-               f"domain={chunk.domain})")
-    if chunk.tags:
-        click.echo(f"  tags: {', '.join(chunk.tags)}")
+    total_chars = sum(len(c.text) for c in chunks)
+    click.echo(f"ingested {len(chunks)} chunk(s) ({total_chars} chars, "
+               f"domain={domain})")
+    for c in chunks:
+        if c.tags:
+            click.echo(f"  [{c.chunk_id}] tags: {', '.join(c.tags)}")
+        else:
+            click.echo(f"  [{c.chunk_id}]")
+
+
+# Shared in-process knowledge expansion — survives across click commands
+# inside the same `agency` invocation. KnowledgeExpansion holds chunks in
+# memory only; without a singleton, ingest + search across two `agency
+# expand` calls in the same Click runner would see different stores.
+_KE_SINGLETON: "object | None" = None
+
+
+def _shared_knowledge_expansion():
+    global _KE_SINGLETON
+    if _KE_SINGLETON is None:
+        from .knowledge_expansion import KnowledgeExpansion
+        _KE_SINGLETON = KnowledgeExpansion()
+    return _KE_SINGLETON
 
 
 def _maybe_llm() -> AnthropicLLM | None:

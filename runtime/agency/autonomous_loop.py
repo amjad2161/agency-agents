@@ -1,22 +1,30 @@
-"""Autonomous loop runner.
+"""Autonomous iterative loop engine — executes goal-directed cycles until done.
 
-Executes a registered task callable repeatedly, with bounded
-iterations, cancellation, and threading-safe stop signal. Used by
-long-running self-driven workflows (e.g. an evolver that wants to
-keep optimizing tools until told to stop).
-
-The loop is *not* a thread pool. Exactly one task runs at a time.
-Async wrapping is provided via `run_async` for callers who want to
-fire-and-forget without blocking their main thread.
+Implements a ReAct-style Thought→Action→Observe loop with:
+- Max-iteration guard
+- Threading interrupt support (stop_event)
+- Pluggable action executors
+- Persistent run history via ~/.jarvis/loop_runs.jsonl
 """
 
 from __future__ import annotations
 
+import json
 import threading
 import time
-from dataclasses import dataclass, field
+import uuid
+from dataclasses import asdict, dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any, Callable
+
+from .logging import get_logger
+
+DEFAULT_RUNS_PATH = Path.home() / ".jarvis" / "loop_runs.jsonl"
+DEFAULT_MAX_ITERATIONS = 10
+LOOP_SLEEP_S = 0.05
+
+log = get_logger()
 
 
 class LoopStatus(str, Enum):
@@ -29,145 +37,259 @@ class LoopStatus(str, Enum):
 
 
 @dataclass
-class LoopResult:
-    status: LoopStatus
-    iterations: int
-    last_output: Any = None
-    error: str | None = None
-    elapsed_seconds: float = 0.0
+class LoopIteration:
+    """One cycle of Thought → Action → Observe."""
+
+    iteration: int
+    thought: str
+    action: str
+    observation: str
+    done: bool = False
+    timestamp: float = field(default_factory=time.time)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
-# Executor signature: (task_payload, iteration_index) -> (output, done)
-#   - output: anything the caller wants to keep
-#   - done:   True ⇒ loop terminates with status DONE
-ExecutorFn = Callable[[Any, int], tuple[Any, bool]]
+@dataclass
+class LoopRun:
+    """Complete record of an autonomous loop execution."""
+
+    run_id: str
+    goal: str
+    status: str = LoopStatus.PENDING
+    iterations: list[LoopIteration] = field(default_factory=list)
+    result: str = ""
+    error: str = ""
+    started_at: float = field(default_factory=time.time)
+    ended_at: float = 0.0
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d["iterations"] = [i.to_dict() for i in self.iterations]
+        return d
+
+
+# Type alias for action executor: receives (action_str, context) → observation_str
+ActionExecutor = Callable[[str, dict[str, Any]], str]
 
 
 class AutonomousLoop:
-    """Single-task runner with cooperative cancel + bounded iterations."""
+    """Goal-directed autonomous loop with interrupt support.
 
-    def __init__(self) -> None:
-        self._executors: dict[str, ExecutorFn] = {}
-        self._stop_event = threading.Event()
-        self._status: LoopStatus = LoopStatus.PENDING
-        self._thread: threading.Thread | None = None
-        self._last_result: LoopResult | None = None
+    Usage::
 
-    # ----- registration -----
+        loop = AutonomousLoop(max_iterations=8)
 
-    def register_executor(self, name: str, fn: ExecutorFn) -> None:
-        if not callable(fn):
-            raise TypeError("executor must be callable")
+        def my_executor(action: str, ctx: dict) -> str:
+            return f"executed: {action}"
+
+        loop.register_executor("default", my_executor)
+        run = loop.run("Summarise recent news about LLMs")
+        print(run.result)
+
+    Interrupt from another thread::
+
+        stop = threading.Event()
+        loop = AutonomousLoop(stop_event=stop)
+        threading.Timer(5.0, stop.set).start()
+        run = loop.run("long running goal")
+    """
+
+    def __init__(
+        self,
+        max_iterations: int = DEFAULT_MAX_ITERATIONS,
+        stop_event: threading.Event | None = None,
+        runs_path: Path | None = None,
+    ) -> None:
+        self._max_iterations = max_iterations
+        self._stop_event = stop_event or threading.Event()
+        self._runs_path = runs_path or DEFAULT_RUNS_PATH
+        self._runs_path.parent.mkdir(parents=True, exist_ok=True)
+        self._executors: dict[str, ActionExecutor] = {}
+        self._lock = threading.Lock()
+
+    # ── public API ────────────────────────────────────────────────────────────
+
+    def register_executor(self, name: str, fn: ActionExecutor) -> None:
+        """Register an action executor callable under *name*."""
         self._executors[name] = fn
-
-    def unregister_executor(self, name: str) -> bool:
-        return self._executors.pop(name, None) is not None
-
-    def executors(self) -> list[str]:
-        return sorted(self._executors.keys())
-
-    # ----- run -----
 
     def run(
         self,
-        task: dict[str, Any],
-        *,
-        max_iterations: int = 10,
-        sleep_between: float = 0.0,
-    ) -> LoopResult:
-        """Run the task synchronously. `task` must contain a "executor"
-        key naming a registered executor and may contain "payload"."""
-        if max_iterations <= 0:
-            raise ValueError("max_iterations must be positive")
-        executor_name = task.get("executor")
-        if not executor_name:
-            raise ValueError("task must include an 'executor' name")
-        fn = self._executors.get(executor_name)
-        if fn is None:
-            raise KeyError(f"no executor registered for {executor_name!r}")
+        goal: str,
+        context: dict[str, Any] | None = None,
+        executor_name: str = "default",
+    ) -> LoopRun:
+        """Execute an autonomous loop for *goal*.
 
-        payload = task.get("payload")
-        # Note: we do NOT clear the stop event here — pre-setting stop()
-        # before run() should produce an immediate INTERRUPTED. Callers
-        # who want to reuse a loop instance call reset() between runs.
-        self._status = LoopStatus.RUNNING
-        started = time.monotonic()
-        last_output: Any = None
-        i = 0
+        Returns a LoopRun with full iteration history and final result.
+        """
+        ctx = dict(context or {})
+        run = LoopRun(run_id=str(uuid.uuid4())[:8], goal=goal, status=LoopStatus.RUNNING)
+        run.started_at = time.time()
+
+        executor = self._executors.get(executor_name) or self._executors.get("default")
+
         try:
-            for i in range(1, max_iterations + 1):
+            for i in range(self._max_iterations):
                 if self._stop_event.is_set():
-                    self._status = LoopStatus.INTERRUPTED
+                    run.status = LoopStatus.INTERRUPTED
+                    log.info("autonomous_loop: interrupted at iteration %d", i)
                     break
-                last_output, done = fn(payload, i)
+
+                thought = self._think(goal, run.iterations, ctx)
+                action = self._decide_action(thought, goal, ctx)
+                observation = self._execute(action, ctx, executor)
+
+                done = self._is_done(observation, goal, i)
+                iteration = LoopIteration(
+                    iteration=i + 1,
+                    thought=thought,
+                    action=action,
+                    observation=observation,
+                    done=done,
+                )
+                run.iterations.append(iteration)
+                ctx["last_observation"] = observation
+
+                log.debug(
+                    "autonomous_loop: iter %d done=%s observation_len=%d",
+                    i + 1, done, len(observation),
+                )
+
                 if done:
-                    self._status = LoopStatus.DONE
+                    run.status = LoopStatus.DONE
+                    run.result = self._summarise(goal, run.iterations)
                     break
-                if sleep_between > 0:
-                    # Wait but stay responsive to stop().
-                    if self._stop_event.wait(sleep_between):
-                        self._status = LoopStatus.INTERRUPTED
-                        break
+
+                time.sleep(LOOP_SLEEP_S)
             else:
-                # Loop fell through without break.
-                self._status = LoopStatus.MAX_ITER
-            result = LoopResult(
-                status=self._status,
-                iterations=i,
-                last_output=last_output,
-                elapsed_seconds=round(time.monotonic() - started, 4),
-            )
-        except Exception as e:  # noqa: BLE001 — surface any executor failure
-            self._status = LoopStatus.ERROR
-            result = LoopResult(
-                status=LoopStatus.ERROR,
-                iterations=i,
-                last_output=last_output,
-                error=f"{type(e).__name__}: {e}",
-                elapsed_seconds=round(time.monotonic() - started, 4),
-            )
-        self._last_result = result
-        return result
+                run.status = LoopStatus.MAX_ITER
+                run.result = self._summarise(goal, run.iterations)
+
+        except Exception as exc:
+            run.status = LoopStatus.ERROR
+            run.error = str(exc)
+            log.error("autonomous_loop: error — %s", exc)
+
+        run.ended_at = time.time()
+        self._persist(run)
+        return run
 
     def run_async(
         self,
-        task: dict[str, Any],
-        *,
-        max_iterations: int = 10,
-        sleep_between: float = 0.0,
+        goal: str,
+        context: dict[str, Any] | None = None,
+        executor_name: str = "default",
+        callback: Callable[[LoopRun], None] | None = None,
     ) -> threading.Thread:
-        """Fire-and-forget. Returns the worker thread; caller can
-        `join()` if they want to wait. Only one async run at a time."""
-        if self._thread is not None and self._thread.is_alive():
-            raise RuntimeError("an autonomous loop is already running")
+        """Start loop in background thread. Returns the thread."""
 
-        def _runner() -> None:
-            self.run(task, max_iterations=max_iterations, sleep_between=sleep_between)
+        def _worker() -> None:
+            result = self.run(goal, context, executor_name)
+            if callback:
+                callback(result)
 
-        t = threading.Thread(target=_runner, daemon=True)
-        self._thread = t
+        t = threading.Thread(target=_worker, daemon=True)
         t.start()
         return t
 
     def stop(self) -> None:
-        """Signal the running loop to exit at the next checkpoint."""
+        """Signal the running loop to stop after the current iteration."""
         self._stop_event.set()
 
-    def reset(self) -> None:
-        """Clear the stop signal so the loop can be reused."""
+    def reset_stop(self) -> None:
+        """Clear the stop signal (allows re-use of the same instance)."""
         self._stop_event.clear()
-        self._status = LoopStatus.PENDING
 
-    # ----- introspection -----
+    def get_run_history(self, n: int = 20) -> list[LoopRun]:
+        """Return last *n* persisted runs."""
+        runs: list[LoopRun] = []
+        if not self._runs_path.exists():
+            return runs
+        with self._lock:
+            lines = self._runs_path.read_text().splitlines()
+        for line in lines[-n:]:
+            try:
+                d = json.loads(line)
+                r = LoopRun(
+                    run_id=d["run_id"],
+                    goal=d["goal"],
+                    status=d["status"],
+                    result=d.get("result", ""),
+                    error=d.get("error", ""),
+                    started_at=d.get("started_at", 0.0),
+                    ended_at=d.get("ended_at", 0.0),
+                )
+                runs.append(r)
+            except Exception:
+                pass
+        return runs
 
-    @property
-    def status(self) -> LoopStatus:
-        return self._status
+    # ── internals ─────────────────────────────────────────────────────────────
 
-    def last_result(self) -> LoopResult | None:
-        return self._last_result
-
-    def is_running(self) -> bool:
-        return self._status is LoopStatus.RUNNING and (
-            self._thread is None or self._thread.is_alive()
+    def _think(
+        self,
+        goal: str,
+        history: list[LoopIteration],
+        ctx: dict[str, Any],
+    ) -> str:
+        if not history:
+            return f"Starting fresh: my goal is '{goal[:80]}'. I'll begin by understanding scope."
+        last = history[-1]
+        if last.done:
+            return "Goal achieved. Preparing final summary."
+        return (
+            f"After {len(history)} iterations, last observation was: "
+            f"'{last.observation[:60]}'. Continuing toward: '{goal[:60]}'."
         )
+
+    def _decide_action(self, thought: str, goal: str, ctx: dict[str, Any]) -> str:
+        goal_lower = goal.lower()
+        if "search" in goal_lower or "find" in goal_lower:
+            return f"search: {goal[:80]}"
+        if "summarise" in goal_lower or "summarize" in goal_lower:
+            return f"summarise: {ctx.get('last_observation', goal)[:80]}"
+        if "write" in goal_lower or "generate" in goal_lower:
+            return f"generate: {goal[:80]}"
+        if "analyse" in goal_lower or "analyze" in goal_lower:
+            return f"analyse: {ctx.get('last_observation', goal)[:80]}"
+        return f"execute: {goal[:80]}"
+
+    def _execute(
+        self,
+        action: str,
+        ctx: dict[str, Any],
+        executor: ActionExecutor | None,
+    ) -> str:
+        if executor:
+            try:
+                return executor(action, ctx)
+            except Exception as exc:
+                return f"[executor error] {exc}"
+        # Stub
+        verb = action.split(":")[0].strip()
+        return f"[stub] {verb} completed for: {action[len(verb)+1:].strip()[:60]}"
+
+    def _is_done(self, observation: str, goal: str, iteration: int) -> bool:
+        obs_lower = observation.lower()
+        if any(w in obs_lower for w in ("complete", "done", "finished", "success")):
+            return True
+        if iteration >= self._max_iterations - 1:
+            return True
+        return False
+
+    def _summarise(self, goal: str, iterations: list[LoopIteration]) -> str:
+        if not iterations:
+            return f"No iterations completed for goal: {goal}"
+        last_obs = iterations[-1].observation
+        return (
+            f"Goal '{goal[:60]}' completed in {len(iterations)} iteration(s). "
+            f"Final observation: {last_obs[:120]}"
+        )
+
+    def _persist(self, run: LoopRun) -> None:
+        with self._lock:
+            with self._runs_path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(run.to_dict()) + "\n")

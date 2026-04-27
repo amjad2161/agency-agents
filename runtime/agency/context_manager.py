@@ -1,176 +1,199 @@
-"""Working-context manager.
+"""Persistent cross-session context manager for JARVIS.
 
-Domain-scoped key/value store with TTL semantics. Used by the CLI
-`context` command and by long-running reasoning loops to remember
-intermediate state without bloating the LLM prompt.
-
-Design notes:
-  - Domains are flat namespaces (one level). Cross-domain keys are
-    independent — `store("token", x, "gh")` and `store("token", y, "aws")`
-    don't collide.
-  - TTL is *evaluated lazily*: an expired entry is still in memory
-    until you try to read or list it. We don't run a background sweep
-    because the runtime tries to avoid daemons.
-  - Storage is in-memory only. Tasks that need durability should reach
-    for `self_learner_engine` or `knowledge_expansion`.
+Stores and retrieves structured context entries keyed by domain / session.
+Backend: JSON file at ~/.jarvis/context_store.json (atomic write via tmp file).
 """
 
 from __future__ import annotations
 
+import json
+import os
+import tempfile
+import threading
 import time
-from dataclasses import dataclass, field
-from typing import Any, Iterator
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any
+
+from .logging import get_logger
+
+DEFAULT_CONTEXT_PATH = Path.home() / ".jarvis" / "context_store.json"
+
+log = get_logger()
 
 
-_DEFAULT_TTL_SECONDS = 3600  # 1h
-
-
-@dataclass(frozen=True)
+@dataclass
 class ContextEntry:
-    """One stored value. Immutable — overwriting creates a new entry."""
+    """One unit of stored context."""
 
     key: str
     value: Any
-    domain: str
-    created_at: float
-    ttl_seconds: int
+    domain: str = "general"
+    session_id: str = ""
+    created_at: float = field(default_factory=time.time)
+    accessed_at: float = field(default_factory=time.time)
+    ttl_seconds: float = 0.0          # 0 = no expiry
+    tags: list[str] = field(default_factory=list)
 
-    def is_expired(self, *, now: float | None = None) -> bool:
+    def is_expired(self) -> bool:
         if self.ttl_seconds <= 0:
-            return False  # 0 / negative ttl means "never expire"
-        if now is None:
-            now = time.time()
-        return (now - self.created_at) > self.ttl_seconds
+            return False
+        return time.time() - self.created_at > self.ttl_seconds
 
-    def age_seconds(self, *, now: float | None = None) -> float:
-        if now is None:
-            now = time.time()
-        return max(0.0, now - self.created_at)
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ContextEntry":
+        return cls(**d)
 
 
 class ContextManager:
-    """Domain-scoped, TTL-aware in-memory key/value store."""
+    """Persistent context store with TTL, tagging, and domain namespacing.
 
-    def __init__(self) -> None:
-        # {domain: {key: ContextEntry}}
-        self._store: dict[str, dict[str, ContextEntry]] = {}
-        # Insertion order for recall_recent — Python dicts preserve it,
-        # but we materialize it into a list per-domain so an overwrite
-        # bumps the entry to the back of the queue.
-        self._order: dict[str, list[str]] = {}
+    Usage::
 
-    # ----- write side -----
+        cm = ContextManager()
+        cm.store("user_goal", "build a rate limiter", domain="engineering")
+        val = cm.recall("user_goal", domain="engineering")
+        recent = cm.recall_recent(domain="engineering", n=5)
+    """
+
+    def __init__(self, store_path: Path | None = None) -> None:
+        self._path = store_path or DEFAULT_CONTEXT_PATH
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
+        self._cache: dict[str, ContextEntry] = {}
+        self._load()
+
+    # ── public API ────────────────────────────────────────────────────────────
 
     def store(
         self,
         key: str,
         value: Any,
-        *,
-        domain: str = "default",
-        ttl_seconds: int = _DEFAULT_TTL_SECONDS,
+        domain: str = "general",
+        session_id: str = "",
+        ttl_seconds: float = 0.0,
+        tags: list[str] | None = None,
     ) -> ContextEntry:
-        if not key:
-            raise ValueError("key must not be empty")
-        if not domain:
-            raise ValueError("domain must not be empty")
+        """Store a value under *key* in *domain* namespace."""
+        full_key = self._full_key(domain, key)
         entry = ContextEntry(
             key=key,
             value=value,
             domain=domain,
-            created_at=time.time(),
+            session_id=session_id,
             ttl_seconds=ttl_seconds,
+            tags=tags or [],
         )
-        d = self._store.setdefault(domain, {})
-        d[key] = entry
-        order = self._order.setdefault(domain, [])
-        # Promote / append.
-        if key in order:
-            order.remove(key)
-        order.append(key)
+        with self._lock:
+            self._cache[full_key] = entry
+            self._persist()
+        log.debug("context_manager: stored '%s' in domain '%s'", key, domain)
         return entry
 
-    def forget(self, key: str, *, domain: str = "default") -> bool:
-        d = self._store.get(domain)
-        if not d or key not in d:
-            return False
-        del d[key]
-        if domain in self._order and key in self._order[domain]:
-            self._order[domain].remove(key)
-        return True
-
-    def clear_domain(self, domain: str) -> int:
-        d = self._store.pop(domain, {})
-        self._order.pop(domain, None)
-        return len(d)
-
-    # ----- read side -----
-
-    def recall(self, key: str, *, domain: str = "default") -> Any | None:
-        """Return the value or None if missing/expired. Expired entries
-        are evicted as a side-effect of recall."""
-        d = self._store.get(domain)
-        if not d:
-            return None
-        entry = d.get(key)
-        if entry is None:
-            return None
-        if entry.is_expired():
-            self.forget(key, domain=domain)
-            return None
-        return entry.value
-
-    def recall_entry(
-        self, key: str, *, domain: str = "default"
-    ) -> ContextEntry | None:
-        d = self._store.get(domain)
-        if not d:
-            return None
-        entry = d.get(key)
-        if entry is None or entry.is_expired():
-            if entry is not None:
-                self.forget(key, domain=domain)
-            return None
-        return entry
-
-    def recall_recent(
-        self, *, domain: str = "default", n: int = 5
-    ) -> list[ContextEntry]:
-        """Return the `n` most recent live entries from `domain`,
-        newest first. Expired entries are evicted on the way."""
-        order = self._order.get(domain, [])
-        d = self._store.get(domain, {})
-        out: list[ContextEntry] = []
-        for key in reversed(order):
-            entry = d.get(key)
+    def recall(self, key: str, domain: str = "general") -> Any | None:
+        """Retrieve value for *key* in *domain*. Returns None if missing/expired."""
+        full_key = self._full_key(domain, key)
+        with self._lock:
+            entry = self._cache.get(full_key)
             if entry is None:
-                continue
+                return None
             if entry.is_expired():
-                self.forget(key, domain=domain)
-                continue
-            out.append(entry)
-            if len(out) >= n:
-                break
-        return out
+                del self._cache[full_key]
+                self._persist()
+                return None
+            entry.accessed_at = time.time()
+            return entry.value
 
-    def all_domains(self) -> list[str]:
-        return [d for d, m in self._store.items() if m]
+    def recall_recent(self, domain: str | None = None, n: int = 10) -> list[ContextEntry]:
+        """Return last *n* non-expired entries, optionally filtered by *domain*."""
+        with self._lock:
+            entries = [
+                e for e in self._cache.values()
+                if not e.is_expired() and (domain is None or e.domain == domain)
+            ]
+        entries.sort(key=lambda e: e.accessed_at, reverse=True)
+        return entries[:n]
+
+    def search_by_tag(self, tag: str) -> list[ContextEntry]:
+        """Return all non-expired entries that carry *tag*."""
+        with self._lock:
+            return [
+                e for e in self._cache.values()
+                if tag in e.tags and not e.is_expired()
+            ]
+
+    def forget(self, key: str, domain: str = "general") -> bool:
+        """Delete an entry. Returns True if it existed."""
+        full_key = self._full_key(domain, key)
+        with self._lock:
+            existed = full_key in self._cache
+            self._cache.pop(full_key, None)
+            if existed:
+                self._persist()
+        return existed
+
+    def purge_expired(self) -> int:
+        """Remove all expired entries. Returns count removed."""
+        with self._lock:
+            expired = [k for k, e in self._cache.items() if e.is_expired()]
+            for k in expired:
+                del self._cache[k]
+            if expired:
+                self._persist()
+        return len(expired)
 
     def dump_domain(self, domain: str) -> dict[str, Any]:
-        """Plain `{key: value}` mapping for `domain`, expired entries
-        evicted. Mostly useful for CLI listings and tests."""
-        d = self._store.get(domain, {})
-        out: dict[str, Any] = {}
-        # Iterate over a snapshot since we may mutate during expiry.
-        for key in list(d.keys()):
-            entry = d[key]
-            if entry.is_expired():
-                self.forget(key, domain=domain)
-                continue
-            out[key] = entry.value
-        return out
+        """Return {key: value} snapshot for *domain* (non-expired)."""
+        with self._lock:
+            return {
+                e.key: e.value
+                for e in self._cache.values()
+                if e.domain == domain and not e.is_expired()
+            }
 
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.all_domains())
+    def clear_domain(self, domain: str) -> int:
+        """Delete all entries in *domain*. Returns count."""
+        with self._lock:
+            keys = [k for k, e in self._cache.items() if e.domain == domain]
+            for k in keys:
+                del self._cache[k]
+            if keys:
+                self._persist()
+        return len(keys)
 
-    def __len__(self) -> int:
-        return sum(len(self.dump_domain(d)) for d in list(self._store.keys()))
+    def all_domains(self) -> list[str]:
+        """List distinct domain names that have live entries."""
+        with self._lock:
+            return list({e.domain for e in self._cache.values() if not e.is_expired()})
+
+    # ── internals ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _full_key(domain: str, key: str) -> str:
+        return f"{domain}::{key}"
+
+    def _load(self) -> None:
+        if not self._path.exists():
+            return
+        try:
+            raw = json.loads(self._path.read_text(encoding="utf-8"))
+            for full_key, d in raw.items():
+                try:
+                    self._cache[full_key] = ContextEntry.from_dict(d)
+                except Exception:
+                    pass
+        except Exception as exc:
+            log.warning("context_manager: failed to load store: %s", exc)
+
+    def _persist(self) -> None:
+        """Atomic write to avoid corruption on crash."""
+        data = {k: e.to_dict() for k, e in self._cache.items()}
+        tmp = self._path.with_suffix(".tmp")
+        try:
+            tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            os.replace(tmp, self._path)
+        except Exception as exc:
+            log.warning("context_manager: failed to persist: %s", exc)

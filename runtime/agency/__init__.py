@@ -91,15 +91,16 @@ def get_knowledge_expansion() -> "KnowledgeExpansion":
 
 
 def get_multimodal_processor() -> "MultimodalProcessor":
-    """Return the (stateless) multimodal processor.
+    """Return the shared multimodal processor instance.
 
-    `MultimodalProcessor` is all classmethods — the singleton is a
-    convenience handle, not a state holder.
+    `MultimodalProcessor` is instance-based and may carry pluggable OCR /
+    transcription backends; the singleton lets callers configure those
+    backends once and reuse the processor everywhere.
     """
     global _multimodal_processor
     if _multimodal_processor is None:
         from .multimodal import MultimodalProcessor
-        _multimodal_processor = MultimodalProcessor
+        _multimodal_processor = MultimodalProcessor()
     return _multimodal_processor
 
 
