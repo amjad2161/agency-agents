@@ -399,9 +399,28 @@ def _run_shell(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
     if not command:
         return ToolResult("Empty command.", is_error=True)
     try:
-        tokens = shlex.split(command)
+        if os.name == "nt":
+            # POSIX shlex splits Windows paths into garbage because backslash
+            # is a POSIX escape — `C:\Users\...` becomes `C:Users...`. Use
+            # non-POSIX mode to preserve backslashes, then strip the
+            # surrounding quote chars shlex leaves on each token so the
+            # final argv looks the same as POSIX would have produced.
+            raw_tokens = shlex.split(command, posix=False)
+            tokens = []
+            for tok in raw_tokens:
+                if (
+                    len(tok) >= 2
+                    and tok[0] == tok[-1]
+                    and tok[0] in ("'", '"')
+                ):
+                    tok = tok[1:-1]
+                tokens.append(tok)
+        else:
+            tokens = shlex.split(command)
     except ValueError as e:
         return ToolResult(f"Could not parse command: {e}", is_error=True)
+    if not tokens:
+        return ToolResult("Empty command.", is_error=True)
     head = tokens[0]
 
     gate = trust_gate()

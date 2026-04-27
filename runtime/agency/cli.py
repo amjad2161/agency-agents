@@ -654,6 +654,202 @@ except ImportError:
     pass
 
 
+# ----- learn / reason / context / expand commands -----------------------------
+#
+# These four commands surface the new capability modules
+# (self_learner_engine, meta_reasoner, context_manager, knowledge_expansion)
+# at the CLI without forcing the user to drop into a Python REPL.
+# They share the same persistent storage as the lazy getters in
+# `agency.__init__`, so what you record here shows up in every later
+# `agency run` / `agency reason` invocation.
+
+
+@main.command("learn")
+@click.argument("insight")
+@click.option("--domain", "domains", multiple=True,
+              help="Domain slug this insight applies to (repeatable).")
+@click.option("--confidence", type=click.FloatRange(0.0, 1.0), default=0.7,
+              show_default=True, help="How sure you are. 0=guess, 1=proven.")
+@click.option("--outcome", default="success",
+              type=click.Choice(["success", "failure", "partial"],
+                                case_sensitive=False),
+              show_default=True)
+@click.option("--context", "context_text", default="manual entry",
+              show_default=True, help="Short context tag.")
+@click.option("--correction", "routing_correction", default=None,
+              help="Optional routing correction to apply when this domain "
+                   "comes up again.")
+def learn_cmd(insight: str, domains: tuple[str, ...], confidence: float,
+              outcome: str, context_text: str,
+              routing_correction: str | None) -> None:
+    """Record a structured lesson into ~/.agency/lessons.jsonl.
+
+    Different from `agency lessons add`: that one writes free-text to
+    lessons.md. This one writes a typed `Lesson` row with confidence
+    and applies-to tags so the runtime can surface it later.
+    """
+    from .self_learner_engine import SelfLearnerEngine
+    engine = SelfLearnerEngine()
+    lesson = engine.record_interaction(
+        context=context_text,
+        outcome=outcome.lower(),
+        insight=insight,
+        applies_to=tuple(domains),
+        confidence=confidence,
+        routing_correction=routing_correction,
+    )
+    click.echo(f"recorded lesson @ {lesson.timestamp:.0f}")
+    click.echo(f"  insight     : {lesson.insight}")
+    click.echo(f"  outcome     : {lesson.outcome}")
+    click.echo(f"  confidence  : {lesson.confidence:.2f}")
+    if lesson.applies_to:
+        click.echo(f"  applies_to  : {', '.join(lesson.applies_to)}")
+    if lesson.routing_correction:
+        click.echo(f"  correction  : {lesson.routing_correction}")
+
+
+@main.command("reason")
+@click.argument("goal")
+@click.option("--iterations", type=click.IntRange(1, 32), default=5,
+              show_default=True, help="Max ReAct loop iterations.")
+@click.option("--plan", "do_plan", is_flag=True, default=False,
+              help="Run plan_and_execute (reason + critique + refine) "
+                   "instead of plain reason.")
+@click.option("--threshold", type=click.FloatRange(0.0, 1.0), default=0.85,
+              show_default=True, help="Confidence at which to stop early.")
+def reason_cmd(goal: str, iterations: int, do_plan: bool,
+               threshold: float) -> None:
+    """Run a multi-step reasoning loop against a goal.
+
+    Without an LLM wired in, the loop runs against the no-op executor
+    and terminates fast; useful for verifying the loop machinery. With
+    an LLM, callers should construct MetaReasoningEngine in their own
+    code — this command exposes the offline path.
+    """
+    from .meta_reasoner import MetaReasoningEngine
+    engine = MetaReasoningEngine(confidence_threshold=threshold)
+    if do_plan:
+        steps = engine.plan_and_execute(goal)
+    else:
+        steps = engine.reason(goal, max_iterations=iterations)
+    for s in steps:
+        click.echo(
+            f"  #{s.step_id} [{s.confidence:.2f}] {s.action}: "
+            f"{s.observation[:120]}"
+        )
+    avg = engine.avg_confidence(steps)
+    click.echo(f"avg_confidence={avg:.3f} steps={len(steps)}")
+    crit = engine.critique(steps)
+    if crit:
+        click.echo(f"critique: {crit}")
+
+
+@main.group("context", invoke_without_command=True)
+@click.pass_context
+def context_cmd(ctx: click.Context) -> None:
+    """Working-context store: short-lived domain-scoped key/value memory."""
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+
+
+@context_cmd.command("store")
+@click.argument("key")
+@click.argument("value")
+@click.option("--domain", default="default", show_default=True)
+@click.option("--ttl", "ttl_seconds", type=int, default=3600,
+              show_default=True, help="Seconds before expiry. 0 = never.")
+def context_store_cmd(key: str, value: str, domain: str,
+                      ttl_seconds: int) -> None:
+    from .context_manager import ContextManager
+    cm = _shared_context_manager()
+    cm.store(key, value, domain=domain, ttl_seconds=ttl_seconds)
+    click.echo(f"stored {domain}:{key} (ttl={ttl_seconds}s)")
+
+
+@context_cmd.command("recall")
+@click.argument("key")
+@click.option("--domain", default="default", show_default=True)
+def context_recall_cmd(key: str, domain: str) -> None:
+    cm = _shared_context_manager()
+    val = cm.recall(key, domain=domain)
+    if val is None:
+        click.echo(f"no live entry for {domain}:{key}", err=True)
+        sys.exit(1)
+    click.echo(val)
+
+
+@context_cmd.command("list")
+@click.option("--domain", default=None,
+              help="Restrict to one domain. Default: list all domains.")
+def context_list_cmd(domain: str | None) -> None:
+    cm = _shared_context_manager()
+    if domain is None:
+        for d in cm.all_domains():
+            click.echo(f"{d}: {len(cm.dump_domain(d))} entries")
+        return
+    body = cm.dump_domain(domain)
+    if not body:
+        click.echo(f"(no live entries in {domain})")
+        return
+    for k, v in sorted(body.items()):
+        click.echo(f"{k}: {v}")
+
+
+# Shared in-process context manager — survives across click commands
+# inside the same `agency` invocation. (CLI processes are short-lived
+# so cross-invocation persistence belongs in the durable stores.)
+_CTX_MANAGER_SINGLETON: "object | None" = None
+
+
+def _shared_context_manager():
+    global _CTX_MANAGER_SINGLETON
+    if _CTX_MANAGER_SINGLETON is None:
+        from .context_manager import ContextManager
+        _CTX_MANAGER_SINGLETON = ContextManager()
+    return _CTX_MANAGER_SINGLETON
+
+
+@main.command("expand")
+@click.argument("source")
+@click.option("--domain", default="default", show_default=True)
+@click.option("--url", "is_url", is_flag=True, default=False,
+              help="Treat SOURCE as a URL to fetch instead of literal text.")
+@click.option("--search", "search_query", default=None,
+              help="Don't ingest — search the existing store for this query.")
+@click.option("--top-k", "top_k", type=int, default=5, show_default=True)
+def expand_cmd(source: str, domain: str, is_url: bool,
+               search_query: str | None, top_k: int) -> None:
+    """Ingest text/URL into the knowledge store, or search it.
+
+    Without --search, ingests SOURCE (literal text by default, or a URL
+    with --url). With --search, treats SEARCH_QUERY as a substring/tag
+    query and prints the top matches.
+    """
+    from .knowledge_expansion import KnowledgeExpansion
+    ke = KnowledgeExpansion()
+    if search_query is not None:
+        hits = ke.search(search_query, domain=domain, top_k=top_k)
+        if not hits:
+            click.echo("(no matches)")
+            return
+        for h in hits:
+            preview = h.content[:160].replace("\n", " ")
+            click.echo(f"[{h.id}] {h.source} :: {preview}")
+        return
+    try:
+        if is_url:
+            chunk = ke.ingest_url(source, domain=domain)
+        else:
+            chunk = ke.ingest_text(source, domain=domain, source="cli")
+    except (ValueError, RuntimeError, PermissionError) as e:
+        click.echo(f"ingest failed: {e}", err=True)
+        sys.exit(1)
+    click.echo(f"ingested {chunk.id} ({len(chunk.content)} chars, "
+               f"domain={chunk.domain})")
+    if chunk.tags:
+        click.echo(f"  tags: {', '.join(chunk.tags)}")
+
+
 def _maybe_llm() -> AnthropicLLM | None:
     """Return an LLM client if configured, else None (for offline planning)."""
     try:

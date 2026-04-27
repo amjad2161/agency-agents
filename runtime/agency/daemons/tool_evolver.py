@@ -41,11 +41,13 @@ from __future__ import annotations
 
 import importlib.util
 import os
-import resource
 import shutil
 import sys
 import time
 import traceback
+
+if sys.platform != "win32":
+    import resource  # noqa: F401  Unix-only; reserved for future RLIMIT use
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator

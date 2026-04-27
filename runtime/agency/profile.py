@@ -46,7 +46,8 @@ def load_profile_text(path: Path | None = None) -> str | None:
     truncated = len(raw) > MAX_PROFILE_BYTES
     if truncated:
         raw = raw[:MAX_PROFILE_BYTES]
-    text = raw.decode("utf-8", errors="replace").strip()
+    text = raw.decode("utf-8", errors="replace")
+    text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
     if not text:
         return None
     if truncated:
