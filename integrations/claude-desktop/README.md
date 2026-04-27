@@ -1,40 +1,93 @@
 # 🧠 Claude Desktop Brain / Memory Integration
 
-> **Give Claude Desktop a persistent memory** — so it remembers your projects, preferences, and past decisions across every conversation. Fewer repeated explanations = fewer tokens burned = lower credit usage.
+> **Give Claude Desktop a persistent local memory + a Super-Brain stack of MCP abilities + an interactive 3D knowledge-graph visualizer.** Fewer repeated explanations = fewer tokens burned = lower credit usage.
 
----
-
-## What It Does
-
-By default, Claude Desktop starts fresh every conversation. You re-explain your stack, your preferences, your project context — every single time. A local MCP memory server fixes that:
-
-| Without memory | With memory |
-|---|---|
-| Re-paste project context every session | Claude recalls it automatically |
-| Re-explain coding conventions each time | Recalled on first message |
-| Lost decisions after a conversation ends | Stored and searchable forever |
-| Large system prompts burn credits fast | Only relevant memories are loaded |
-
-**Credit savings**: Instead of a 2,000-token system prompt every turn, Claude pulls only the ~200 tokens of context that matter right now. On an active project, this can cut input-token usage by 50–80%.
-
----
-
-## Quick Start (copy-paste friendly)
-
-### Step 1 — Install the memory server
-
-Requires [Node.js](https://nodejs.org/) 18+.
-
-```bash
-# Verify Node is available
-node --version
+```
+            ┌───────────────────────────────────────────┐
+            │           CLAUDE DESKTOP                  │
+            └─────────────────────┬─────────────────────┘
+                                  │ MCP (stdio)
+        ┌──────────────┬──────────┼──────────┬──────────────┐
+        │              │          │          │              │
+        ▼              ▼          ▼          ▼              ▼
+  ┌─────────┐   ┌──────────┐ ┌────────┐ ┌────────┐  ┌──────────────┐
+  │ memory  │   │sequential│ │filesys-│ │ fetch  │  │     time     │
+  │ (graph) │   │ thinking │ │  tem   │ │  HTTP  │  │ tz / clocks  │
+  └────┬────┘   └──────────┘ └────────┘ └────────┘  └──────────────┘
+       │
+       ▼
+  ~/.claude-memory/memory.json   ◄── 3D Brain Visualizer
+                                     (open in any browser)
 ```
 
-The server runs on-demand via `npx` — no permanent install needed.
+[![Local](https://img.shields.io/badge/storage-100%25%20local-1e88e5)]() [![Speed](https://img.shields.io/badge/credit%20savings-50–80%25-43a047)]() [![No install](https://img.shields.io/badge/install-zero-9c27b0)]() [![3D](https://img.shields.io/badge/visualizer-3D%20WebGL-ff7043)]()
 
-### Step 2 — Add to Claude Desktop config
+---
 
-Open (or create) your Claude Desktop MCP config file:
+## ✨ What you get
+
+| Ability | What it does | Saves credits because… |
+|---|---|---|
+| 🧠 **Persistent Memory** | Knowledge graph of you, your projects, and decisions | No re-pasting context every session |
+| 🤔 **Sequential Thinking** | Structured step-by-step reasoning tool | Claude branches less, retries less |
+| 📁 **Filesystem** | Direct read/write to `~/Documents` and `~/Desktop` | No copy-paste of file contents |
+| 🌐 **Fetch** | Pulls live web pages on demand | No "let me paste the article…" |
+| 🕒 **Time** | Real timezone-aware clocks | No fake date drift in logs |
+| 🌌 **3D Visualizer** | WebGL knowledge-graph explorer | See/audit/prune your memory |
+
+---
+
+## 🚀 Quick Start (60 seconds)
+
+### 🧠 Memory only (minimal)
+
+```bash
+./integrations/mcp-memory/setup.sh --claude-desktop
+```
+
+### ⚡ Super-Brain (memory + reasoning + filesystem + fetch + time)
+
+```bash
+./integrations/mcp-memory/setup.sh --claude-desktop --advanced
+```
+
+### 🚀 Super-Brain + Speed pre-warm (instant cold-start)
+
+```bash
+./integrations/mcp-memory/setup.sh --claude-desktop --advanced --prewarm
+```
+
+`--prewarm` downloads every MCP server package into your local npm cache **before** Claude Desktop needs them, so the first conversation doesn't pause while npx fetches packages.
+
+Then **fully quit and reopen Claude Desktop**.
+
+> Requires [Node.js](https://nodejs.org/) 18+. Verify with `node --version`.
+
+---
+
+## 🌌 3D Brain Visualizer
+
+A built-in WebGL viewer that renders your memory as an interactive knowledge graph.
+
+```bash
+./integrations/claude-desktop/view-memory.sh
+```
+
+**Features**
+- 🌐 Force-directed 3D layout (Fibonacci-sphere distribution)
+- 🔍 Real-time fuzzy search across entities + observations
+- 🎯 Click any node → see its observations and connections
+- 📁 Drag-and-drop your own `memory.json` (or it auto-loads sample data)
+- 🎬 Auto-orbit camera, pause/resume, reset view
+- ⚡ Zero install — pure HTML + Three.js via CDN, opens in any browser
+
+> 📄 File: [`brain-visualizer.html`](./brain-visualizer.html). Open it directly in your browser, or run `view-memory.sh` to launch.
+
+---
+
+## 📦 Manual Configuration
+
+If you'd rather edit the config by hand, the config path differs per OS:
 
 | OS | Config path |
 |----|-------------|
@@ -42,7 +95,9 @@ Open (or create) your Claude Desktop MCP config file:
 | **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` |
 | **Linux** | `~/.config/Claude/claude_desktop_config.json` |
 
-Add the `memory` entry (or merge it into an existing `mcpServers` block):
+### Minimal (memory only)
+
+📄 Source: [`claude_desktop_config.json`](./claude_desktop_config.json)
 
 ```json
 {
@@ -58,35 +113,39 @@ Add the `memory` entry (or merge it into an existing `mcpServers` block):
 }
 ```
 
-> 📄 See [`claude_desktop_config.json`](./claude_desktop_config.json) in this directory for a ready-to-copy example.
+### Super-Brain (recommended)
 
-### Step 3 — Restart Claude Desktop
+📄 Source: [`claude_desktop_config.advanced.json`](./claude_desktop_config.advanced.json)
 
-Fully quit and reopen Claude Desktop. The memory tools will appear automatically.
-
-### Step 4 — Verify it works
-
-Ask Claude:
-
+```json
+{
+  "mcpServers": {
+    "memory":              { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"],
+                             "env": { "MEMORY_FILE_PATH": "~/.claude-memory/memory.json" } },
+    "sequential-thinking": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"] },
+    "filesystem":          { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "~/Documents", "~/Desktop"] },
+    "fetch":               { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-fetch"] },
+    "time":                { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-time"] }
+  }
+}
 ```
-Do you have access to a memory tool?
-```
 
-Claude should confirm it can store and retrieve memories.
+> ⚠️ **Filesystem scoping**: the `filesystem` server is restricted to `~/Documents` and `~/Desktop` by default. **Never** pass `/` or `~` directly — it would expose your entire home directory. Edit those paths to match what you want Claude to see.
 
 ---
 
-## Automated Setup Script
+## 🏎️ Speed Tips
 
-Run the setup script from the repo root — it detects your OS, locates the Claude Desktop config, and patches it in place:
-
-```bash
-./integrations/mcp-memory/setup.sh --claude-desktop
-```
+| Tip | Effect |
+|-----|--------|
+| Run `setup.sh --prewarm` | First Claude Desktop conversation boots instantly (no npx download pause) |
+| Use the Super-Brain stack | Sequential-thinking reduces "let me try again" loops, cutting total tokens |
+| Trim memory regularly | Open the 3D Visualizer, find stale entities, ask Claude to delete them |
+| Pin Node LTS | `nvm install --lts && nvm alias default lts/*` keeps `npx` fast and predictable |
 
 ---
 
-## Platform-Specific Notes
+## 🖥️ Platform-Specific Notes
 
 ### macOS
 
@@ -96,7 +155,7 @@ open -e "$HOME/Library/Application Support/Claude/claude_desktop_config.json" 2>
   || open -e "$HOME/Library/Application Support/Claude/"
 ```
 
-If Claude Desktop hasn't been launched yet, the directory may not exist. Create it:
+If Claude Desktop hasn't been launched yet, the directory may not exist:
 
 ```bash
 mkdir -p "$HOME/Library/Application Support/Claude"
@@ -105,122 +164,77 @@ mkdir -p "$HOME/Library/Application Support/Claude"
 ### Windows (PowerShell)
 
 ```powershell
-# Open config directory
 explorer $env:APPDATA\Claude
-
-# Create if missing
 New-Item -ItemType Directory -Force -Path "$env:APPDATA\Claude"
-
-# Verify Node is installed
-node --version
-# If not: winget install OpenJS.NodeJS.LTS
+node --version  # if missing: winget install OpenJS.NodeJS.LTS
 ```
 
 ### Linux
 
 ```bash
-# Create config dir if missing
 mkdir -p "$HOME/.config/Claude"
-
-# Open config
 "${EDITOR:-nano}" "$HOME/.config/Claude/claude_desktop_config.json"
 ```
 
 ---
 
-## Example: Full Config with Memory + Filesystem
-
-If you already have other MCP servers configured, merge like this:
-
-```json
-{
-  "mcpServers": {
-    "memory": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
-      "env": {
-        "MEMORY_FILE_PATH": "~/.claude-memory/memory.json"
-      }
-    },
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/you/projects"]
-    }
-  }
-}
-```
-
----
-
-## How to Use Memory in Conversations
-
-Once configured, instruct Claude naturally:
+## 💬 Using Memory in Conversations
 
 ```
 Remember that I prefer TypeScript over JavaScript in all new projects.
 ```
 
 ```
-Remember: my main project is called "Helios" and it uses React 18 + Node 20 + PostgreSQL.
+Remember: my main project is "Helios", uses React 18 + Node 20 + PostgreSQL.
 ```
 
-In a future conversation:
+In any future conversation:
 
 ```
 What do you know about my project setup?
 ```
 
-Claude will recall stored facts without you repeating them.
-
-### Suggested First Memories
-
-Run these in your first session to prime the memory:
+### Suggested First-Run Memories
 
 ```
 Please remember the following about me and my projects:
 - Name: [your name]
-- Main language/framework: [e.g., TypeScript + React]
-- Current project: [project name and brief description]
-- Coding style preferences: [e.g., functional patterns, strict ESLint]
-- Things I never want to do: [e.g., use class components, skip error handling]
+- Main stack: [e.g., TypeScript + React]
+- Current project: [project name + brief description]
+- Coding style: [e.g., functional patterns, strict ESLint]
+- Things I never want to do: [e.g., use class components]
 ```
 
 ---
 
-## Memory File Location
+## 🔒 Privacy & Safety
 
-By default the memory server stores data at:
-
-```
-~/.claude-memory/memory.json
-```
-
-This is a plain JSON file on your local machine. **Nothing is sent to any cloud service.** You can inspect, edit, or delete it at any time:
-
-```bash
-# View stored memories
-cat ~/.claude-memory/memory.json
-
-# Clear all memories (start fresh)
-rm ~/.claude-memory/memory.json
-```
+- **100% local**: memory is stored at `~/.claude-memory/memory.json` — no cloud service involved
+- **Inspect anytime**: `cat ~/.claude-memory/memory.json` or open the 3D Visualizer
+- **Wipe anytime**: `rm ~/.claude-memory/memory.json`
+- **No secrets**: don't tell Claude to remember API keys, passwords, or tokens — they'd live in plain JSON
+- **Filesystem server**: scoped to `~/Documents` and `~/Desktop` by default. Edit the args to broaden or narrow
 
 ---
 
-## Troubleshooting
+## 🛠️ Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
 | `npx: command not found` | Install Node.js 18+ from [nodejs.org](https://nodejs.org/) |
-| Memory tools don't appear | Fully quit and reopen Claude Desktop (not just close the window) |
-| `ENOENT` on config path | Create the directory manually (see platform notes above) |
-| JSON parse error | Validate your config at [jsonlint.com](https://jsonlint.com) |
+| Memory tools don't appear | **Fully quit** and reopen Claude Desktop (not just close the window) |
+| First message takes 30+ seconds | Run `setup.sh --prewarm` to cache packages ahead of time |
+| `ENOENT` on config path | Create the directory manually (see Platform Notes) |
+| JSON parse error | Validate at [jsonlint.com](https://jsonlint.com); the setup script does this for you |
 | Memories not persisting | Check `MEMORY_FILE_PATH` is a writable directory |
+| Visualizer shows sample data | Click 📁 and pick `~/.claude-memory/memory.json` |
 
 ---
 
-## Further Reading
+## 📚 Further Reading
 
-- [MCP Memory Integration guide](../mcp-memory/README.md) — using memory with Claude Code / other tools
-- [Full MCP guide](../mcp.md) — wiring any MCP server to The Agency's agents
-- [Official MCP memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) — upstream source
+- 📘 [MCP Memory Integration guide](../mcp-memory/README.md) — using memory with Claude Code / other tools
+- 📘 [Full MCP guide](../mcp.md) — wiring any MCP server to The Agency's agents
+- 📘 [Official MCP memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) — upstream source
+- 📘 [Sequential Thinking server](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking) — structured reasoning
+- 📘 [Filesystem server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) — sandboxed file access

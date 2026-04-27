@@ -3,27 +3,45 @@
 # setup.sh -- Set up persistent memory for Claude Desktop (and other MCP clients).
 #
 # Usage:
-#   ./integrations/mcp-memory/setup.sh               # Claude Code / generic MCP client
-#   ./integrations/mcp-memory/setup.sh --claude-desktop  # Claude Desktop (recommended)
+#   ./integrations/mcp-memory/setup.sh                       # generic / Claude Code
+#   ./integrations/mcp-memory/setup.sh --claude-desktop      # memory only
+#   ./integrations/mcp-memory/setup.sh --claude-desktop --advanced
+#                                                            # memory + sequential-thinking
+#                                                            # + filesystem + fetch + time
+#   ./integrations/mcp-memory/setup.sh --prewarm             # pre-download MCP servers
+#                                                            # for faster cold starts
 #
 # Requirements: Node.js 18+
 
 set -euo pipefail
 
 CLAUDE_DESKTOP=false
+ADVANCED=false
+PREWARM=false
 
 for arg in "$@"; do
   case "$arg" in
     --claude-desktop) CLAUDE_DESKTOP=true ;;
+    --advanced)       ADVANCED=true ;;
+    --prewarm)        PREWARM=true ;;
     -h|--help)
-      echo "Usage: $0 [--claude-desktop]"
+      echo "Usage: $0 [--claude-desktop] [--advanced] [--prewarm]"
       echo ""
       echo "  --claude-desktop   Patch the Claude Desktop config file with the memory server."
       echo "                     Config path is detected automatically per OS."
+      echo "  --advanced         Install the Super-Brain stack (memory + sequential-thinking"
+      echo "                     + filesystem + fetch + time). Implies --claude-desktop."
+      echo "  --prewarm          Pre-download MCP server packages so Claude Desktop boots"
+      echo "                     instantly the first time. Speeds up cold starts."
       exit 0
       ;;
   esac
 done
+
+# --advanced implies --claude-desktop
+if [ "$ADVANCED" = true ]; then
+  CLAUDE_DESKTOP=true
+fi
 
 echo "MCP Memory Integration Setup"
 echo "=============================="
@@ -41,9 +59,9 @@ if ! command -v node >/dev/null 2>&1; then
   exit 1
 fi
 
-NODE_MAJOR=$(node --version | sed 's/v\([0-9]*\).*/\1/')
-if [ "$NODE_MAJOR" -lt 18 ]; then
-  echo "ERROR: Node.js 18+ is required (found $(node --version))."
+NODE_MAJOR=$(node --version 2>/dev/null | sed -E 's/^[^0-9]*([0-9]+).*/\1/')
+if ! [[ "$NODE_MAJOR" =~ ^[0-9]+$ ]] || [ "$NODE_MAJOR" -lt 18 ]; then
+  echo "ERROR: Node.js 18+ is required (found $(node --version 2>/dev/null || echo 'unknown'))."
   echo "Upgrade at https://nodejs.org/"
   exit 1
 fi
@@ -52,7 +70,7 @@ echo "Node.js $(node --version) detected."
 echo ""
 
 # ---------------------------------------------------------------------------
-# 2. Smoke-test the memory server package (dry-run via npx --dry-run)
+# 2. Verify the memory server package is reachable on npm
 # ---------------------------------------------------------------------------
 
 echo "Verifying @modelcontextprotocol/server-memory is resolvable via npm..."
@@ -63,6 +81,35 @@ else
   echo "The package will be downloaded on first use by npx (this is normal in offline environments)."
 fi
 echo ""
+
+# ---------------------------------------------------------------------------
+# 2b. Speed: pre-warm npx cache for instant Claude Desktop boot
+# ---------------------------------------------------------------------------
+
+ADVANCED_PACKAGES=(
+  "@modelcontextprotocol/server-memory"
+  "@modelcontextprotocol/server-sequential-thinking"
+  "@modelcontextprotocol/server-filesystem"
+  "@modelcontextprotocol/server-fetch"
+  "@modelcontextprotocol/server-time"
+)
+
+if [ "$PREWARM" = true ]; then
+  echo "Pre-warming MCP server packages (speeds up Claude Desktop cold start)..."
+  PKGS=("@modelcontextprotocol/server-memory")
+  if [ "$ADVANCED" = true ]; then
+    PKGS=("${ADVANCED_PACKAGES[@]}")
+  fi
+  for pkg in "${PKGS[@]}"; do
+    printf "  · %s ... " "$pkg"
+    if npm cache add "$pkg" >/dev/null 2>&1; then
+      echo "cached"
+    else
+      echo "skipped (offline or not yet published)"
+    fi
+  done
+  echo ""
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Resolve Claude Desktop config path
@@ -106,11 +153,50 @@ if [ "$CLAUDE_DESKTOP" = true ]; then
   CONFIG_PATH="$(_claude_desktop_config_path)"
   CONFIG_DIR="$(dirname "$CONFIG_PATH")"
 
-  echo "Claude Desktop mode"
+  if [ "$ADVANCED" = true ]; then
+    echo "Claude Desktop mode (Super-Brain stack: memory + sequential-thinking + filesystem + fetch + time)"
+  else
+    echo "Claude Desktop mode (memory only)"
+  fi
   echo "Config path: $CONFIG_PATH"
   echo ""
 
   mkdir -p "$CONFIG_DIR"
+
+  # Build the merge payload as a JSON string for Node to read from env
+  if [ "$ADVANCED" = true ]; then
+    MERGE_JSON='{
+      "memory": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-memory"],
+        "env": { "MEMORY_FILE_PATH": "~/.claude-memory/memory.json" }
+      },
+      "sequential-thinking": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+      },
+      "filesystem": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "~/Documents", "~/Desktop"]
+      },
+      "fetch": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-fetch"]
+      },
+      "time": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-time"]
+      }
+    }'
+  else
+    MERGE_JSON='{
+      "memory": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-memory"],
+        "env": { "MEMORY_FILE_PATH": "~/.claude-memory/memory.json" }
+      }
+    }'
+  fi
 
   if [ -f "$CONFIG_PATH" ]; then
     # Validate existing JSON
@@ -120,42 +206,33 @@ if [ "$CLAUDE_DESKTOP" = true ]; then
       exit 1
     fi
 
-    # Check if 'memory' key already present
-    if CONFIG_FILE="$CONFIG_PATH" node -e "const c=JSON.parse(require('fs').readFileSync(process.env.CONFIG_FILE,'utf8')); process.exit(c.mcpServers && c.mcpServers.memory ? 0 : 1);" 2>/dev/null; then
-      echo "Memory server entry already exists in $CONFIG_PATH — no changes needed."
-    else
-      echo "Patching existing config to add the memory server..."
-      # Use Node to merge the memory entry into the existing config
-      CONFIG_FILE="$CONFIG_PATH" node <<'NODEEOF'
+    echo "Merging server entries into existing config..."
+    CONFIG_FILE="$CONFIG_PATH" MERGE_JSON="$MERGE_JSON" node <<'NODEEOF'
 const fs = require('fs');
 const path = process.env.CONFIG_FILE;
+const merge = JSON.parse(process.env.MERGE_JSON);
 const config = JSON.parse(fs.readFileSync(path, 'utf8'));
 config.mcpServers = config.mcpServers || {};
-config.mcpServers.memory = {
-  command: 'npx',
-  args: ['-y', '@modelcontextprotocol/server-memory'],
-  env: { MEMORY_FILE_PATH: '~/.claude-memory/memory.json' }
-};
+let added = 0, kept = 0;
+for (const [k, v] of Object.entries(merge)) {
+  if (config.mcpServers[k]) { kept++; continue; }
+  config.mcpServers[k] = v;
+  added++;
+}
 fs.writeFileSync(path, JSON.stringify(config, null, 2) + '\n');
-console.log('Done.');
+console.log(`Added ${added} server(s), kept ${kept} existing server(s).`);
 NODEEOF
-      echo "Config updated: $CONFIG_PATH"
-    fi
+    echo "Config updated: $CONFIG_PATH"
   else
     echo "Creating new config at $CONFIG_PATH..."
-    cat > "$CONFIG_PATH" <<'EOF'
-{
-  "mcpServers": {
-    "memory": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
-      "env": {
-        "MEMORY_FILE_PATH": "~/.claude-memory/memory.json"
-      }
-    }
-  }
-}
-EOF
+    CONFIG_FILE="$CONFIG_PATH" MERGE_JSON="$MERGE_JSON" node <<'NODEEOF'
+const fs = require('fs');
+const path = process.env.CONFIG_FILE;
+const merge = JSON.parse(process.env.MERGE_JSON);
+const config = { mcpServers: merge };
+fs.writeFileSync(path, JSON.stringify(config, null, 2) + '\n');
+console.log('Created new config.');
+NODEEOF
     echo "Config created: $CONFIG_PATH"
   fi
 
@@ -164,6 +241,15 @@ EOF
   echo "  1. Fully quit and reopen Claude Desktop"
   echo "  2. Ask Claude: 'Do you have access to a memory tool?'"
   echo "  3. Start storing memories: 'Remember that I prefer TypeScript'"
+  if [ "$ADVANCED" = true ]; then
+    echo "  4. Try the new abilities:"
+    echo "       'Think step-by-step about ...' → uses sequential-thinking"
+    echo "       'Read the file ~/Documents/notes.md' → uses filesystem"
+    echo "       'Fetch https://example.com and summarize' → uses fetch"
+  fi
+  echo ""
+  echo "🧠 Visualize your memory in 3D (run from the repo root):"
+  echo "   ./integrations/claude-desktop/view-memory.sh"
   echo ""
   echo "Memory data is stored locally at ~/.claude-memory/memory.json"
   echo "See integrations/claude-desktop/README.md for full usage guide."
@@ -217,3 +303,4 @@ echo "  3. Add a Memory Integration section to any agent prompt"
 echo "     (see integrations/mcp-memory/README.md for the pattern)"
 echo ""
 echo "For Claude Desktop, run: $0 --claude-desktop"
+echo "For the Super-Brain stack, run: $0 --claude-desktop --advanced"

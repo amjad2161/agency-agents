@@ -25,8 +25,11 @@ jobs:
 
       - name: Validate JSON config files
         run: |
-          echo "Checking integrations/claude-desktop/claude_desktop_config.json..."
-          node -e "JSON.parse(require('fs').readFileSync('integrations/claude-desktop/claude_desktop_config.json','utf8')); console.log('Valid JSON');"
+          for f in integrations/claude-desktop/claude_desktop_config.json \
+                   integrations/claude-desktop/claude_desktop_config.advanced.json; do
+            echo "Checking $f..."
+            CONFIG_FILE="$f" node -e "JSON.parse(require('fs').readFileSync(process.env.CONFIG_FILE,'utf8')); console.log('  Valid JSON');"
+          done
 
       - name: Check required keys in claude_desktop_config.json
         run: |
@@ -39,11 +42,40 @@ jobs:
           console.log('Config structure OK');
           EOF
 
-      - name: Check setup.sh is executable and has no syntax errors
+      - name: Check Super-Brain advanced config has all expected servers
         run: |
-          chmod +x integrations/mcp-memory/setup.sh
+          node - <<'EOF'
+          const cfg = JSON.parse(require('fs').readFileSync('integrations/claude-desktop/claude_desktop_config.advanced.json','utf8'));
+          const expected = ['memory','sequential-thinking','filesystem','fetch','time'];
+          for (const k of expected) {
+            if (!cfg.mcpServers || !cfg.mcpServers[k]) throw new Error('Missing server: ' + k);
+            if (!cfg.mcpServers[k].command) throw new Error('Missing command for: ' + k);
+            if (!Array.isArray(cfg.mcpServers[k].args)) throw new Error('args must be array for: ' + k);
+          }
+          console.log('Advanced config structure OK -- all', expected.length, 'servers present');
+          EOF
+
+      - name: Validate brain-visualizer.html
+        run: |
+          test -f integrations/claude-desktop/brain-visualizer.html
+          # Basic sanity checks: must be HTML and contain three.js + memory parsing
+          grep -q '<!doctype html>' integrations/claude-desktop/brain-visualizer.html
+          grep -q 'three' integrations/claude-desktop/brain-visualizer.html
+          grep -q 'parseMemory' integrations/claude-desktop/brain-visualizer.html
+          echo "brain-visualizer.html OK"
+
+      - name: Check setup.sh and view-memory.sh have no syntax errors
+        run: |
+          chmod +x integrations/mcp-memory/setup.sh integrations/claude-desktop/view-memory.sh
           bash -n integrations/mcp-memory/setup.sh
-          echo "setup.sh syntax OK"
+          bash -n integrations/claude-desktop/view-memory.sh
+          echo "scripts: syntax OK"
+
+      - name: Smoke-test setup.sh --help
+        run: |
+          ./integrations/mcp-memory/setup.sh --help | grep -q -- "--advanced"
+          ./integrations/mcp-memory/setup.sh --help | grep -q -- "--prewarm"
+          echo "--help advertises new flags"
 
       - name: Smoke-test setup.sh (generic mode, no Node required)
         run: |
@@ -68,14 +100,33 @@ jobs:
           console.log('Generated config is valid.');
           EOF
 
+      - name: Smoke-test setup.sh --claude-desktop --advanced (merging extra servers)
+        run: |
+          # Re-run with --advanced; should add the additional servers without dropping memory
+          ./integrations/mcp-memory/setup.sh --claude-desktop --advanced
+          echo "--- Merged config ---"
+          cat "$HOME/.config/Claude/claude_desktop_config.json"
+          echo ""
+          node - <<'EOF'
+          const path = process.env.HOME + '/.config/Claude/claude_desktop_config.json';
+          const cfg = JSON.parse(require('fs').readFileSync(path, 'utf8'));
+          const expected = ['memory','sequential-thinking','filesystem','fetch','time'];
+          for (const k of expected) {
+            if (!cfg.mcpServers[k]) throw new Error('Missing server after --advanced: ' + k);
+          }
+          console.log('All advanced servers merged OK.');
+          EOF
+
       - name: Smoke-test idempotency (re-run should not duplicate the entry)
         run: |
-          # Second run should detect the entry and skip patching
-          ./integrations/mcp-memory/setup.sh --claude-desktop
+          # Second run should detect existing entries and keep them
+          ./integrations/mcp-memory/setup.sh --claude-desktop --advanced
           node - <<'EOF'
           const path = process.env.HOME + '/.config/Claude/claude_desktop_config.json';
           const cfg = JSON.parse(require('fs').readFileSync(path, 'utf8'));
           const keys = Object.keys(cfg.mcpServers);
-          if (keys.filter(k => k === 'memory').length !== 1) throw new Error('memory key duplicated');
+          // Each server name must appear exactly once
+          const dupes = keys.filter((k, i) => keys.indexOf(k) !== i);
+          if (dupes.length) throw new Error('Duplicate server keys: ' + dupes.join(','));
           console.log('Idempotency check passed.');
           EOF

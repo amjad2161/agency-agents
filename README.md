@@ -592,14 +592,23 @@ Each agent is designed with:
 
 ## 🧠 Claude Desktop Brain / Memory
 
-Give Claude Desktop a **persistent local memory** that stores your project context, preferences, and decisions across every conversation — dramatically reducing repeated explanations and token usage.
+Give Claude Desktop a **persistent local memory + a Super-Brain stack** of MCP abilities (memory · sequential-thinking · filesystem · fetch · time) plus an **interactive 3D knowledge-graph visualizer** — dramatically reducing repeated explanations and token usage.
 
 ```bash
-# One-command setup (auto-detects macOS / Windows / Linux)
+# 🧠 Memory only (minimal)
 ./integrations/mcp-memory/setup.sh --claude-desktop
+
+# ⚡ Super-Brain (memory + reasoning + filesystem + fetch + time)
+./integrations/mcp-memory/setup.sh --claude-desktop --advanced
+
+# 🚀 Super-Brain + speed pre-warm (instant cold-start)
+./integrations/mcp-memory/setup.sh --claude-desktop --advanced --prewarm
+
+# 🌌 Visualize your memory in 3D (WebGL, zero install)
+./integrations/claude-desktop/view-memory.sh
 ```
 
-Or add it manually to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Or merge the snippet manually into `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) / `%APPDATA%\Claude\claude_desktop_config.json` (Windows) / `~/.config/Claude/claude_desktop_config.json` (Linux):
 
 ```json
 {
@@ -607,9 +616,7 @@ Or add it manually to your Claude Desktop config (`~/Library/Application Support
     "memory": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-memory"],
-      "env": {
-        "MEMORY_FILE_PATH": "~/.claude-memory/memory.json"
-      }
+      "env": { "MEMORY_FILE_PATH": "~/.claude-memory/memory.json" }
     }
   }
 }
@@ -621,10 +628,10 @@ Restart Claude Desktop, then tell it what to remember:
 Remember that I prefer TypeScript and my current project uses React 18 + Node 20.
 ```
 
-✅ Memory is stored **100% locally** — nothing sent to any cloud service.
+✅ **100% local** — memory lives in `~/.claude-memory/memory.json`, never sent to any cloud service.
 
 > 📖 Full guide → [integrations/claude-desktop/README.md](integrations/claude-desktop/README.md)
-> 📄 Ready-to-copy config → [integrations/claude-desktop/claude_desktop_config.json](integrations/claude-desktop/claude_desktop_config.json)
+> 📄 Minimal config → [`claude_desktop_config.json`](integrations/claude-desktop/claude_desktop_config.json) · ⚡ Super-Brain config → [`claude_desktop_config.advanced.json`](integrations/claude-desktop/claude_desktop_config.advanced.json) · 🌌 3D visualizer → [`brain-visualizer.html`](integrations/claude-desktop/brain-visualizer.html)
 
 ---
 
