@@ -18,14 +18,16 @@ set -euo pipefail
 CLAUDE_DESKTOP=false
 ADVANCED=false
 PREWARM=false
+DOCTOR=false
 
 for arg in "$@"; do
   case "$arg" in
     --claude-desktop) CLAUDE_DESKTOP=true ;;
     --advanced)       ADVANCED=true ;;
     --prewarm)        PREWARM=true ;;
+    --doctor)         DOCTOR=true ;;
     -h|--help)
-      echo "Usage: $0 [--claude-desktop] [--advanced] [--prewarm]"
+      echo "Usage: $0 [--claude-desktop] [--advanced] [--prewarm] [--doctor]"
       echo ""
       echo "  --claude-desktop   Patch the Claude Desktop config file with the memory server."
       echo "                     Config path is detected automatically per OS."
@@ -33,6 +35,7 @@ for arg in "$@"; do
       echo "                     + filesystem + puppeteer + everything). Implies --claude-desktop."
       echo "  --prewarm          Pre-download MCP server packages so Claude Desktop boots"
       echo "                     instantly the first time. Speeds up cold starts."
+      echo "  --doctor           Run a health check against your current setup and exit."
       exit 0
       ;;
   esac
@@ -132,6 +135,102 @@ _claude_desktop_config_path() {
       ;;
   esac
 }
+
+# ---------------------------------------------------------------------------
+# 3b. --doctor: diagnose the current setup and exit
+# ---------------------------------------------------------------------------
+
+if [ "$DOCTOR" = true ]; then
+  echo "🩺 Running health check..."
+  echo ""
+
+  CFG="$(_claude_desktop_config_path)"
+  MEM="${MEMORY_FILE_PATH:-$HOME/.claude-memory/memory.json}"
+  # Expand a leading ~ that the env var may carry
+  MEM="${MEM/#~/$HOME}"
+
+  STATUS=0
+  ok()    { echo "  ✓ $*"; }
+  warn()  { echo "  ⚠ $*"; }
+  fail()  { echo "  ✗ $*"; STATUS=1; }
+
+  echo "Node.js"
+  ok "$(node --version) (npx ships with Node 18+)"
+
+  echo ""
+  echo "npm registry"
+  if npm show @modelcontextprotocol/server-memory version >/dev/null 2>&1; then
+    ok "@modelcontextprotocol/server-memory reachable ($(npm show @modelcontextprotocol/server-memory version 2>/dev/null))"
+  else
+    warn "Could not reach npm registry (may be offline; npx will fetch on first use)"
+  fi
+
+  echo ""
+  echo "Claude Desktop config"
+  if [ -f "$CFG" ]; then
+    ok "Config file exists: $CFG"
+    if CFG_PATH="$CFG" node -e 'JSON.parse(require("fs").readFileSync(process.env.CFG_PATH,"utf8"))' >/dev/null 2>&1; then
+      ok "Config is valid JSON"
+      # List configured servers + flag PyPI-only-via-npx (`if` consumes set -e)
+      if CFG_PATH="$CFG" node - <<'NODEEOF'
+const cfg = JSON.parse(require('fs').readFileSync(process.env.CFG_PATH,'utf8'));
+const servers = (cfg && cfg.mcpServers) || {};
+const names = Object.keys(servers);
+if (!names.length) { console.log('  ⚠ No mcpServers configured'); process.exit(0); }
+console.log('  ✓ ' + names.length + ' MCP server(s) configured: ' + names.join(', '));
+const pypi = ['@modelcontextprotocol/server-fetch','@modelcontextprotocol/server-time','@modelcontextprotocol/server-git'];
+let bad = 0;
+for (const [n, s] of Object.entries(servers)) {
+  if (s.command === 'npx' && Array.isArray(s.args) && s.args.some(a => pypi.includes(a))) {
+    console.log('  ✗ Server "' + n + '" launches a PyPI-only package via npx — it will fail. Use uvx instead.');
+    bad++;
+  }
+}
+process.exit(bad ? 1 : 0);
+NODEEOF
+      then : ; else STATUS=1 ; fi
+    else
+      fail "Config file is NOT valid JSON"
+    fi
+  else
+    warn "Config file not found: $CFG (run without --doctor to create it)"
+  fi
+
+  echo ""
+  echo "Memory file"
+  if [ -f "$MEM" ]; then
+    ok "Memory file exists: $MEM"
+    SIZE=$(wc -c < "$MEM" | tr -d ' ')
+    ok "Size: $SIZE bytes"
+    # Memory is JSONL (one entity/relation per line); validate each line
+    if MEM_PATH="$MEM" node - <<'NODEEOF'
+const fs = require('fs');
+const text = fs.readFileSync(process.env.MEM_PATH,'utf8');
+const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+let entities = 0, relations = 0, bad = 0;
+for (const l of lines) {
+  try {
+    const o = JSON.parse(l);
+    if (o.type === 'entity')   entities++;
+    if (o.type === 'relation') relations++;
+  } catch (_) { bad++; }
+}
+if (bad) { console.error('bad lines: ' + bad); process.exit(1); }
+console.log('  ✓ ' + entities + ' entities · ' + relations + ' relations (JSONL parse OK)');
+NODEEOF
+    then : ; else fail "Memory file has malformed JSONL line(s)"; fi
+  else
+    warn "Memory file not yet created (will be on Claude's first 'remember' command)"
+  fi
+
+  echo ""
+  if [ "$STATUS" -eq 0 ]; then
+    echo "✅ All checks passed."
+  else
+    echo "❌ One or more checks failed — see above."
+  fi
+  exit $STATUS
+fi
 
 # ---------------------------------------------------------------------------
 # 4. Claude Desktop mode: patch the config file

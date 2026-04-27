@@ -96,6 +96,10 @@ jobs:
         run: |
           ./integrations/mcp-memory/setup.sh --help | grep -q -- "--advanced"
           ./integrations/mcp-memory/setup.sh --help | grep -q -- "--prewarm"
+          ./integrations/mcp-memory/setup.sh --help | grep -q -- "--doctor"
+          ./integrations/claude-desktop/view-memory.sh --help | grep -q -- "--stats"
+          ./integrations/claude-desktop/view-memory.sh --help | grep -q -- "--search"
+          ./integrations/claude-desktop/view-memory.sh --help | grep -q -- "--backup"
           echo "--help advertises new flags"
 
       - name: Smoke-test setup.sh (generic mode, no Node required)
@@ -151,3 +155,83 @@ jobs:
           if (dupes.length) throw new Error('Duplicate server keys: ' + dupes.join(','));
           console.log('Idempotency check passed.');
           EOF
+
+      - name: Smoke-test setup.sh --doctor (healthy + broken cases)
+        run: |
+          # Seed a sample memory.json (JSONL format, same as the memory MCP server uses)
+          mkdir -p "$HOME/.claude-memory"
+          cat > "$HOME/.claude-memory/memory.json" <<'JSONL'
+          {"type":"entity","name":"Alice","entityType":"person","observations":["likes TS"]}
+          {"type":"entity","name":"Acme","entityType":"organization","observations":["startup"]}
+          {"type":"relation","from":"Alice","to":"Acme","relationType":"works_at"}
+          JSONL
+
+          # 1) Healthy config from the previous step → exit 0
+          ./integrations/mcp-memory/setup.sh --doctor
+          echo "  ✓ doctor: healthy → exit 0"
+
+          # 2) Inject the PyPI-via-npx footgun → doctor must catch it (exit 1)
+          node - <<'EOF'
+          const fs=require('fs'), p=process.env.HOME+'/.config/Claude/claude_desktop_config.json';
+          const cfg=JSON.parse(fs.readFileSync(p,'utf8'));
+          cfg.mcpServers.fetch={command:'npx',args:['-y','@modelcontextprotocol/server-fetch']};
+          fs.writeFileSync(p, JSON.stringify(cfg,null,2));
+          EOF
+          if ./integrations/mcp-memory/setup.sh --doctor; then
+            echo "  ✗ doctor should have flagged PyPI-via-npx"; exit 1
+          else
+            echo "  ✓ doctor: PyPI-via-npx → non-zero exit"
+          fi
+
+          # 3) Corrupt the config → doctor must catch it (exit 1)
+          echo "{not valid" > "$HOME/.config/Claude/claude_desktop_config.json"
+          if ./integrations/mcp-memory/setup.sh --doctor; then
+            echo "  ✗ doctor should have flagged broken JSON"; exit 1
+          else
+            echo "  ✓ doctor: broken JSON → non-zero exit"
+          fi
+
+      - name: Smoke-test view-memory.sh CLI subcommands
+        run: |
+          # Reseed memory after the previous step's mutations
+          mkdir -p "$HOME/.claude-memory"
+          cat > "$HOME/.claude-memory/memory.json" <<'JSONL'
+          {"type":"entity","name":"Alice","entityType":"person","observations":["likes TS"]}
+          {"type":"entity","name":"Bob","entityType":"person","observations":["learning TS"]}
+          {"type":"entity","name":"TypeScript","entityType":"language","observations":[]}
+          {"type":"relation","from":"Alice","to":"TypeScript","relationType":"uses"}
+          {"type":"relation","from":"Bob","to":"Alice","relationType":"colleague_of"}
+          JSONL
+
+          out=$(./integrations/claude-desktop/view-memory.sh --stats)
+          echo "$out" | grep -q "Entities:     3"
+          echo "$out" | grep -q "Relations:    2"
+          echo "$out" | grep -q "Most-connected"
+          echo "  ✓ --stats works"
+
+          ./integrations/claude-desktop/view-memory.sh --types | grep -q "person"
+          echo "  ✓ --types works"
+
+          ./integrations/claude-desktop/view-memory.sh --search "TypeScript" | grep -q "Alice"
+          echo "  ✓ --search finds matches"
+
+          # No-match must exit non-zero
+          if ./integrations/claude-desktop/view-memory.sh --search "definitely-not-there-xyzzy" >/dev/null; then
+            echo "  ✗ --search with no matches should exit non-zero"; exit 1
+          else
+            echo "  ✓ --search no-match → non-zero exit"
+          fi
+
+          # Backup must produce a timestamped file
+          ./integrations/claude-desktop/view-memory.sh --backup
+          test -d "$HOME/.claude-memory/backups"
+          n=$(find "$HOME/.claude-memory/backups" -name 'memory-*.json' | wc -l)
+          test "$n" -ge 1
+          echo "  ✓ --backup created file"
+
+          # Bad option must exit non-zero
+          if ./integrations/claude-desktop/view-memory.sh --bogus >/dev/null 2>&1; then
+            echo "  ✗ unknown option should exit non-zero"; exit 1
+          else
+            echo "  ✓ unknown option → non-zero exit"
+          fi

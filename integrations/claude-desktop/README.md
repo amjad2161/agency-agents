@@ -91,6 +91,34 @@ A built-in WebGL viewer that renders your memory as an interactive knowledge gra
 
 > 📄 File: [`brain-visualizer.html`](./brain-visualizer.html). Open it directly in your browser, or run `view-memory.sh` to launch.
 
+### 🔬 CLI inspection (no browser needed)
+
+`view-memory.sh` doubles as a CLI tool for inspecting/backing up your memory:
+
+```bash
+# Quick stats: entity / relation / observation counts, top types, top hubs
+./integrations/claude-desktop/view-memory.sh --stats
+
+# List all entity types with counts
+./integrations/claude-desktop/view-memory.sh --types
+
+# Text search across names, types, observations, and relations
+./integrations/claude-desktop/view-memory.sh --search "TypeScript"
+
+# Timestamped backup → ~/.claude-memory/backups/memory-<UTC>.json
+./integrations/claude-desktop/view-memory.sh --backup
+```
+
+### 🩺 Health check
+
+Diagnose your install in one command:
+
+```bash
+./integrations/mcp-memory/setup.sh --doctor
+```
+
+Verifies Node.js version, npm reachability, config file presence + JSON validity, lists configured MCP servers, flags the [PyPI-via-npx footgun](#-python-add-ons-uvx), and validates the memory file's JSONL format. Exits non-zero when anything is wrong, so it's safe to wire into your own scripts or CI.
+
 ---
 
 ## 📦 Manual Configuration
