@@ -147,6 +147,43 @@ KEYWORD_SLUG_BOOST: dict[str, dict[str, float]] = {
     "foia": {"journalism": 7.0},
     "visa": {"immigration": 7.0, "mobility": 5.0},
 
+    # Frontend / Web development
+    "react": {"frontend": 9.0, "engineering": 5.0},
+    "reactjs": {"frontend": 9.0, "engineering": 5.0},
+    "react.js": {"frontend": 9.0, "engineering": 5.0},
+    "next.js": {"frontend": 9.0, "engineering": 5.0},
+    "nextjs": {"frontend": 9.0, "engineering": 5.0},
+    "vue": {"frontend": 8.0, "engineering": 5.0},
+    "angular": {"frontend": 8.0, "engineering": 5.0},
+    "svelte": {"frontend": 8.0, "engineering": 5.0},
+    "typescript": {"frontend": 7.0, "engineering": 6.0},
+    "javascript": {"frontend": 7.0, "engineering": 6.0},
+    "component": {"frontend": 7.0, "engineering": 5.0},
+    "ui component": {"frontend": 8.0, "design": 5.0},
+    "frontend": {"frontend": 9.0, "engineering": 5.0},
+    "front-end": {"frontend": 9.0, "engineering": 5.0},
+    "tailwind": {"frontend": 8.0, "engineering": 5.0},
+    "css": {"frontend": 7.0, "engineering": 4.0},
+    "html": {"frontend": 6.0, "engineering": 4.0},
+    "spa": {"frontend": 7.0, "engineering": 4.0},
+    "webpack": {"frontend": 7.0, "engineering": 4.0},
+    "vite": {"frontend": 7.0, "engineering": 4.0},
+
+    # Backend / systems
+    "api": {"backend": 6.0, "engineering": 4.0},
+    "rest api": {"backend": 7.0, "engineering": 4.0},
+    "graphql": {"backend": 7.0, "engineering": 4.0},
+    "microservices": {"backend": 7.0, "engineering": 5.0},
+    "docker": {"devops": 7.0, "engineering": 5.0},
+    "postgres": {"database": 7.0, "engineering": 5.0},
+    "redis": {"backend": 6.0, "engineering": 5.0},
+    "python": {"engineering": 6.0, "backend": 5.0},
+    "django": {"backend": 7.0, "engineering": 5.0},
+    "flask": {"backend": 6.0, "engineering": 5.0},
+    "fastapi": {"backend": 7.0, "engineering": 5.0},
+    "node": {"backend": 6.0, "engineering": 5.0},
+    "nodejs": {"backend": 7.0, "engineering": 5.0},
+
     # Web3
     "web3": {"web3": 7.0, "blockchain": 6.0},
     "blockchain": {"blockchain": 7.0, "web3": 5.0},
@@ -371,7 +408,7 @@ class SupremeJarvisBrain:
         for cat in sorted(by_cat):
             lines.append(f"## {cat}")
             for s in sorted(by_cat[cat], key=lambda x: x.slug):
-                lines.append(f"- `{s.slug}` — {s.name}: {s.description[:120]}")
+                lines.append(f"- \`{s.slug}\` — {s.name}: {s.description[:120]}")
         return "\n".join(lines)
 
 
@@ -405,9 +442,3 @@ def get_brain() -> SupremeJarvisBrain:
     if _global_brain is None:
         _global_brain = SupremeJarvisBrain()
     return _global_brain
-
-
-def reset_brain() -> None:
-    """Reset the global singleton (useful for testing)."""
-    global _global_brain
-    _global_brain = None

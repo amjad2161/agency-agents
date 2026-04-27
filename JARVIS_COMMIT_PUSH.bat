@@ -25,26 +25,12 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "fix: E2E upgrade — humanized soul, repair truncated files, CI startup fixed, 688/688 tests passing"
-echo.
+git commit -m "feat(jarvis): SupremeJarvisBrain routing + React fix + setup scripts
 
-echo [4] Fetching origin...
-git fetch origin
-echo.
-
-echo [5] Pushing to GitHub...
-git push origin HEAD:main
-if errorlevel 1 (
-    echo.
-    echo Trying force-with-lease...
-    git push --force-with-lease origin HEAD:main
-)
-
-echo.
-echo ============================================
-echo  DONE. J.A.R.V.I.S commit pushed to main.
-echo ============================================
-echo.
-git log --oneline -5
-echo.
-pause
+- jarvis_brain.py: add React/frontend keyword boosts to KEYWORD_SLUG_BOOST
+  (react, vue, angular, svelte, typescript, component, tailwind, vite, etc.)
+- planner.py: wire SupremeJarvisBrain.top_k() as primary skill router
+  (replaces naive registry.search; falls back on error)
+- amjad_memory.py: remove duplicate _singleton declaration (line 184)
+- JARVIS_SETUP.bat: one-click venv + pip install -e runtime[dev] + smoke test
+- JARVIS_START.bat: one-click

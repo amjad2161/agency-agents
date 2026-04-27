@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from .llm import AnthropicLLM, LLMError
 from .logging import get_logger
 from .skills import Skill, SkillRegistry
+from .jarvis_brain import SupremeJarvisBrain
 
 
 @dataclass
@@ -50,7 +51,16 @@ class Planner:
             log.info("plan.hint slug=%s", hint_slug)
             return PlanResult(skill=skill, rationale="explicit user choice", candidates=[skill])
 
-        candidates = self.registry.search(request, limit=self.shortlist_size)
+        # Use SupremeJarvisBrain for keyword-weighted routing first.
+        try:
+            brain = SupremeJarvisBrain(self.registry)
+            top_results = brain.top_k(request, k=self.shortlist_size)
+            candidates = [skill for skill, _ in top_results]
+        except Exception:
+            candidates = []
+        # Fall back to naive search if brain returns nothing.
+        if not candidates:
+            candidates = self.registry.search(request, limit=self.shortlist_size)
         if not candidates:
             candidates = self.registry.all()[: self.shortlist_size]
 
