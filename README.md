@@ -598,7 +598,7 @@ Give Claude Desktop a **persistent local memory + a Super-Brain stack** of MCP a
 # 🧠 Memory only (minimal)
 ./integrations/mcp-memory/setup.sh --claude-desktop
 
-# ⚡ Super-Brain (memory + reasoning + filesystem + fetch + time)
+# ⚡ Super-Brain (memory + reasoning + filesystem + puppeteer + everything)
 ./integrations/mcp-memory/setup.sh --claude-desktop --advanced
 
 # 🚀 Super-Brain + speed pre-warm (instant cold-start)

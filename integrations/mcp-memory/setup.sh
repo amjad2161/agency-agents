@@ -30,7 +30,7 @@ for arg in "$@"; do
       echo "  --claude-desktop   Patch the Claude Desktop config file with the memory server."
       echo "                     Config path is detected automatically per OS."
       echo "  --advanced         Install the Super-Brain stack (memory + sequential-thinking"
-      echo "                     + filesystem + fetch + time). Implies --claude-desktop."
+      echo "                     + filesystem + puppeteer + everything). Implies --claude-desktop."
       echo "  --prewarm          Pre-download MCP server packages so Claude Desktop boots"
       echo "                     instantly the first time. Speeds up cold starts."
       exit 0
@@ -90,8 +90,8 @@ ADVANCED_PACKAGES=(
   "@modelcontextprotocol/server-memory"
   "@modelcontextprotocol/server-sequential-thinking"
   "@modelcontextprotocol/server-filesystem"
-  "@modelcontextprotocol/server-fetch"
-  "@modelcontextprotocol/server-time"
+  "@modelcontextprotocol/server-puppeteer"
+  "@modelcontextprotocol/server-everything"
 )
 
 if [ "$PREWARM" = true ]; then
@@ -154,7 +154,7 @@ if [ "$CLAUDE_DESKTOP" = true ]; then
   CONFIG_DIR="$(dirname "$CONFIG_PATH")"
 
   if [ "$ADVANCED" = true ]; then
-    echo "Claude Desktop mode (Super-Brain stack: memory + sequential-thinking + filesystem + fetch + time)"
+    echo "Claude Desktop mode (Super-Brain stack: memory + sequential-thinking + filesystem + puppeteer + everything)"
   else
     echo "Claude Desktop mode (memory only)"
   fi
@@ -179,13 +179,13 @@ if [ "$CLAUDE_DESKTOP" = true ]; then
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-filesystem", "~/Documents", "~/Desktop"]
       },
-      "fetch": {
+      "puppeteer": {
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-fetch"]
+        "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
       },
-      "time": {
+      "everything": {
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-time"]
+        "args": ["-y", "@modelcontextprotocol/server-everything"]
       }
     }'
   else
@@ -245,7 +245,8 @@ NODEEOF
     echo "  4. Try the new abilities:"
     echo "       'Think step-by-step about ...' → uses sequential-thinking"
     echo "       'Read the file ~/Documents/notes.md' → uses filesystem"
-    echo "       'Fetch https://example.com and summarize' → uses fetch"
+    echo "       'Take a screenshot of https://example.com' → uses puppeteer"
+    echo "       'Show me the example tools' → uses everything (demo server)"
   fi
   echo ""
   echo "🧠 Visualize your memory in 3D (run from the repo root):"

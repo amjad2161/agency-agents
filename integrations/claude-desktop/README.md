@@ -6,18 +6,18 @@
             ┌───────────────────────────────────────────┐
             │           CLAUDE DESKTOP                  │
             └─────────────────────┬─────────────────────┘
-                                  │ MCP (stdio)
+                                  │ MCP (stdio, all via npx)
         ┌──────────────┬──────────┼──────────┬──────────────┐
         │              │          │          │              │
         ▼              ▼          ▼          ▼              ▼
-  ┌─────────┐   ┌──────────┐ ┌────────┐ ┌────────┐  ┌──────────────┐
-  │ memory  │   │sequential│ │filesys-│ │ fetch  │  │     time     │
-  │ (graph) │   │ thinking │ │  tem   │ │  HTTP  │  │ tz / clocks  │
-  └────┬────┘   └──────────┘ └────────┘ └────────┘  └──────────────┘
-       │
+  ┌─────────┐   ┌──────────┐ ┌────────┐ ┌──────────┐ ┌─────────────┐
+  │ memory  │   │sequential│ │filesys-│ │puppeteer │ │ everything  │
+  │ (graph) │   │ thinking │ │  tem   │ │ headless │ │ demo server │
+  └────┬────┘   └──────────┘ └────────┘ │ Chrome   │ └─────────────┘
+       │                                └──────────┘
        ▼
   ~/.claude-memory/memory.json   ◄── 3D Brain Visualizer
-                                     (open in any browser)
+                                     (zero-install WebGL)
 ```
 
 [![Local](https://img.shields.io/badge/storage-100%25%20local-1e88e5)]() [![Speed](https://img.shields.io/badge/credit%20savings-50–80%25-43a047)]() [![No install](https://img.shields.io/badge/install-zero-9c27b0)]() [![3D](https://img.shields.io/badge/visualizer-3D%20WebGL-ff7043)]()
@@ -31,9 +31,11 @@
 | 🧠 **Persistent Memory** | Knowledge graph of you, your projects, and decisions | No re-pasting context every session |
 | 🤔 **Sequential Thinking** | Structured step-by-step reasoning tool | Claude branches less, retries less |
 | 📁 **Filesystem** | Direct read/write to `~/Documents` and `~/Desktop` | No copy-paste of file contents |
-| 🌐 **Fetch** | Pulls live web pages on demand | No "let me paste the article…" |
-| 🕒 **Time** | Real timezone-aware clocks | No fake date drift in logs |
-| 🌌 **3D Visualizer** | WebGL knowledge-graph explorer | See/audit/prune your memory |
+| 🤖 **Puppeteer** | Headless-Chrome browser automation: navigate, screenshot, click, fill, scrape, fetch | No manual browser steps; one server replaces a generic HTTP fetcher |
+| 🧪 **Everything** | Demo server exposing every MCP feature (tools, resources, prompts) | Great for verifying setup + learning what MCP can do |
+| 🌌 **3D Visualizer** | WebGL knowledge-graph explorer with type filters, hover peek, screenshot export, keyboard shortcuts | See/audit/prune your memory |
+
+> 🐍 **Want `fetch` / `time` / `git`?** Those MCP servers are published as Python packages, not npm — see [Python add-ons](#-python-add-ons-uvx) below.
 
 ---
 
@@ -45,11 +47,13 @@
 ./integrations/mcp-memory/setup.sh --claude-desktop
 ```
 
-### ⚡ Super-Brain (memory + reasoning + filesystem + fetch + time)
+### ⚡ Super-Brain (memory + reasoning + filesystem + puppeteer + everything)
 
 ```bash
 ./integrations/mcp-memory/setup.sh --claude-desktop --advanced
 ```
+
+All five servers are published to npm and run via `npx` — no separate install steps.
 
 ### 🚀 Super-Brain + Speed pre-warm (instant cold-start)
 
@@ -74,12 +78,16 @@ A built-in WebGL viewer that renders your memory as an interactive knowledge gra
 ```
 
 **Features**
-- 🌐 Force-directed 3D layout (Fibonacci-sphere distribution)
+- 🌐 Force-distributed 3D layout (Fibonacci-sphere, even on a giant graph)
+- 🎨 Auto color-coded by `entityType` with a dynamic legend (click a type to mute/unmute)
 - 🔍 Real-time fuzzy search across entities + observations
-- 🎯 Click any node → see its observations and connections
+- 🪄 Hover any node → peek tooltip; click → full details + connected edges glow
 - 📁 Drag-and-drop your own `memory.json` (or it auto-loads sample data)
+- 📸 One-click PNG screenshot export (or press `S`)
+- ⌨ Keyboard shortcuts: `R` reset · `Space` pause · `F` focus selected · `S` screenshot · `Esc` deselect · `?` help
 - 🎬 Auto-orbit camera, pause/resume, reset view
-- ⚡ Zero install — pure HTML + Three.js via CDN, opens in any browser
+- ⚡ Throttled hover raycast (30 Hz) keeps interaction smooth on large graphs
+- 🚀 Zero install — pure HTML + Three.js via CDN, opens in any browser
 
 > 📄 File: [`brain-visualizer.html`](./brain-visualizer.html). Open it directly in your browser, or run `view-memory.sh` to launch.
 
@@ -124,8 +132,22 @@ If you'd rather edit the config by hand, the config path differs per OS:
                              "env": { "MEMORY_FILE_PATH": "~/.claude-memory/memory.json" } },
     "sequential-thinking": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"] },
     "filesystem":          { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "~/Documents", "~/Desktop"] },
-    "fetch":               { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-fetch"] },
-    "time":                { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-time"] }
+    "puppeteer":           { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-puppeteer"] },
+    "everything":          { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-everything"] }
+  }
+}
+```
+
+### 🐍 Python add-ons (uvx)
+
+A few popular MCP servers are only published to PyPI. If you want them, install [`uv`](https://docs.astral.sh/uv/) (`brew install uv` / `pipx install uv`) and add any of these entries to your config — `uvx` will fetch and run them on demand the same way `npx` does for npm packages:
+
+```json
+{
+  "mcpServers": {
+    "fetch": { "command": "uvx", "args": ["mcp-server-fetch"] },
+    "time":  { "command": "uvx", "args": ["mcp-server-time"] },
+    "git":   { "command": "uvx", "args": ["mcp-server-git"] }
   }
 }
 ```

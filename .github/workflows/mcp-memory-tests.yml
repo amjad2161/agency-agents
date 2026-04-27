@@ -46,22 +46,43 @@ jobs:
         run: |
           node - <<'EOF'
           const cfg = JSON.parse(require('fs').readFileSync('integrations/claude-desktop/claude_desktop_config.advanced.json','utf8'));
-          const expected = ['memory','sequential-thinking','filesystem','fetch','time'];
+          const expected = ['memory','sequential-thinking','filesystem','puppeteer','everything'];
           for (const k of expected) {
             if (!cfg.mcpServers || !cfg.mcpServers[k]) throw new Error('Missing server: ' + k);
-            if (!cfg.mcpServers[k].command) throw new Error('Missing command for: ' + k);
+            if (cfg.mcpServers[k].command !== 'npx') throw new Error('Server '+k+' must use npx (Super-Brain stack is npm-only)');
             if (!Array.isArray(cfg.mcpServers[k].args)) throw new Error('args must be array for: ' + k);
           }
           console.log('Advanced config structure OK -- all', expected.length, 'servers present');
           EOF
 
+      - name: Reject npm-incompatible servers in advanced config
+        run: |
+          # fetch/time/git are PyPI-only; they must NOT appear in the npx-based advanced config.
+          # If they're added, they should use 'uvx' as the command.
+          node - <<'EOF'
+          const cfg = JSON.parse(require('fs').readFileSync('integrations/claude-desktop/claude_desktop_config.advanced.json','utf8'));
+          const pypiOnly = ['@modelcontextprotocol/server-fetch','@modelcontextprotocol/server-time','@modelcontextprotocol/server-git'];
+          for (const [name, srv] of Object.entries(cfg.mcpServers)) {
+            if (srv.command === 'npx' && srv.args.some(a => pypiOnly.includes(a))) {
+              throw new Error('Server '+name+' uses npx for a PyPI-only package: '+srv.args.join(' '));
+            }
+          }
+          console.log('No PyPI-only packages in npx commands.');
+          EOF
+
       - name: Validate brain-visualizer.html
         run: |
           test -f integrations/claude-desktop/brain-visualizer.html
-          # Basic sanity checks: must be HTML and contain three.js + memory parsing
+          # Basic sanity checks
           grep -q '<!doctype html>' integrations/claude-desktop/brain-visualizer.html
           grep -q 'three' integrations/claude-desktop/brain-visualizer.html
           grep -q 'parseMemory' integrations/claude-desktop/brain-visualizer.html
+          # New v2 features
+          grep -q 'colorForType' integrations/claude-desktop/brain-visualizer.html
+          grep -q 'saveScreenshot' integrations/claude-desktop/brain-visualizer.html
+          grep -q 'preserveDrawingBuffer' integrations/claude-desktop/brain-visualizer.html
+          grep -q 'kb-help' integrations/claude-desktop/brain-visualizer.html
+          grep -q 'tooltip' integrations/claude-desktop/brain-visualizer.html
           echo "brain-visualizer.html OK"
 
       - name: Check setup.sh and view-memory.sh have no syntax errors
@@ -110,11 +131,11 @@ jobs:
           node - <<'EOF'
           const path = process.env.HOME + '/.config/Claude/claude_desktop_config.json';
           const cfg = JSON.parse(require('fs').readFileSync(path, 'utf8'));
-          const expected = ['memory','sequential-thinking','filesystem','fetch','time'];
+          const expected = ['memory','sequential-thinking','filesystem','puppeteer','everything'];
           for (const k of expected) {
             if (!cfg.mcpServers[k]) throw new Error('Missing server after --advanced: ' + k);
           }
-          console.log('All advanced servers merged OK.');
+          console.log('All', expected.length, 'advanced servers merged OK.');
           EOF
 
       - name: Smoke-test idempotency (re-run should not duplicate the entry)

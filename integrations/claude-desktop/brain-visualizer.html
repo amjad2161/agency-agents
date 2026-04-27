@@ -43,8 +43,15 @@
 
   #legend { font-size:11px; color:#7a85b0; margin-top:12px;
     padding-top:12px; border-top:1px solid #1f2c5a; }
-  #legend .dot { display:inline-block; width:8px; height:8px; border-radius:50%;
-    margin-right:6px; vertical-align:middle; }
+  #legend .dot { display:inline-block; width:9px; height:9px; border-radius:50%;
+    margin-right:7px; vertical-align:middle;
+    box-shadow:0 0 6px currentColor; }
+  #legend .row-l { display:flex; align-items:center; padding:2px 0;
+    cursor:pointer; user-select:none; transition:opacity .15s; }
+  #legend .row-l:hover { opacity:0.7; }
+  #legend .row-l.muted { opacity:0.35; }
+  #legend .count { margin-left:auto; color:#5a6595; font-size:10px;
+    background:#0a0f24; padding:1px 6px; border-radius:8px; }
 
   #info { position:fixed; bottom:16px; right:16px; max-width:380px;
     background:rgba(10,14,32,0.92); border:1px solid #2a3a6a; border-radius:10px;
@@ -53,8 +60,36 @@
   #info .obs { font-size:11px; color:#9aa5cc; margin-top:6px;
     max-height:140px; overflow:auto; }
 
+  /* Hover tooltip — appears next to the cursor */
+  #tooltip { position:fixed; pointer-events:none; z-index:25;
+    background:rgba(10,14,32,0.94); border:1px solid #3a5aaa; border-radius:6px;
+    padding:5px 9px; font-size:11px; color:#aef0ff;
+    box-shadow:0 4px 18px rgba(0,180,255,0.18);
+    transform:translate(-50%, -120%); display:none;
+    transition:opacity .12s; }
+
+  /* Keyboard help overlay */
+  #kb-help { position:fixed; inset:0; background:rgba(0,0,0,0.7);
+    z-index:40; display:none; align-items:center; justify-content:center;
+    backdrop-filter:blur(6px); }
+  #kb-help.on { display:flex; }
+  #kb-help .panel { background:rgba(10,14,32,0.96); border:1px solid #3a5aaa;
+    border-radius:14px; padding:24px 28px; max-width:380px;
+    box-shadow:0 20px 80px rgba(0,180,255,0.2); }
+  #kb-help h2 { margin:0 0 12px; color:#6ae0ff; font-size:14px;
+    letter-spacing:0.15em; text-transform:uppercase; }
+  #kb-help dl { display:grid; grid-template-columns:auto 1fr;
+    gap:8px 14px; margin:0; font-size:12px; }
+  #kb-help kbd { background:#0a0f24; border:1px solid #3a5aaa; border-radius:4px;
+    padding:2px 8px; font-family:ui-monospace,Menlo,monospace;
+    font-size:11px; color:#aef0ff; }
+  #kb-help dd { margin:0; color:#9aa5cc; align-self:center; }
+
   #help { position:fixed; bottom:14px; left:16px; font-size:10px;
     color:#5a6595; letter-spacing:0.04em; pointer-events:none; }
+  #help kbd { background:#0a0f24; border:1px solid #2a3a6a; border-radius:3px;
+    padding:1px 5px; font-family:ui-monospace,Menlo,monospace;
+    font-size:10px; color:#7a85b0; }
 
   .empty { padding:30px 16px; text-align:center; color:#7a85b0;
     font-size:12px; line-height:1.6; }
@@ -86,20 +121,38 @@
   </div>
 
   <div class="row">
-    <button id="reset-cam" style="flex:1">Reset view</button>
-    <button id="toggle-spin">⏸ Pause</button>
+    <button id="reset-cam" style="flex:1" title="Reset camera (R)">Reset view</button>
+    <button id="toggle-spin" title="Toggle auto-rotate (Space)">⏸ Pause</button>
+    <button id="screenshot" title="Save PNG screenshot (S)">📸</button>
   </div>
 
   <div id="legend">
-    <div><span class="dot" style="background:#6ae0ff"></span>Entity node</div>
-    <div><span class="dot" style="background:#f0a86a"></span>Highlighted (search)</div>
-    <div><span class="dot" style="background:#a06af0"></span>Selected node</div>
-    <div style="margin-top:6px">Drag = orbit · Wheel = zoom · Click node = details</div>
+    <div style="font-size:10px; color:#5a6595; letter-spacing:0.08em;
+                text-transform:uppercase; margin-bottom:6px">Entity types — click to filter</div>
+    <div id="legend-types"></div>
   </div>
 </div>
 
 <div id="info"></div>
-<div id="help">three.js · WebGL · zero install · 100% local</div>
+<div id="tooltip"></div>
+
+<div id="kb-help">
+  <div class="panel">
+    <h2>⌨ Keyboard shortcuts</h2>
+    <dl>
+      <dt><kbd>R</kbd></dt>            <dd>Reset camera</dd>
+      <dt><kbd>Space</kbd></dt>        <dd>Toggle auto-rotate</dd>
+      <dt><kbd>F</kbd></dt>            <dd>Focus on selected node</dd>
+      <dt><kbd>S</kbd></dt>            <dd>Save PNG screenshot</dd>
+      <dt><kbd>Esc</kbd></dt>          <dd>Deselect / clear search</dd>
+      <dt><kbd>?</kbd></dt>            <dd>Show / hide this help</dd>
+    </dl>
+  </div>
+</div>
+
+<div id="help">
+  Drag = orbit · Wheel = zoom · Click = select · Hover = peek · <kbd>?</kbd> = shortcuts
+</div>
 
 <script type="importmap">
 {
@@ -116,7 +169,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // ---------- Scene ----------
 const stage = document.getElementById('stage');
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  alpha: false,
+  preserveDrawingBuffer: true   // required for the PNG screenshot button (S)
+});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 stage.appendChild(renderer.domElement);
@@ -166,10 +223,25 @@ let nodes = [];   // {id, name, type, obs:[], mesh, label, sphere}
 let edges = [];   // {a, b, line, type}
 let selectedId = null;
 let highlightSet = new Set();
+let mutedTypes = new Set();   // entity types currently filtered out
 
-const NODE_COLOR = 0x6ae0ff;
-const NODE_HIGHLIGHT = 0xf0a86a;
-const NODE_SELECTED = 0xa06af0;
+// Type -> color palette (auto-assigned, deterministic by type name hash)
+const TYPE_PALETTE = [
+  0x6ae0ff, 0xf0a86a, 0xa06af0, 0x7af0a8, 0xf06aa0,
+  0xf0e06a, 0x6af0e0, 0xff7a55, 0x9aa0ff, 0xff9ad6
+];
+const typeColor = new Map();
+function colorForType(t) {
+  if (typeColor.has(t)) return typeColor.get(t);
+  let h = 0;
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
+  const c = TYPE_PALETTE[h % TYPE_PALETTE.length];
+  typeColor.set(t, c);
+  return c;
+}
+
+const NODE_HIGHLIGHT = 0xffd76a;   // search-match glow
+const NODE_SELECTED  = 0xffffff;   // selected outline tint
 
 const labelTextureCache = new Map();
 function makeLabelSprite(text) {
@@ -219,6 +291,8 @@ function buildGraph(entities, relations) {
   const golden = Math.PI * (3 - Math.sqrt(5));
   const sphereGeo = new THREE.SphereGeometry(0.9, 20, 16);
 
+  const typeCounts = new Map();
+
   entities.forEach((e, i) => {
     const y = 1 - (i / Math.max(1, N - 1)) * 2;
     const r = Math.sqrt(1 - y * y);
@@ -226,8 +300,12 @@ function buildGraph(entities, relations) {
     const x = Math.cos(theta) * r;
     const z = Math.sin(theta) * r;
 
+    const type = e.entityType || 'entity';
+    typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
+    const baseColor = colorForType(type);
+
     const mat = new THREE.MeshStandardMaterial({
-      color: NODE_COLOR, emissive: NODE_COLOR, emissiveIntensity: 0.45,
+      color: baseColor, emissive: baseColor, emissiveIntensity: 0.55,
       metalness: 0.4, roughness: 0.3
     });
     const sphere = new THREE.Mesh(sphereGeo, mat);
@@ -240,7 +318,7 @@ function buildGraph(entities, relations) {
     scene.add(label);
 
     nodes.push({
-      id: e.name, name: e.name, type: e.entityType || 'entity',
+      id: e.name, name: e.name, type, baseColor,
       obs: e.observations || [], sphere, label
     });
   });
@@ -253,9 +331,10 @@ function buildGraph(entities, relations) {
     if (!a || !b) return;
     const g = new THREE.BufferGeometry().setFromPoints([a.sphere.position, b.sphere.position]);
     const m = new THREE.LineBasicMaterial({
-      color: 0x335c8a, transparent: true, opacity: 0.55
+      color: 0x4a6a9a, transparent: true, opacity: 0.45
     });
     const line = new THREE.Line(g, m);
+    line.userData = { a: a.id, b: b.id };
     scene.add(line);
     edges.push({ a: a.id, b: b.id, line, type: r.relationType || '' });
   });
@@ -265,6 +344,39 @@ function buildGraph(entities, relations) {
   document.getElementById('stat-relations').textContent = edges.length;
   document.getElementById('stat-obs').textContent =
     nodes.reduce((s, n) => s + (n.obs?.length || 0), 0);
+
+  // Build type legend
+  const legend = document.getElementById('legend-types');
+  legend.innerHTML = '';
+  const sorted = [...typeCounts.entries()].sort((a, b) => b[1] - a[1]);
+  for (const [type, count] of sorted) {
+    const row = document.createElement('div');
+    row.className = 'row-l';
+    const hex = '#' + colorForType(type).toString(16).padStart(6, '0');
+    row.innerHTML = `<span class="dot" style="background:${hex};color:${hex}"></span>` +
+                    `<span>${escapeHtml(type)}</span>` +
+                    `<span class="count">${count}</span>`;
+    row.addEventListener('click', () => {
+      if (mutedTypes.has(type)) mutedTypes.delete(type);
+      else mutedTypes.add(type);
+      row.classList.toggle('muted', mutedTypes.has(type));
+      applyVisibility();
+    });
+    legend.appendChild(row);
+  }
+}
+
+function applyVisibility() {
+  nodes.forEach(n => {
+    const visible = !mutedTypes.has(n.type);
+    n.sphere.visible = visible;
+    n.label.visible = visible;
+  });
+  edges.forEach(e => {
+    const a = nodes.find(n => n.id === e.a);
+    const b = nodes.find(n => n.id === e.b);
+    e.line.visible = !!(a && b && a.sphere.visible && b.sphere.visible);
+  });
 }
 
 // ---------- Memory parsing ----------
@@ -358,11 +470,20 @@ function applySearch(query) {
       (n.obs || []).some(o => String(o).toLowerCase().includes(q))
     );
     if (matches) highlightSet.add(n.id);
-    const c = (n.id === selectedId) ? NODE_SELECTED
-      : (matches ? NODE_HIGHLIGHT : NODE_COLOR);
+    let c;
+    if (n.id === selectedId)        c = NODE_SELECTED;
+    else if (matches)               c = NODE_HIGHLIGHT;
+    else                            c = n.baseColor;
     n.sphere.material.color.setHex(c);
     n.sphere.material.emissive.setHex(c);
+    n.sphere.material.emissiveIntensity = (matches || n.id === selectedId) ? 0.95 : 0.55;
     n.sphere.scale.setScalar(matches ? 1.6 : 1.0);
+  });
+  // Edge emphasis
+  edges.forEach(e => {
+    const touches = e.a === selectedId || e.b === selectedId;
+    e.line.material.color.setHex(touches ? 0xffd76a : 0x4a6a9a);
+    e.line.material.opacity = touches ? 0.9 : 0.45;
   });
 }
 
@@ -382,6 +503,44 @@ function onPointerDown(ev) {
   }
 }
 renderer.domElement.addEventListener('pointerdown', onPointerDown);
+
+// Hover tooltip with throttled raycast (every ~33ms = 30 Hz)
+const tooltipEl = document.getElementById('tooltip');
+let lastHoverTs = 0;
+let lastHoverId = null;
+function onPointerMove(ev) {
+  const now = performance.now();
+  if (now - lastHoverTs < 33) return;
+  lastHoverTs = now;
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const meshes = nodes.filter(n => n.sphere.visible).map(n => n.sphere);
+  const hits = raycaster.intersectObjects(meshes, false);
+  if (hits.length) {
+    const id = hits[0].object.userData.id;
+    if (id !== lastHoverId) {
+      lastHoverId = id;
+      const n = nodes.find(x => x.id === id);
+      if (n) {
+        tooltipEl.innerHTML = `<b>${escapeHtml(n.name)}</b>` +
+          `<span style="color:#7a85b0"> · ${escapeHtml(n.type)}</span>`;
+      }
+    }
+    tooltipEl.style.left = ev.clientX + 'px';
+    tooltipEl.style.top  = ev.clientY + 'px';
+    tooltipEl.style.display = 'block';
+    renderer.domElement.style.cursor = 'pointer';
+  } else if (lastHoverId !== null) {
+    lastHoverId = null;
+    tooltipEl.style.display = 'none';
+    renderer.domElement.style.cursor = '';
+  }
+}
+renderer.domElement.addEventListener('pointermove', onPointerMove);
+renderer.domElement.addEventListener('pointerleave',
+  () => { tooltipEl.style.display = 'none'; lastHoverId = null; });
 
 function selectNode(id) {
   selectedId = id;
@@ -445,14 +604,73 @@ document.getElementById('file').addEventListener('change', async e => {
   buildGraph(parsed.entities, parsed.relations);
   showToast(`Loaded ${parsed.entities.length} entities · ${parsed.relations.length} relations`);
 });
-document.getElementById('reset-cam').addEventListener('click', () => {
+document.getElementById('reset-cam').addEventListener('click', resetCamera);
+document.getElementById('toggle-spin').addEventListener('click', toggleSpin);
+document.getElementById('screenshot').addEventListener('click', saveScreenshot);
+
+function resetCamera() {
   camera.position.set(0, 0, 80);
   controls.target.set(0, 0, 0);
   controls.update();
-});
-document.getElementById('toggle-spin').addEventListener('click', e => {
+}
+function toggleSpin() {
   controls.autoRotate = !controls.autoRotate;
-  e.target.textContent = controls.autoRotate ? '⏸ Pause' : '▶ Spin';
+  document.getElementById('toggle-spin').textContent =
+    controls.autoRotate ? '⏸ Pause' : '▶ Spin';
+}
+function focusSelected() {
+  if (!selectedId) { showToast('Select a node first'); return; }
+  const n = nodes.find(x => x.id === selectedId);
+  if (!n) return;
+  const target = n.sphere.position.clone();
+  controls.target.copy(target);
+  // Move camera to a point ~14 units from the node, along current view direction
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  camera.position.copy(target).add(dir.multiplyScalar(14));
+  controls.update();
+}
+function saveScreenshot() {
+  // Re-render once just before grabbing pixels so the framebuffer is current
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.href = url;
+  a.download = `brain-${ts}.png`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast('Screenshot saved');
+}
+
+// Keyboard shortcuts
+const kbHelp = document.getElementById('kb-help');
+window.addEventListener('keydown', ev => {
+  // Ignore when typing in inputs
+  if (ev.target.matches('input, textarea')) {
+    if (ev.key === 'Escape') ev.target.blur();
+    return;
+  }
+  switch (ev.key) {
+    case 'r': case 'R':       resetCamera(); break;
+    case ' ':                 ev.preventDefault(); toggleSpin(); break;
+    case 'f': case 'F':       focusSelected(); break;
+    case 's': case 'S':       saveScreenshot(); break;
+    case '?':                 kbHelp.classList.toggle('on'); break;
+    case 'Escape':
+      if (kbHelp.classList.contains('on')) {
+        kbHelp.classList.remove('on');
+      } else {
+        selectedId = null;
+        document.getElementById('info').style.display = 'none';
+        const s = document.getElementById('search');
+        s.value = ''; applySearch('');
+      }
+      break;
+  }
+});
+kbHelp.addEventListener('click', ev => {
+  if (ev.target === kbHelp) kbHelp.classList.remove('on');
 });
 
 // ---------- Resize / animate ----------

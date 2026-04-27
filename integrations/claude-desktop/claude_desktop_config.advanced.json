@@ -1,5 +1,5 @@
 {
-  "_comment": "Super-Brain config: memory + reasoning + filesystem + fetch + time. See integrations/claude-desktop/README.md for details.",
+  "_comment": "Super-Brain config: memory + sequential-thinking + filesystem + puppeteer + everything. All servers are published to npm and run via npx with zero install. See integrations/claude-desktop/README.md for optional Python-based add-ons (fetch/time/git via uvx).",
   "mcpServers": {
     "memory": {
       "command": "npx",
@@ -16,13 +16,15 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "~/Documents", "~/Desktop"]
     },
-    "fetch": {
+    "puppeteer": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-fetch"]
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
     },
-    "time": {
+    "everything": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-time"]
+      "args": ["-y", "@modelcontextprotocol/server-everything"]
     }
   }
 }
+
+
