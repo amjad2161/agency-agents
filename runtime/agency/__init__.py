@@ -14,24 +14,23 @@ __version__ = "0.1.0"
 
 
 if TYPE_CHECKING:
-    # Type-only imports so callers get autocomplete without paying the
-    # import cost at runtime. The actual instances come from the
-    # getters below.
+    from .amjad_memory import AmjadMemory
     from .autonomous_loop import AutonomousLoop
     from .capability_evolver import CapabilityEvolver
+    from .character_state import CharacterState
     from .context_manager import ContextManager
     from .knowledge_expansion import KnowledgeExpansion
     from .meta_reasoner import MetaReasoningEngine
     from .multimodal import MultimodalProcessor
+    from .persona_engine import PersonaEngine
     from .self_learner_engine import SelfLearnerEngine
 
 
 # ---- Singletons -----------------------------------------------------------
-# These are process-wide. Each holds either persistent state on disk
-# (lessons, capabilities, knowledge) or process-local state (context,
-# loop, reasoner, multimodal). Constructing them is cheap, but a
-# singleton spares callers from re-loading the JSONL/JSON every time.
 
+_persona_engine: "PersonaEngine | None" = None
+_character_state: "CharacterState | None" = None
+_amjad_memory: "AmjadMemory | None" = None
 _self_learner: "SelfLearnerEngine | None" = None
 _meta_reasoner: "MetaReasoningEngine | None" = None
 _capability_evolver: "CapabilityEvolver | None" = None
@@ -40,6 +39,30 @@ _autonomous_loop: "AutonomousLoop | None" = None
 _knowledge_expansion: "KnowledgeExpansion | None" = None
 _multimodal_processor: "MultimodalProcessor | None" = None
 _unified_bridge: "object | None" = None
+
+
+def get_persona_engine() -> "PersonaEngine":
+    global _persona_engine
+    if _persona_engine is None:
+        from .persona_engine import PersonaEngine
+        _persona_engine = PersonaEngine()
+    return _persona_engine
+
+
+def get_character_state() -> "CharacterState":
+    global _character_state
+    if _character_state is None:
+        from .character_state import CharacterState
+        _character_state = CharacterState.get_instance()
+    return _character_state
+
+
+def get_amjad_memory() -> "AmjadMemory":
+    global _amjad_memory
+    if _amjad_memory is None:
+        from .amjad_memory import AmjadMemory
+        _amjad_memory = AmjadMemory()
+    return _amjad_memory
 
 
 def get_self_learner() -> "SelfLearnerEngine":
@@ -91,12 +114,7 @@ def get_knowledge_expansion() -> "KnowledgeExpansion":
 
 
 def get_multimodal_processor() -> "MultimodalProcessor":
-    """Return the shared multimodal processor instance.
-
-    `MultimodalProcessor` is instance-based and may carry pluggable OCR /
-    transcription backends; the singleton lets callers configure those
-    backends once and reuse the processor everywhere.
-    """
+    """Return the shared multimodal processor instance."""
     global _multimodal_processor
     if _multimodal_processor is None:
         from .multimodal import MultimodalProcessor
@@ -105,11 +123,8 @@ def get_multimodal_processor() -> "MultimodalProcessor":
 
 
 def get_unified_bridge() -> object:
-    """Composite bridge that exposes every capability through one
-    handle — useful for callers that want a single `bridge.something`
-    surface without juggling seven imports.
-
-    The bridge is built lazily so importing the package is still cheap.
+    """Composite bridge exposing every capability through one handle.
+    Includes JARVIS persona, character state, and Amjad memory.
     """
     global _unified_bridge
     if _unified_bridge is not None:
@@ -124,13 +139,39 @@ def get_unified_bridge() -> object:
             self.autonomous_loop = get_autonomous_loop()
             self.knowledge_expansion = get_knowledge_expansion()
             self.multimodal = get_multimodal_processor()
+            # JARVIS character system
+            self.persona = get_persona_engine()
+            self.character = get_character_state()
+            self.memory = get_amjad_memory()
+
+        def process(self, request: str, context: dict | None = None) -> dict:
+            """Route request through JARVIS persona; inject persona_mode."""
+            ctx = dict(context or {})
+            mode = ctx.get("mode") or self.persona.detect_mode(request)
+            raw_response = ctx.get("response", "")
+            formatted = (
+                self.persona.format_response(raw_response, mode)
+                if raw_response
+                else ""
+            )
+            self.character.record_interaction(
+                domain=ctx.get("domain", "general")
+            )
+            ctx.update(
+                {
+                    "request": request,
+                    "response": formatted or raw_response,
+                    "persona_mode": mode,
+                }
+            )
+            return ctx
 
         def __repr__(self) -> str:
             return (
                 "<UnifiedBridge "
                 "self_learner+meta_reasoner+capability_evolver"
                 "+context_manager+autonomous_loop+knowledge_expansion"
-                "+multimodal>"
+                "+multimodal+persona+character+memory>"
             )
 
     _unified_bridge = _UnifiedBridge()
@@ -139,6 +180,9 @@ def get_unified_bridge() -> object:
 
 __all__ = [
     "__version__",
+    "get_persona_engine",
+    "get_character_state",
+    "get_amjad_memory",
     "get_self_learner",
     "get_meta_reasoner",
     "get_capability_evolver",
