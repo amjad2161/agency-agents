@@ -1,7 +1,7 @@
 # Agency Runtime
 
 A Python orchestration runtime that turns the persona markdown files in this
-repo into runnable skills. Pick (or auto-route to) any of the 180+ agents,
+repo into runnable skills. Pick (or auto-route to) any of the 320+ agents,
 hand it a request, and the runtime drives a Claude tool-use loop with file IO,
 sandboxed shell, and web fetch.
 

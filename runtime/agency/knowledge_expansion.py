@@ -139,8 +139,8 @@ class KnowledgeExpansion:
                     )
                     for r in results[:top_k]
                 ]
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001
+                log.warning("knowledge_expansion: vector search failed: %s", e)
 
         # Fallback: keyword overlap
         query_terms = set(query.lower().split())
@@ -216,8 +216,8 @@ class KnowledgeExpansion:
                     domain=f"kb:{chunk.domain}",
                     tags=chunk.tags,
                 )
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001
+                log.warning("knowledge_expansion: context_manager store failed: %s", e)
 
         if self._vector_store and hasattr(self._vector_store, "add"):
             try:
@@ -231,8 +231,8 @@ class KnowledgeExpansion:
                         "domain": chunk.domain,
                     },
                 )
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001
+                log.warning("knowledge_expansion: vector_store add failed: %s", e)
 
     @staticmethod
     def _strip_html(html: str) -> str:

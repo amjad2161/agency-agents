@@ -13,7 +13,7 @@ from .memory import MemoryStore, Session
 from .lessons import load_lessons_text
 from .profile import load_profile_text
 from .skills import Skill, SkillRegistry
-from .tools import Tool, ToolContext, builtin_tools, tools_by_name
+from .tools import Tool, ToolContext, builtin_tools, tools_by_name, ToolResult
 
 MAX_TURNS = 12  # safety cap on tool-use iterations
 
@@ -138,6 +138,8 @@ _LESSONS_DEFAULT = _LessonsDefault()
 
 class Executor:
     """One Executor per agent loop. Reuse across turns of a session."""
+
+    llm: "AnthropicLLM"  # always set in __init__; never None
 
     def __init__(
         self,
@@ -440,7 +442,7 @@ class Executor:
                     etype = getattr(event, "type", None)
                     if etype == "content_block_delta":
                         delta = getattr(event, "delta", None)
-                        if getattr(delta, "type", None) == "text_delta":
+                        if getattr(delta, "type", None) == "text_delta" and delta is not None:
                             yield ExecutionEvent("text_delta", delta.text)
                 final = stream.get_final_message()
                 if getattr(final, "usage", None) is not None:
@@ -562,7 +564,7 @@ class Executor:
                 i += 1
         return results
 
-    def _run_tool(self, name: str, args: dict[str, Any]):
+    def _run_tool(self, name: str, args: dict[str, Any]) -> Any:
         log = get_logger()
         tool = self._tool_index.get(name)
         if tool is None:
@@ -588,7 +590,7 @@ class Executor:
         return result
 
     @staticmethod
-    def _block_to_dict(block) -> dict[str, Any]:
+    def _block_to_dict(block: Any) -> dict[str, Any]:
         btype = getattr(block, "type", None)
         if btype == "text":
             return {"type": "text", "text": block.text}
@@ -603,4 +605,4 @@ class Executor:
         # Fallback for any other block type — preserve raw via model_dump if available.
         if hasattr(block, "model_dump"):
             return block.model_dump()
-        return {"type": btype or "unknown"}
+        return {"type": str(btype)}

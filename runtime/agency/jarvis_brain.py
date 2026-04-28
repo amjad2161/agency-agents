@@ -272,6 +272,44 @@ KEYWORD_SLUG_BOOST: dict[str, dict[str, float]] = {
     "data analysis": {"data": 10.0},
     "data visualization": {"data": 9.0},
     "dashboard": {"data": 8.0},
+
+    # Deployment / DevOps (missing entries)
+    "deploy": {"devops": 9.0, "engineering": 5.0},
+    "deployment": {"devops": 8.0, "engineering": 4.0},
+    "production deploy": {"devops": 10.0},
+    "deploy to": {"devops": 9.0},
+
+    # Git / version control
+    "git": {"engineering": 7.0, "devops": 4.0},
+    "git commit": {"engineering": 8.0},
+    "git merge": {"engineering": 8.0},
+    "version control": {"engineering": 6.0},
+
+    # Refactoring
+    "refactor": {"omega-engineer": 8.0, "engineering": 6.0},
+    "refactoring": {"omega-engineer": 8.0, "engineering": 6.0},
+    "clean up code": {"omega-engineer": 7.0, "engineering": 5.0},
+    "code smell": {"omega-engineer": 7.0, "engineering": 5.0},
+
+    # Containerization
+    "containerize": {"devops": 9.0, "engineering": 5.0},
+    "container": {"devops": 7.0, "engineering": 4.0},
+    "dockerfile": {"devops": 8.0, "engineering": 5.0},
+    "docker-compose": {"devops": 8.0, "engineering": 5.0},
+
+    # SQL / database queries
+    "sql query": {"database": 9.0, "engineering": 4.0},
+    "optimize sql": {"database": 9.0},
+    "sql optimization": {"database": 9.0},
+    "query optimization": {"database": 8.0},
+
+    # Python bugs specifically
+    "python bug": {"omega-engineer": 10.0, "engineering": 6.0},
+    "my python bug": {"omega-engineer": 12.0, "engineering": 6.0},
+    "fix my": {"omega-engineer": 8.0, "engineering": 5.0},
+    "fix bug": {"omega-engineer": 10.0, "engineering": 6.0},
+    "fix the bug": {"omega-engineer": 10.0, "engineering": 6.0},
+    "my bug": {"omega-engineer": 8.0, "engineering": 5.0},
 }
 
 
@@ -304,6 +342,7 @@ class RouteResult:
     candidates: list[tuple[Skill, float]] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Serialize routing result to a JSON-safe dict."""
         return {
             "skill": self.skill.slug,
             "name": self.skill.name,
@@ -332,10 +371,22 @@ class SupremeJarvisBrain:
     def __init__(self, registry: SkillRegistry | None = None) -> None:
         self.registry = registry or SkillRegistry.load()
         self._slug_index = {s.slug: s for s in self.registry.all()}
+        # Pre-compute lowercased text fields once at load time.
+        # Avoids repeated .lower() calls inside the per-request scoring loop
+        # (323 skills × 4 fields × every route() call).
+        self._skill_texts: list[tuple[Skill, str, str, str, str]] = [
+            (s, s.slug.lower(), s.name.lower(), s.description.lower(), (s.vibe or "").lower())
+            for s in self.registry.all()
+        ]
 
     # ------------------------------------------------------------------
     # Routing
     # ------------------------------------------------------------------
+
+    @property
+    def skills(self) -> list:
+        """All registered skills as a list — convenience alias for list(registry.all())."""
+        return list(self.registry.all())
 
     def skill_for(self, request: str, top_k: int = 5) -> RouteResult:
         """Pick the single best skill for *request*. Returns a RouteResult."""
@@ -364,6 +415,7 @@ class SupremeJarvisBrain:
         return scored[:k]
 
     def by_slug(self, slug: str) -> Skill | None:
+        """Return the Skill with the given slug, or None if not found."""
         return self._slug_index.get(slug)
 
     # ------------------------------------------------------------------
@@ -409,25 +461,31 @@ class SupremeJarvisBrain:
         terms = _tokenize(request)
         bigrams = _bigrams(terms)
         request_lower = request.lower()
+        # Pre-filter KEYWORD_SLUG_BOOST to only entries whose key appears in the
+        # request. Avoids re-checking all 191 keys for every skill, reducing the
+        # per-call work from O(keys×skills) to O(keys + matched×skills).
+        matched_boosts: list[tuple[str, float]] = []
+        for key, mapping in KEYWORD_SLUG_BOOST.items():
+            if key in request_lower:
+                matched_boosts.extend(mapping.items())
         scored: list[tuple[Skill, float]] = []
-        for skill in self.registry.all():
-            score = self._score_one(skill, terms, bigrams, request_lower)
+        # Use pre-lowercased skill text tuples (avoids 4×N .lower() calls per request).
+        for skill, slug_l, name_l, desc_l, vibe_l in self._skill_texts:
+            score = self._score_one(slug_l, name_l, desc_l, vibe_l, terms, bigrams, matched_boosts)
             if score > 0:
                 scored.append((skill, score))
         return scored
 
     def _score_one(
         self,
-        skill: Skill,
+        slug_l: str,
+        name_l: str,
+        desc_l: str,
+        vibe_l: str,
         terms: list[str],
         bigrams: list[str],
-        request_lower: str,
+        matched_boosts: list[tuple[str, float]],
     ) -> float:
-        slug_l = skill.slug.lower()
-        name_l = skill.name.lower()
-        desc_l = skill.description.lower()
-        vibe_l = (skill.vibe or "").lower()
-
         score = 0.0
         # Per-token frequency, weighted per field.
         for term in terms:
@@ -441,13 +499,10 @@ class SupremeJarvisBrain:
             if bg in slug_l or bg in name_l or bg in desc_l or bg in vibe_l:
                 score += 2.0
 
-        # KEYWORD_SLUG_BOOST: if a boost key appears in the request and
-        # any boost target appears in the slug, add the weight.
-        for key, mapping in KEYWORD_SLUG_BOOST.items():
-            if key in request_lower:
-                for target, weight in mapping.items():
-                    if target in slug_l:
-                        score += weight
+        # Apply pre-filtered boost entries: any target substring in slug earns weight.
+        for target, weight in matched_boosts:
+            if target in slug_l:
+                score += weight
         return score
 
     def _rationalize(self, request: str, skill: Skill, score: float) -> str:
@@ -488,7 +543,7 @@ class SupremeJarvisBrain:
         for cat in sorted(by_cat):
             lines.append(f"## {cat}")
             for s in sorted(by_cat[cat], key=lambda x: x.slug):
-                lines.append(f"- \`{s.slug}\` — {s.name}: {s.description[:120]}")
+                lines.append(f"- `{s.slug}` — {s.name}: {s.description[:120]}")
         return "\n".join(lines)
 
 

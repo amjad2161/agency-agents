@@ -67,12 +67,17 @@ class ComplexityClassifier:
         light_hits = sum(1 for t in self.LIGHT_TERMS if t in lower)
         heavy_hits = sum(1 for t in self.HEAVY_TERMS if t in lower)
 
-        if n < 6 and light_hits > 0:
+        # Trivial only when short AND light-only AND no heavy terms.
+        if n < 6 and light_hits > 0 and heavy_hits == 0:
             return Complexity.TRIVIAL
-        if heavy_hits >= 2 and n >= 25:
+        # Heavy-signal dominant: multiple heavy terms escalate regardless of length.
+        if heavy_hits >= 3 or (heavy_hits >= 2 and n >= 8):
             return Complexity.VERY_COMPLEX
-        if heavy_hits >= 1 and n >= 12:
+        if heavy_hits >= 2 or (heavy_hits >= 1 and n >= 8):
             return Complexity.COMPLEX
+        if heavy_hits >= 1:
+            return Complexity.MEDIUM
+        # Length-only fallback when no heavy terms present.
         if n >= 18:
             return Complexity.MEDIUM
         if n >= 6:

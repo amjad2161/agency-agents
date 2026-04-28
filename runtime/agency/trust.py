@@ -46,6 +46,7 @@ class TrustMode(str, Enum):
 # The persistent-mode file. Override with AGENCY_TRUST_CONF if you need to
 # point at a different path (e.g. for tests or alternate XDG layouts).
 def trust_conf_path() -> Path:
+    """Return the path to the persistent trust-mode config file."""
     override = os.environ.get("AGENCY_TRUST_CONF")
     if override:
         return Path(override).expanduser()
@@ -174,6 +175,7 @@ class TrustGate:
 
 
 def gate() -> TrustGate:
+    """Return the TrustGate for the current active trust mode."""
     return TrustGate.for_mode(current())
 
 

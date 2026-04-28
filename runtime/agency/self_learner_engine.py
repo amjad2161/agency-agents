@@ -240,8 +240,8 @@ class SelfLearnerEngine:
                 lesson = Lesson.from_dict(d)
                 self._append(lesson)
                 imported += 1
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001
+                log.warning("self_learner: skipping malformed lesson entry: %s", e)
         return imported
 
     # ------------------------------------------------------------------

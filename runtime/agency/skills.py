@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable, Iterator
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 # Folders in the repo root that contain agent persona markdown files.
 DEFAULT_CATEGORIES: tuple[str, ...] = (
@@ -60,6 +60,7 @@ class Skill:
         return self.body.strip()
 
     def summary(self) -> str:
+        """One-line human-readable summary of this skill."""
         return f"{self.emoji} {self.name} ({self.category}) — {self.description}"
 
     def tool_is_allowed(self, name: str) -> bool:
@@ -117,7 +118,7 @@ def _parse_one(path: Path, category: str) -> Skill | None:
     )
 
 
-def _parse_tool_list(raw) -> tuple[str, ...] | None:
+def _parse_tool_list(raw: Any) -> tuple[str, ...] | None:
     """Accept a YAML list, a comma-separated string, or None.
 
     Returns None when the field is absent (so callers can distinguish
@@ -176,24 +177,29 @@ class SkillRegistry:
 
     @classmethod
     def load(cls, repo_root: Path | None = None) -> "SkillRegistry":
+        """Discover and load all skill markdown files from the repo."""
         return cls(load_skills(repo_root))
 
     def __len__(self) -> int:
         return len(self._skills)
 
-    def __iter__(self):
+    def __iter__(self) -> "Iterator[Skill]":
         return iter(self._skills)
 
     def all(self) -> list[Skill]:
+        """Return every loaded skill as a list."""
         return list(self._skills)
 
     def by_slug(self, slug: str) -> Skill | None:
+        """Return the skill matching *slug*, or None."""
         return self._by_slug.get(slug)
 
     def by_category(self, category: str) -> list[Skill]:
+        """Return all skills in *category*."""
         return [s for s in self._skills if s.category == category]
 
     def categories(self) -> list[str]:
+        """Return sorted list of all distinct category names."""
         return sorted({s.category for s in self._skills})
 
     def search(self, query: str, limit: int = 10) -> list[Skill]:

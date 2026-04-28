@@ -123,7 +123,7 @@ def run_supervised(
     stdout_buf: list[str] = []
     stderr_buf: list[str] = []
 
-    def _drain(stream, buf):
+    def _drain(stream: Any, buf: list[str]) -> None:
         if stream is None:
             return
         try:
@@ -243,5 +243,4 @@ def crash_message(result: SupervisedResult, original_command: str) -> str:
         f"command: {original_command}\n"
         f"elapsed: {result.elapsed_s:.2f}s\n"
         f"--- stdout tail ---\n{result.stdout[-2000:]}\n"
-        f"--- stderr tail ---\n{result.stderr[-2000:]}\n"
-    )
+        f"--- stderr tail ---\n{result.s

@@ -98,8 +98,8 @@ class ManagedAgentBackend:
     # ----- lazy init ----------------------------------------------
 
     def _ensure_agent(self) -> str:
-        if self._agent_id:
-            return self._agent_id
+        if agent_id := self._agent_id:
+            return agent_id
         c = self._get_client()
         agent = c.beta.agents.create(
             name=self.name,
@@ -108,13 +108,13 @@ class ManagedAgentBackend:
             tools=[{"type": "agent_toolset_20260401"}],
             extra_headers={"anthropic-beta": self.beta},
         )
-        self._agent_id = agent.id
+        self._agent_id = str(agent.id)
         self._agent_version = getattr(agent, "version", None)
         return self._agent_id
 
     def _ensure_env(self) -> str:
-        if self._env_id:
-            return self._env_id
+        if env_id := self._env_id:
+            return env_id
         c = self._get_client()
         env = c.beta.environments.create(
             name=f"{self.name}-env",
@@ -124,7 +124,7 @@ class ManagedAgentBackend:
             },
             extra_headers={"anthropic-beta": self.beta},
         )
-        self._env_id = env.id
+        self._env_id = str(env.id)
         return self._env_id
 
     def _get_client(self):

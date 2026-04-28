@@ -280,6 +280,8 @@ class AmjadJarvisMetaOrchestrator:
             body=enhanced_prompt,
             path=skill.path,
             extra=skill.extra,
+            tools_allowed=skill.tools_allowed,
+            tools_denied=skill.tools_denied,
         )
 
         enhanced_registry = SkillRegistry(
@@ -305,9 +307,6 @@ class AmjadJarvisMetaOrchestrator:
 
     def _identify_workflow_agents(self, request: str) -> list[str]:
         """Auto-identify agents needed for a multi-agent workflow."""
-        from .planner import Planner
-
-        planner = Planner(self.registry, self.llm, shortlist_size=4)
         candidates = self.registry.search(request, limit=4)
 
         return [s.slug for s in candidates]

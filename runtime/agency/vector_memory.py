@@ -134,10 +134,12 @@ class VectorMemory:
             )
 
     def delete(self, doc_id: str) -> None:
+        """Remove a document (and its term vectors) by ID."""
         with self._conn:
             self._conn.execute("DELETE FROM docs WHERE id=?", (doc_id,))
 
     def clear(self) -> None:
+        """Delete all documents and term vectors from the store."""
         with self._conn:
             self._conn.execute("DELETE FROM terms")
             self._conn.execute("DELETE FROM docs")
@@ -145,9 +147,11 @@ class VectorMemory:
     # ----- read path ----------------------------------------------
 
     def count(self) -> int:
+        """Return total number of indexed documents."""
         return self._conn.execute("SELECT COUNT(*) FROM docs").fetchone()[0]
 
     def get(self, doc_id: str) -> tuple[str, dict] | None:
+        """Return (text, metadata) for *doc_id*, or None if not found."""
         import json as _json
 
         row = self._conn.execute(
@@ -169,13 +173,18 @@ class VectorMemory:
         if n_docs == 0:
             return []
 
-        # IDF for query terms only — that's all we need to compute similarity.
+        # IDF for query terms — one batched round-trip instead of N queries.
+        q_terms = list(q_tf.keys())
+        ph_q = ",".join("?" * len(q_terms))
+        df_rows = self._conn.execute(
+            f"SELECT term, COUNT(DISTINCT doc_id) FROM terms "
+            f"WHERE term IN ({ph_q}) GROUP BY term",
+            q_terms,
+        ).fetchall()
+        df_map = {t: df for t, df in df_rows}
         idf: dict[str, float] = {}
         for term in q_tf:
-            row = self._conn.execute(
-                "SELECT COUNT(DISTINCT doc_id) FROM terms WHERE term=?", (term,)
-            ).fetchone()
-            df = row[0] if row else 0
+            df = df_map.get(term, 0)
             # add-one smoothing so a term that appears in every doc still has
             # a finite, small weight (avoids log(1)=0 collapsing the score).
             idf[term] = math.log((n_docs + 1) / (df + 1)) + 1.0
@@ -285,11 +294,13 @@ class VectorMemory:
         return n
 
     def all_ids(self) -> list[str]:
+        """Return all document IDs ordered by most-recently-updated first."""
         return [r[0] for r in self._conn.execute(
             "SELECT id FROM docs ORDER BY updated_at DESC"
         ).fetchall()]
 
     def close(self) -> None:
+        """Close the underlying SQLite connection."""
         try:
             self._conn.close()
         except Exception:

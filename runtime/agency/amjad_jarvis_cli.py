@@ -30,19 +30,19 @@ from .logging import get_logger
 
 
 @click.group()
-def amjad_group():
+def amjad_group() -> None:
     """Amjad Jarvis Meta-Orchestrator commands."""
     pass
 
 
 @amjad_group.group()
-def profile():
+def profile() -> None:
     """Manage Amjad's profile and preferences."""
     pass
 
 
 @profile.command("show")
-def profile_show():
+def profile_show() -> None:
     """Display Amjad's complete profile."""
     j = jarvis()
     click.echo("\n" + "=" * 70)
@@ -62,7 +62,7 @@ def profile_show():
 
 @profile.command("edit")
 @click.option("--editor", default=None, help="Editor to use (default: $EDITOR)")
-def profile_edit(editor: str | None):
+def profile_edit(editor: str | None) -> None:
     """Edit Amjad's profile in your default editor."""
     j = jarvis()
     profile_path = Path.home() / ".agency" / "amjad-profile.json"
@@ -83,7 +83,7 @@ def profile_edit(editor: str | None):
         temp_path = f.name
 
     try:
-        editor_cmd = editor or os.environ.get("EDITOR", "vim")
+        editor_cmd: str = editor or os.environ.get("EDITOR") or "vim"
         subprocess.run([editor_cmd, temp_path], check=False)
 
         if Path(temp_path).exists():
@@ -98,7 +98,7 @@ def profile_edit(editor: str | None):
 @profile.command("set")
 @click.argument("key")
 @click.argument("value")
-def profile_set(key: str, value: str):
+def profile_set(key: str, value: str) -> None:
     """Set a profile preference."""
     j = jarvis()
 
@@ -121,7 +121,7 @@ def profile_set(key: str, value: str):
 
 @amjad_group.command("trust")
 @click.argument("mode", type=click.Choice(["off", "on-my-machine", "yolo"]))
-def set_trust_mode(mode: str):
+def set_trust_mode(mode: str) -> None:
     """Set the trust mode."""
     j = jarvis()
     j.set_trust_mode(mode)
@@ -143,7 +143,7 @@ def set_trust_mode(mode: str):
 
 @amjad_group.command("shell")
 @click.argument("action", type=click.Choice(["on", "off", "status"]))
-def control_shell(action: str):
+def control_shell(action: str) -> None:
     """Control shell access."""
     j = jarvis()
     if action == "on":
@@ -159,7 +159,7 @@ def control_shell(action: str):
 
 @amjad_group.command("web-search")
 @click.argument("action", type=click.Choice(["on", "off", "status"]))
-def control_web_search(action: str):
+def control_web_search(action: str) -> None:
     """Control web search."""
     j = jarvis()
     if action == "on":
@@ -175,7 +175,7 @@ def control_web_search(action: str):
 
 @amjad_group.command("code-exec")
 @click.argument("action", type=click.Choice(["on", "off", "status"]))
-def control_code_exec(action: str):
+def control_code_exec(action: str) -> None:
     """Control code execution."""
     j = jarvis()
     if action == "on":
@@ -191,7 +191,7 @@ def control_code_exec(action: str):
 
 @amjad_group.command("computer-use")
 @click.argument("action", type=click.Choice(["on", "off", "status"]))
-def control_computer_use(action: str):
+def control_computer_use(action: str) -> None:
     """Control computer use."""
     j = jarvis()
     if action == "on":
@@ -210,7 +210,7 @@ def control_computer_use(action: str):
 @click.option("--agent", "-a", default=None, help="Explicit agent slug (auto-select if omitted)")
 @click.option("--session", "-s", default=None, help="Session ID for memory persistence")
 @click.option("--workflow", "-w", default=None, help="Workflow name for multi-agent coordination")
-def run_request(request: tuple[str, ...], agent: str | None, session: str | None, workflow: str | None):
+def run_request(request: tuple[str, ...], agent: str | None, session: str | None, workflow: str | None) -> None:
     """Execute a request with Amjad's full context."""
     j = jarvis()
     request_text = " ".join(request)
@@ -239,7 +239,7 @@ def run_request(request: tuple[str, ...], agent: str | None, session: str | None
 
 
 @amjad_group.command("status")
-def show_status():
+def show_status() -> None:
     """Show current system status."""
     j = jarvis()
     click.echo("\n" + "=" * 70)

@@ -22,6 +22,7 @@ class Session:
     turns: list[TurnRecord] = field(default_factory=list)
 
     def append(self, role: str, text: str) -> None:
+        """Append a turn record with *role* and *text* to this session."""
         self.turns.append(TurnRecord(role=role, text=text))
 
 
@@ -37,6 +38,7 @@ class MemoryStore:
         return self.root / f"{safe}.jsonl"
 
     def load(self, session_id: str) -> Session | None:
+        """Load a session from disk, or return None if not found."""
         path = self._path(session_id)
         if not path.exists():
             return None
@@ -53,6 +55,7 @@ class MemoryStore:
         return Session(session_id=session_id, skill_slug=skill_slug, turns=turns)
 
     def save(self, session: Session) -> None:
+        """Persist a session to disk as newline-delimited JSON."""
         path = self._path(session.session_id)
         with path.open("w", encoding="utf-8") as f:
             f.write(json.dumps({"kind": "header", "skill_slug": session.skill_slug}) + "\n")

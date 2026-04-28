@@ -24,7 +24,7 @@ def get_logger() -> logging.Logger:
     return logging.getLogger(LOGGER_NAME)
 
 
-def configure(level: str | int | None = None, *, stream=None) -> logging.Logger:
+def configure(level: str | int | None = None, *, stream: Any = None) -> logging.Logger:
     """Attach a single stream handler with a compact formatter.
 
     Idempotent — calling it twice doesn't duplicate handlers. Default level
@@ -74,4 +74,4 @@ def timed(event: str, **fields: Any):
         ms = round((time.monotonic() - start) * 1000)
         logger.info("%s elapsed_ms=%d %s",
                     event, ms,
-                    " ".join(f"{k}={v}" for k, v in fields.items()))
+                    " ".join(f"{k}={v}" for k, v in fields.ite

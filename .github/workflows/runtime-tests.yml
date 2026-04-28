@@ -31,8 +31,17 @@ jobs:
       - name: Install runtime
         run: pip install -e runtime[dev]
 
+      - name: Install pytest-timeout
+        run: pip install pytest-timeout
+
       - name: Run pytest
-        run: python -m pytest runtime/tests -q
+        run: >
+          python -m pytest runtime/tests -q
+          --tb=short
+          --timeout=60
+          --cov=agency
+          --cov-report=term-missing
+          --cov-fail-under=0
 
       - name: Smoke-test CLI
         env:

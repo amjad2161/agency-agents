@@ -793,7 +793,7 @@ def context_list_cmd(domain: str | None) -> None:
 _CTX_MANAGER_SINGLETON: "object | None" = None
 
 
-def _shared_context_manager():
+def _shared_context_manager() -> Any:
     global _CTX_MANAGER_SINGLETON
     if _CTX_MANAGER_SINGLETON is None:
         from .context_manager import ContextManager
@@ -852,7 +852,7 @@ def expand_cmd(source: str, domain: str, is_url: bool,
 _KE_SINGLETON: "object | None" = None
 
 
-def _shared_knowledge_expansion():
+def _shared_knowledge_expansion() -> Any:
     global _KE_SINGLETON
     if _KE_SINGLETON is None:
         from .knowledge_expansion import KnowledgeExpansion
@@ -987,6 +987,7 @@ def chat_cmd(
                     session_id=sid, skill_slug=plan.skill.slug
                 )
 
+            assert llm is not None, "LLM required for chat; set ANTHROPIC_API_KEY"
             executor = Executor(registry, llm, memory=memory_store)
             run_result = executor.run(plan.skill, request, session=session_obj)
 
@@ -999,6 +1000,4 @@ def chat_cmd(
             click.echo(get_farewell())
             break
         except Exception as exc:  # noqa: BLE001
-            click.echo(f"[JARVIS ERROR] {type(exc).__name__}: {exc}", err=True)
-
-        click.echo()
+     
