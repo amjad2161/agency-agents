@@ -512,11 +512,9 @@ def _web_fetch(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
                         f"Refusing to fetch {host}: private / loopback address.",
                         is_error=True,
                     )
-                req = client.build_request("GET", url)
-                with client.send(req, stream=True) as resp:
+                with client.stream("GET", url) as resp:
                     if 300 <= resp.status_code < 400 and "location" in resp.headers:
-                        url = str(resp.next_request.url if resp.next_request else resp.headers["location"])
-                        resp.close()
+                        url = resp.headers["location"]
                         continue
                     prefix = f"HTTP {resp.status_code}\n\n"
                     prefix_bytes = prefix.encode("utf-8")

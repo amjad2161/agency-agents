@@ -502,7 +502,7 @@ def build_app(repo: Path | None = None) -> FastAPI:
 
         executor = Executor(registry, llm, memory=memory)
 
-        def gen():
+        def gen() -> Any:
             yield _sse("plan", {
                 "skill": {"slug": plan.skill.slug, "name": plan.skill.name, "emoji": plan.skill.emoji},
                 "rationale": plan.rationale,

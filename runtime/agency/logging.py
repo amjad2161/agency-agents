@@ -15,7 +15,7 @@ import os
 import sys
 import time
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, Generator
 
 LOGGER_NAME = "agency"
 
@@ -50,7 +50,7 @@ def configure(level: str | int | None = None, *, stream: Any = None) -> logging.
 
 
 @contextmanager
-def timed(event: str, **fields: Any):
+def timed(event: str, **fields: Any) -> Generator[dict[str, Any], None, None]:
     """Measure a block and emit one INFO record with elapsed_ms + fields.
 
     No-op (no timing, no string formatting) when INFO is disabled, so
@@ -74,4 +74,4 @@ def timed(event: str, **fields: Any):
         ms = round((time.monotonic() - start) * 1000)
         logger.info("%s elapsed_ms=%d %s",
                     event, ms,
-                    " ".join(f"{k}={v}" for k, v in fields.ite
+                    " ".join(f"{k}={v}" for k, v in fields.items()))

@@ -216,3 +216,121 @@ class SkillRegistry:
                 scored.append((score, s))
         scored.sort(key=lambda x: x[0], reverse=True)
         return [s for _, s in scored[:limit]]
+
+
+# ---------------------------------------------------------------------------
+# SkillWatcher — hot-reload skill YAML/MD files without restart
+# ---------------------------------------------------------------------------
+
+import threading
+import time as _time
+from typing import Callable as _Callable
+
+_POLL_INTERVAL_S = 5.0
+
+
+class SkillWatcher:
+    """Watch a skills directory and reload on file changes.
+
+    Uses pure mtime-polling (no watchdog dependency) every
+    *poll_interval_s* seconds.  When a change is detected, calls
+    *on_reload(registry)* with the freshly-loaded registry.
+
+    Usage::
+
+        registry = SkillRegistry.load()
+
+        def _on_change(new_registry: SkillRegistry) -> None:
+            nonlocal registry
+            registry = new_registry
+            print("יחידת מיומנות נטענה מחדש")
+
+        watcher = SkillWatcher(
+            watch_dir=Path.home() / ".agency" / "skills",
+            reload_fn=_on_change,
+        )
+        watcher.start()
+        # ... later ...
+        watcher.stop()
+    """
+
+    def __init__(
+        self,
+        watch_dir: Path,
+        reload_fn: _Callable[["SkillRegistry"], None],
+        repo_root: Path | None = None,
+        poll_interval_s: float = _POLL_INTERVAL_S,
+    ) -> None:
+        self._watch_dir = watch_dir
+        self._reload_fn = reload_fn
+        self._repo_root = repo_root
+        self._poll_interval = poll_interval_s
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._last_mtimes: dict[Path, float] = {}
+
+    # ── public API ─────────────────────────────────────────────────────────
+
+    def start(self) -> None:
+        """Start the background polling thread."""
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._last_mtimes = self._snapshot()
+        self._thread = threading.Thread(
+            target=self._poll_loop, daemon=True, name="SkillWatcher"
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Signal the polling thread to stop (non-blocking)."""
+        self._stop_event.set()
+
+    def join(self, timeout: float | None = None) -> None:
+        """Wait for the polling thread to exit."""
+        if self._thread is not None:
+            self._thread.join(timeout=timeout)
+
+    def is_alive(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    # ── internals ──────────────────────────────────────────────────────────
+
+    def _snapshot(self) -> dict[Path, float]:
+        """Return {path: mtime} for all .md and .yaml files in watch_dir."""
+        result: dict[Path, float] = {}
+        if not self._watch_dir.is_dir():
+            return result
+        for ext in ("*.md", "*.yaml", "*.yml"):
+            for p in self._watch_dir.rglob(ext):
+                try:
+                    result[p] = p.stat().st_mtime
+                except OSError:
+                    pass
+        return result
+
+    def _has_changed(self, new: dict[Path, float]) -> bool:
+        if set(new.keys()) != set(self._last_mtimes.keys()):
+            return True
+        return any(new[p] != self._last_mtimes.get(p) for p in new)
+
+    def _poll_loop(self) -> None:
+        from .logging import get_logger as _get_logger
+        log = _get_logger()
+        while not self._stop_event.wait(timeout=self._poll_interval):
+            try:
+                current = self._snapshot()
+                if self._has_changed(current):
+                    log.info("SkillWatcher: שינוי זוהה — טוען מחדש מיומנויות")
+                    self._last_mtimes = current
+                    try:
+                        new_registry = SkillRegistry.load(self._repo_root)
+                        self._reload_fn(new_registry)
+                        log.info(
+                            "SkillWatcher: %d יחידות מיומנות נטענו מחדש",
+                            len(new_registry),
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        log.error("SkillWatcher: שגיאה בטעינה — %s", exc)
+            except Exception as exc:  # noqa: BLE001
+                log.error("SkillWatcher: שגיאה בלולאת הסקר — %s", exc)

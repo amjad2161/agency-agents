@@ -3,10 +3,102 @@
 from __future__ import annotations
 
 import os
+import random
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
 from .logging import get_logger, timed
+
+# ---------------------------------------------------------------------------
+# Retry / backoff constants
+# ---------------------------------------------------------------------------
+
+_RETRY_RATE_LIMIT_MAX = 3       # 429 / 529 — up to 3 retries
+_RETRY_SERVER_ERROR_MAX = 2     # 5xx       — up to 2 retries
+_RETRY_BASE_DELAY_S = 1.0       # 1 → 2 → 4 seconds + jitter
+_RETRY_JITTER_S = 0.5           # random uniform [0, 0.5] added each wait
+
+
+def _backoff_delay(attempt: int) -> float:
+    """Return exponential backoff delay in seconds for *attempt* (0-indexed)."""
+    base = _RETRY_BASE_DELAY_S * (2 ** attempt)
+    jitter = random.uniform(0, _RETRY_JITTER_S)
+    return base + jitter
+
+
+def _http_status(exc: Exception) -> int | None:
+    """Extract HTTP status code from an anthropic API exception, or None."""
+    # anthropic SDK raises APIStatusError subclasses (BadRequestError,
+    # RateLimitError, OverloadedError, InternalServerError, …).
+    # All of them carry a `.status_code` attribute.
+    return getattr(exc, "status_code", None)
+
+
+def _is_retryable_rate_limit(exc: Exception) -> bool:
+    status = _http_status(exc)
+    return status in (429, 529)
+
+
+def _is_retryable_server_error(exc: Exception) -> bool:
+    status = _http_status(exc)
+    return status is not None and 500 <= status < 600 and status not in (529,)
+
+
+def _is_auth_error(exc: Exception) -> bool:
+    return _http_status(exc) == 401
+
+
+def _call_with_retry(fn: Any, *args: Any, **kwargs: Any) -> Any:
+    """Call *fn* with retry logic for rate-limit and server errors.
+
+    Raises immediately on 401 (auth) with a Hebrew-language error message.
+    Retries up to _RETRY_RATE_LIMIT_MAX times on 429/529 with exponential
+    backoff, and up to _RETRY_SERVER_ERROR_MAX times on 5xx errors.
+    All other exceptions propagate immediately.
+    """
+    log = get_logger()
+    rate_limit_attempts = 0
+    server_error_attempts = 0
+
+    while True:
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            if _is_auth_error(exc):
+                raise LLMError(
+                    "שגיאת אימות: מפתח ה-API אינו תקין או פג תוקפו. "
+                    "בדוק את ANTHROPIC_API_KEY."
+                ) from exc
+
+            if _is_retryable_rate_limit(exc):
+                rate_limit_attempts += 1
+                if rate_limit_attempts > _RETRY_RATE_LIMIT_MAX:
+                    raise
+                delay = _backoff_delay(rate_limit_attempts - 1)
+                log.warning(
+                    "llm.retry rate_limit attempt=%d/%d delay=%.1fs status=%s",
+                    rate_limit_attempts, _RETRY_RATE_LIMIT_MAX, delay,
+                    _http_status(exc),
+                )
+                time.sleep(delay)
+                continue
+
+            if _is_retryable_server_error(exc):
+                server_error_attempts += 1
+                if server_error_attempts > _RETRY_SERVER_ERROR_MAX:
+                    raise
+                delay = _backoff_delay(server_error_attempts - 1)
+                log.warning(
+                    "llm.retry server_error attempt=%d/%d delay=%.1fs status=%s",
+                    server_error_attempts, _RETRY_SERVER_ERROR_MAX, delay,
+                    _http_status(exc),
+                )
+                time.sleep(delay)
+                continue
+
+            # Not retryable
+            raise
 
 DEFAULT_MODEL = "claude-opus-4-7"
 PLANNER_MODEL = "claude-haiku-4-5"  # cheap model for routing decisions
@@ -120,7 +212,7 @@ class AnthropicLLM:
         with timed("llm.create", model=kwargs.get("model"), beta=use_beta,
                    tools=len(kwargs.get("tools") or []),
                    messages=len(kwargs.get("messages") or [])) as fields:
-            response = target.create(**kwargs)
+            response = _call_with_retry(target.create, **kwargs)
             fields["stop"] = getattr(response, "stop_reason", None)
         usage = getattr(response, "usage", None)
         if usage is not None:
@@ -132,6 +224,11 @@ class AnthropicLLM:
                 getattr(usage, "cache_read_input_tokens", None),
                 getattr(response, "stop_reason", None),
             )
+            try:
+                from .stats import record_usage
+                record_usage(usage)
+            except Exception:  # noqa: BLE001
+                pass  # stats tracking must never crash the main path
         return response
 
     def messages_stream(
@@ -149,97 +246,4 @@ class AnthropicLLM:
         Use as: `with llm.messages_stream(...) as stream: ...`
         Stream exposes `.text_stream`, iterable events, and `.get_final_message()`.
         """
-        client = self._ensure_client()
-        kwargs, use_beta = self._build_kwargs(
-            system=system, messages=messages, tools=tools,
-            model=model, max_tokens=max_tokens, thinking=thinking,
-        )
-        target = client.beta.messages if use_beta else client.messages
-        return target.stream(**kwargs)
-
-    def _build_kwargs(self, **opts: Any) -> tuple[dict[str, Any], bool]:
-        """Assemble the create/stream kwargs. Returns (kwargs, use_beta)."""
-        kwargs: dict[str, Any] = {
-            "model": opts["model"] or self.config.model,
-            "max_tokens": opts["max_tokens"] or self.config.max_tokens,
-            "system": opts["system"],
-            "messages": opts["messages"],
-        }
-        tools = list(opts["tools"] or [])
-        if self.config.enable_web_search:
-            tools.append({"type": "web_search_20260209", "name": "web_search"})
-        if self.config.enable_code_execution:
-            tools.append({"type": "code_execution_20260120", "name": "code_execution"})
-        if tools:
-            kwargs["tools"] = tools
-        if opts["thinking"]:
-            kwargs["thinking"] = opts["thinking"]
-        if self.config.extra_headers:
-            kwargs["extra_headers"] = self.config.extra_headers
-
-        use_beta = False
-        betas = list(self.config.betas)
-
-        if self.config.task_budget_tokens and self.config.task_budget_tokens >= 20_000:
-            kwargs.setdefault("output_config", {})
-            kwargs["output_config"]["task_budget"] = {
-                "type": "tokens", "total": self.config.task_budget_tokens,
-            }
-            use_beta = True
-            if "task-budgets-2026-03-13" not in betas:
-                betas.append("task-budgets-2026-03-13")
-
-        if self.config.mcp_servers:
-            kwargs["mcp_servers"] = self.config.mcp_servers
-            use_beta = True
-            if "mcp-client-2025-11-20" not in betas:
-                betas.append("mcp-client-2025-11-20")
-
-        if betas:
-            kwargs["betas"] = betas
-
-        return kwargs, use_beta
-
-    @staticmethod
-    def cached_system(
-        text: str,
-        profile: str | None = None,
-        lessons: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """Build a system prompt list with a cache_control breakpoint at the end.
-
-        Optional `profile` and `lessons` are prepended as separate text
-        blocks before the persona body. Neither carries its own
-        breakpoint — the breakpoint stays on the persona block, so
-        Anthropic caches the whole prelude (profile + lessons + persona)
-        as one prefix. Order matters: profile first (who the user is),
-        then lessons (what we've learned working together), then the
-        persona (how to behave for this specific skill).
-
-        Skipping both produces the original single-block shape.
-        """
-        blocks: list[dict[str, Any]] = []
-        if profile:
-            blocks.append({
-                "type": "text",
-                "text": (
-                    "Always-on user profile (background context, not a request):\n\n"
-                    + profile
-                ),
-            })
-        if lessons:
-            blocks.append({
-                "type": "text",
-                "text": (
-                    "Cross-session lessons journal — read this before "
-                    "deciding anything; older entries may have been "
-                    "trimmed for size:\n\n"
-                    + lessons
-                ),
-            })
-        blocks.append({
-            "type": "text",
-            "text": text,
-            "cache_control": {"type": "ephemeral"},
-        })
-        return blocks
+    

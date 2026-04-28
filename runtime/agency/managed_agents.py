@@ -127,7 +127,7 @@ class ManagedAgentBackend:
         self._env_id = str(env.id)
         return self._env_id
 
-    def _get_client(self):
+    def _get_client(self) -> "Anthropic":
         if self._client_obj is None:
             self._client_obj = _client()
         return self._client_obj
@@ -295,4 +295,4 @@ def default_backend(name: str = "agency-runtime",
         _default_backend = ManagedAgentBackend(
             name=name, model=model, system=system or "You are a helpful assistant.",
         )
-    return _default_backend
+    return _d

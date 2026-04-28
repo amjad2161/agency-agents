@@ -860,6 +860,88 @@ def _shared_knowledge_expansion() -> Any:
     return _KE_SINGLETON
 
 
+# ---------------------------------------------------------------------------
+# `agency history` — list / replay saved chat sessions
+# ---------------------------------------------------------------------------
+
+@main.group("history", invoke_without_command=True)
+@click.pass_context
+def history_cmd(ctx: click.Context) -> None:
+    """List or replay saved chat sessions from ~/.agency/history/.
+
+    Subcommands:
+      list   — show the N most recent sessions (default)
+      show N — print the Nth session (1 = most recent)
+      dir    — print the history directory path
+    """
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(history_list_cmd, limit=10)
+
+
+@history_cmd.command("list")
+@click.option("--limit", default=10, show_default=True, type=int,
+              help="Number of recent sessions to show.")
+def history_list_cmd(limit: int) -> None:
+    """List the most recent chat sessions."""
+    from .history import list_sessions, session_summary
+    sessions = list_sessions(limit=limit)
+    if not sessions:
+        click.echo("No chat history found. Start a session with `agency chat`.")
+        return
+    click.echo(f"Recent chat sessions ({len(sessions)} shown):")
+    for i, p in enumerate(sessions, 1):
+        click.echo(f"  {i:3d}.  {session_summary(p)}")
+
+
+@history_cmd.command("show")
+@click.argument("n", type=int, default=1)
+def history_show_cmd(n: int) -> None:
+    """Replay session N (1 = most recent) to stdout."""
+    from .history import list_sessions, read_session
+    sessions = list_sessions(limit=n)
+    if not sessions or n > len(sessions):
+        click.echo(f"No session #{n} found.", err=True)
+        raise SystemExit(1)
+    path = sessions[n - 1]
+    click.echo(f"=== {path.stem} ===")
+    for msg in read_session(path):
+        role = msg.get("role", "?").upper()
+        ts = msg.get("timestamp", "")[:19]
+        content = msg.get("content", "")
+        click.echo(f"\n[{role}] {ts}\n{content}")
+
+
+@history_cmd.command("dir")
+def history_dir_cmd() -> None:
+    """Print the history directory path."""
+    from .history import history_dir
+    click.echo(str(history_dir()))
+
+
+# ---------------------------------------------------------------------------
+# `agency stats` — cumulative token usage
+# ---------------------------------------------------------------------------
+
+@main.command("stats")
+@click.option("--reset", is_flag=True, default=False,
+              help="Zero out all accumulated stats.")
+@click.option("--json", "as_json", is_flag=True, default=False,
+              help="Output raw JSON.")
+def stats_cmd(reset: bool, as_json: bool) -> None:
+    """Show cumulative token usage stored in ~/.agency/stats.json."""
+    import json as _json
+    from .stats import get_stats, reset_stats, format_stats
+    if reset:
+        reset_stats()
+        click.echo("Stats reset.")
+        return
+    data = get_stats()
+    if as_json:
+        click.echo(_json.dumps(data, indent=2))
+    else:
+        click.echo(format_stats(data))
+
+
 def _maybe_llm() -> AnthropicLLM | None:
     """Return an LLM client if configured, else None (for offline planning)."""
     try:
@@ -891,12 +973,18 @@ if __name__ == "__main__":
               help="Persona mode (supreme_brainiac, technical, casual, …).")
 @click.option("--no-banner", is_flag=True, default=False,
               help="Skip the startup banner.")
+@click.option("--model", "model_override", default=None,
+              help="Model to use, e.g. claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5-20251001.")
+@click.option("--stream", "do_stream", is_flag=True, default=False,
+              help="Stream tokens to stdout as they arrive.")
 @click.pass_context
 def chat_cmd(
     ctx: click.Context,
     session_id: str | None,
     persona_mode: str,
     no_banner: bool,
+    model_override: str | None,
+    do_stream: bool,
 ) -> None:
     """Interactive JARVIS chat — greeting, REPL loop, Ctrl+C to exit.
 
@@ -912,7 +1000,15 @@ def chat_cmd(
 
     # ---- startup ---------------------------------------------------------
     registry = _registry(ctx.obj.get("repo"))
-    llm = _maybe_llm()
+    # Build LLM with optional model override from --model flag.
+    try:
+        cfg = LLMConfig.from_env()
+        if model_override:
+            cfg.model = model_override
+        llm: AnthropicLLM | None = AnthropicLLM(cfg)
+        llm._ensure_client()  # noqa: SLF001
+    except LLMError:
+        llm = None
     planner = Planner(registry, llm=llm)
     brain = SupremeJarvisBrain(registry)
 
@@ -936,68 +1032,562 @@ def chat_cmd(
     llm_status = "LLM: online" if llm else "LLM: offline (deterministic routing)"
     click.echo(f"[{llm_status} | {len(registry)} skills | Ctrl+C to exit]\n")
 
-    # ---- REPL loop -------------------------------------------------------
-    while True:
-        try:
-            raw = click.prompt("Amjad", prompt_suffix=" ❯ ", default="", show_default=False)
-        except click.Abort:
-            # Ctrl+C or Ctrl+D
-            click.echo()
-            click.echo(get_farewell())
-            break
+    # ---- REPL loop (wrapped in HistoryWriter) ----------------------------
+    from .history import HistoryWriter
+    with HistoryWriter() as hw:
+        click.echo(f"[session saved → {hw.path}]", err=True)
+        while True:
+            try:
+                raw = click.prompt("Amjad", prompt_suffix=" ❯ ", default="", show_default=False)
+            except click.Abort:
+                # Ctrl+C or Ctrl+D
+                click.echo()
+                click.echo(get_farewell())
+                break
 
-        request = raw.strip()
-        if not request:
-            continue
+            request = raw.strip()
+            if not request:
+                continue
 
-        # Handle built-in meta-commands
-        if request.lower() in ("exit", "quit", "bye", "!q"):
-            click.echo(get_farewell())
-            break
-        if request.lower() in ("help", "?"):
-            click.echo(
-                "Commands: exit/quit/bye — end session | "
-                "!skills — list loaded skills | "
-                "!route <text> — show routing only"
-            )
-            continue
-        if request.lower() == "!skills":
-            for s in registry.all()[:20]:
-                click.echo(f"  {s.slug:<50}  {s.name}")
-            if len(registry) > 20:
-                click.echo(f"  … and {len(registry) - 20} more")
-            continue
-        if request.lower().startswith("!route "):
-            query = request[7:].strip()
-            result = brain.skill_for(query)
-            click.echo(f"→ {result.skill.slug} (score={result.score:.1f}) — {result.rationale}")
-            continue
+            # Handle built-in meta-commands
+            if request.lower() in ("exit", "quit", "bye", "!q"):
+                click.echo(get_farewell())
+                break
+            if request.lower() in ("help", "?"):
+                click.echo(
+                    "Commands: exit/quit/bye — end session | "
+                    "!skills — list loaded skills | "
+                    "!route <text> — show routing only"
+                )
+                continue
+            if request.lower() == "!skills":
+                for s in registry.all()[:20]:
+                    click.echo(f"  {s.slug:<50}  {s.name}")
+                if len(registry) > 20:
+                    click.echo(f"  … and {len(registry) - 20} more")
+                continue
+            if request.lower().startswith("!route "):
+                query = request[7:].strip()
+                result = brain.skill_for(query)
+                click.echo(f"→ {result.skill.slug} (score={result.score:.1f}) — {result.rationale}")
+                continue
 
-        # Route and execute
-        try:
-            plan = planner.plan(request)
-            click.echo(
-                f"  → {plan.skill.emoji} {plan.skill.name} ({plan.skill.slug})",
-                err=True,
-            )
+            # Record user turn
+            hw.append("user", request)
 
-            session_obj = None
-            if sid and memory_store:
-                session_obj = memory_store.load(sid) or Session(
-                    session_id=sid, skill_slug=plan.skill.slug
+            # Route and execute
+            try:
+                plan = planner.plan(request)
+                click.echo(
+                    f"  → {plan.skill.emoji} {plan.skill.name} ({plan.skill.slug})",
+                    err=True,
                 )
 
-            assert llm is not None, "LLM required for chat; set ANTHROPIC_API_KEY"
-            executor = Executor(registry, llm, memory=memory_store)
-            run_result = executor.run(plan.skill, request, session=session_obj)
+                session_obj = None
+                if sid and memory_store:
+                    session_obj = memory_store.load(sid) or Session(
+                        session_id=sid, skill_slug=plan.skill.slug
+                    )
 
-            # Filter through JARVIS soul before display
-            output = filter_response(run_result.text)
-            click.echo(output)
+                assert llm is not None, "LLM required for chat; set ANTHROPIC_API_KEY"
+                executor = Executor(registry, llm, memory=memory_store)
 
-        except KeyboardInterrupt:
+                if do_stream:
+                    # Stream tokens as they arrive; collect for soul filter.
+                    text_buf: list[str] = []
+                    for event in executor.stream(plan.skill, request, session=session_obj):
+                        if event.type == "text_delta":
+                            click.echo(event.data, nl=False)
+                            text_buf.append(event.data)
+                    raw_text = "".join(text_buf)
+                    # Apply soul filter to the final assembled text (print diff if any).
+                    filtered = filter_response(raw_text)
+                    if filtered != raw_text:
+                        click.echo("\n" + filtered)
+                    else:
+                        click.echo()  # newline after streamed output
+                    hw.append("assistant", filtered)
+                else:
+                    run_result = executor.run(plan.skill, request, session=session_obj)
+                    # Filter through JARVIS soul before display
+                    output = filter_response(run_result.text)
+                    click.echo(output)
+                    hw.append("assistant", output)
+
+            except KeyboardInterrupt:
+                click.echo()
+                click.echo(get_farewell())
+                break
+            except Exception as exc:  # noqa: BLE001
+                click.echo(f"[JARVIS ERROR] {type(exc).__name__}: {exc}", err=True)
+
             click.echo()
-            click.echo(get_farewell())
-            break
-        except Exception as exc:  # noqa: BLE001
-     
+
+            try:
+                raw = click.prompt("Amjad", prompt_suffix=" ❯ ", default="", show_default=False)
+            except click.Abort:
+                click.echo()
+                click.echo(get_farewell())
+                break
+
+            request = raw.strip()
+            if not request:
+                continue
+
+            if request.lower() in ("exit", "quit", "bye", "!q"):
+                click.echo(get_farewell())
+                break
+            if request.lower() in ("help", "?"):
+                click.echo(
+                    "Commands: exit/quit/bye — end session | "
+                    "!skills — list loaded skills | "
+                    "!route <text> — show routing only"
+                )
+                continue
+            if request.lower() == "!skills":
+                for s in registry.all()[:20]:
+                    click.echo(f"  {s.slug:<50}  {s.name}")
+                if len(registry) > 20:
+                    click.echo(f"  … and {len(registry) - 20} more")
+                continue
+            if request.lower().startswith("!route "):
+                query = request[7:].strip()
+                result = brain.skill_for(query)
+                click.echo(f"→ {result.skill.slug} (score={result.score:.1f}) — {result.rationale}")
+                continue
+
+            hw.append("user", request)
+
+            try:
+                plan = planner.plan(request)
+                click.echo(
+                    f"  → {plan.skill.emoji} {plan.skill.name} ({plan.skill.slug})",
+                    err=True,
+                )
+
+                session_obj = None
+                if sid and memory_store:
+                    session_obj = memory_store.load(sid) or Session(
+                        session_id=sid, skill_slug=plan.skill.slug
+                    )
+
+                assert llm is not None, "LLM required for chat; set ANTHROPIC_API_KEY"
+                executor = Executor(registry, llm, memory=memory_store)
+
+                if do_stream:
+                    text_buf: list[str] = []
+                    for event in executor.stream(plan.skill, request, session=session_obj):
+                        if event.type == "text_delta":
+                            click.echo(event.data, nl=False)
+                            text_buf.append(event.data)
+                    raw_text = "".join(text_buf)
+                    filtered = filter_response(raw_text)
+                    if filtered != raw_text:
+                        click.echo("\n" + filtered)
+                    else:
+                        click.echo()
+                    hw.append("assistant", filtered)
+                else:
+                    run_result = executor.run(plan.skill, request, session=session_obj)
+                    output = filter_response(run_result.text)
+                    click.echo(output)
+                    hw.append("assistant", output)
+
+            except KeyboardInterrupt:
+                click.echo()
+                click.echo(get_farewell())
+                break
+            except Exception as exc:  # noqa: BLE001
+                click.echo(f"[JARVIS ERROR] {type(exc).__name__}: {exc}", err=True)
+
+            click.echo()
+
+
+
+
+# ---------------------------------------------------------------------------
+# `agency batch` — run a script file of prompts
+# ---------------------------------------------------------------------------
+
+@main.command("batch")
+@click.argument("script", type=click.Path(exists=True, path_type=Path))
+@click.option("--parallel", default=1, type=int, show_default=True,
+              help="Number of concurrent workers (1 = sequential).")
+@click.option("--skill", "skill_slug", default=None,
+              help="Force a specific skill slug for every prompt.")
+@click.pass_context
+def batch_cmd(
+    ctx: click.Context,
+    script: Path,
+    parallel: int,
+    skill_slug: str | None,
+) -> None:
+    """Run every prompt in SCRIPT through JARVIS and write <script>.output.md."""
+    from .batch import BatchRunner
+
+    registry = _registry(ctx.obj["repo"])
+    try:
+        llm = _require_llm()
+    except LLMError as e:
+        raise click.ClickException(str(e))
+
+    planner = Planner(registry, llm=llm)
+    executor = Executor(registry, llm)
+
+    def _handler(prompt: str) -> str:
+        plan = planner.plan(prompt, hint_slug=skill_slug)
+        result = executor.run(plan.skill, prompt)
+        return result.text
+
+    def _progress(i: int, total: int, prompt: str) -> None:
+        click.echo(f"[{i}/{total}] Processing: {prompt[:60]}…", err=True)
+
+    runner = BatchRunner(handler=_handler, progress_cb=_progress)
+    run = runner.run_file(script, parallel=parallel)
+
+    click.echo(
+        f"\nBatch complete: {run.succeeded}/{run.total} ok"
+        + (f", {run.failed} failed" if run.failed else ""),
+        err=True,
+    )
+    click.echo(f"Output: {run.output_path}")
+
+
+# ---------------------------------------------------------------------------
+# `agency export` — export a chat session
+# ---------------------------------------------------------------------------
+
+@main.command("export")
+@click.argument("session_id", required=False, default=None)
+@click.option("--format", "fmt",
+              type=click.Choice(["md", "html", "json"]),
+              default="md", show_default=True,
+              help="Output format.")
+@click.option("--output", "output_path",
+              type=click.Path(path_type=Path), default=None,
+              help="Output file path. Defaults to ~/Desktop/<session_id>.<ext>.")
+def export_cmd(
+    session_id: str | None,
+    fmt: str,
+    output_path: Path | None,
+) -> None:
+    """Export a chat session to Markdown, HTML, or JSON.
+
+    SESSION_ID is the session stem (e.g. 2025-01-15_143022).
+    Omit to export the most recent session.
+    """
+    from .export import export_session
+
+    try:
+        out = export_session(
+            session_id=session_id,
+            fmt=fmt,  # type: ignore[arg-type]
+            output_path=output_path,
+        )
+    except FileNotFoundError as e:
+        raise click.ClickException(str(e))
+
+    click.echo(f"Exported → {out}")
+
+
+# ---------------------------------------------------------------------------
+# `agency dlq` — dead-letter queue management
+# ---------------------------------------------------------------------------
+
+@main.group("dlq", invoke_without_command=True)
+@click.pass_context
+def dlq_cmd(ctx: click.Context) -> None:
+    """Manage the dead-letter queue (~/.agency/dlq.jsonl).
+
+    Subcommands:
+      list    -- show failed entries (default)
+      retry   -- retry all retryable entries
+      clear   -- delete the DLQ file
+    """
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(dlq_list_cmd)
+
+
+@dlq_cmd.command("list")
+@click.option("--all", "show_all", is_flag=True, default=False,
+              help="Include dead (exhausted) entries.")
+def dlq_list_cmd(show_all: bool) -> None:
+    """List failed items in the dead-letter queue."""
+    from .dlq import DeadLetterQueue
+
+    dlq = DeadLetterQueue()
+    entries = dlq.list_entries(include_dead=show_all)
+    if not entries:
+        click.echo("Dead-letter queue is empty.")
+        return
+    summary = dlq.summary()
+    click.echo(
+        f"DLQ: {summary.get('total', 0)} entries  "
+        f"(failed={summary.get('failed', 0)} "
+        f"dead={summary.get('dead', 0)} "
+        f"resolved={summary.get('resolved', 0)})"
+    )
+    click.echo()
+    for e in entries:
+        from datetime import datetime
+        ts = datetime.fromtimestamp(e.timestamp).strftime("%Y-%m-%d %H:%M:%S")
+        retries = f"retries={e.retry_count}/3"
+        status_icon = "\U0001f480" if e.is_dead else ("✅" if e.status == "resolved" else "❌")
+        click.echo(f"  {status_icon} [{e.entry_id}] {ts}  {retries}  {e.status}")
+        click.echo(f"       input : {e.input[:80]}")
+        click.echo(f"       error : {e.error[:80]}")
+        click.echo()
+
+
+@dlq_cmd.command("retry")
+@click.pass_context
+def dlq_retry_cmd(ctx: click.Context) -> None:
+    """Retry all retryable failed items."""
+    from .dlq import DeadLetterQueue
+
+    registry = _registry(ctx.obj["repo"])
+    try:
+        llm = _require_llm()
+    except LLMError as e:
+        raise click.ClickException(str(e))
+
+    planner = Planner(registry, llm=llm)
+    executor = Executor(registry, llm)
+
+    def _handler(prompt: str) -> None:
+        plan = planner.plan(prompt)
+        executor.run(plan.skill, prompt)
+
+    dlq = DeadLetterQueue()
+    resolved, dead = dlq.retry_all(_handler)
+    click.echo(f"DLQ retry: {resolved} resolved, {dead} moved to dead.")
+
+
+@dlq_cmd.command("clear")
+@click.confirmation_option(prompt="Clear the entire dead-letter queue?")
+def dlq_clear_cmd() -> None:
+    """Delete all entries from the dead-letter queue."""
+    from .dlq import DeadLetterQueue
+
+    dlq = DeadLetterQueue()
+    n = dlq.clear()
+    click.echo(f"Cleared {n} entries.")
+
+
+# ---------------------------------------------------------------------------
+# Pass 14 additions — plugin system, Flask API server, rate limiter stats
+# ---------------------------------------------------------------------------
+
+# Patch stats_cmd to support --rate flag
+@main.command("rate-status")
+def rate_status_cmd() -> None:
+    """Show current token-bucket rate limiter level."""
+    from .rate_limiter import get_bucket
+    bucket = get_bucket()
+    level = bucket.get_level()
+    click.echo(f"Rate bucket: {level:.1f}/{bucket.max_tokens:.0f} tokens available "
+               f"(refill {bucket.refill_rate:.1f}/s)")
+
+
+# ------------------------------------------------------------------
+# agency plugin
+# ------------------------------------------------------------------
+
+@main.group("plugin")
+def plugin_group() -> None:
+    """Manage Agency plugins."""
+
+
+@plugin_group.command("install")
+@click.argument("name")
+@click.option("--source", default=None,
+              help="Path to a skill YAML or Python module to copy in.")
+@click.option("--version", default="0.1.0", show_default=True)
+@click.option("--description", default="", help="Short description.")
+def plugin_install(name: str, source: str | None, version: str, description: str) -> None:
+    """Install a plugin by NAME (optionally copying a --source file)."""
+    from .plugins import plugin_install_cmd
+    plugin_install_cmd(name, source, version, description)
+
+
+@plugin_group.command("list")
+def plugin_list() -> None:
+    """List installed plugins."""
+    from .plugins import plugin_list_cmd
+    plugin_list_cmd()
+
+
+@plugin_group.command("remove")
+@click.argument("name")
+def plugin_remove(name: str) -> None:
+    """Remove a plugin by NAME."""
+    from .plugins import plugin_remove_cmd
+    plugin_remove_cmd(name)
+
+
+# ------------------------------------------------------------------
+# agency serve-api  (Flask minimal REST server)
+# ------------------------------------------------------------------
+
+@main.command("serve-api")
+@click.option("--host", default="127.0.0.1", show_default=True,
+              help="Bind host.")
+@click.option("--port", default=8080, show_default=True, type=int,
+              help="Bind port.")
+@click.pass_context
+def serve_api_cmd(ctx: click.Context, host: str, port: int) -> None:
+    """Start the minimal Flask REST API server.
+
+    Endpoints: GET /health, GET /skills, GET /stats, POST /chat
+    Set AGENCY_API_TOKEN env var to require Bearer auth.
+    """
+    from .simple_server import run_server
+    repo = ctx.obj.get("repo")
+    run_server(host=host, port=port, repo=repo)
+
+
+# ------------------------------------------------------------------
+# agency webhook  — webhook management commands
+# ------------------------------------------------------------------
+
+@main.group("webhook")
+def webhook_group() -> None:
+    """Webhook notification management."""
+
+
+@webhook_group.command("test")
+@click.option("--url", default=None, help="Webhook URL (overrides config).")
+@click.option("--secret", default=None, help="HMAC secret (overrides config).")
+def webhook_test_cmd(url: str | None, secret: str | None) -> None:
+    """Send a test ping to the configured (or supplied) webhook URL."""
+    from .webhooks import WebhookConfig, WebhookDispatcher, load_webhook_config
+
+    cfg = load_webhook_config()
+    if url:
+        cfg = WebhookConfig(url=url, secret=secret or (cfg.secret if cfg else ""), events=[])
+    elif cfg is None:
+        click.echo("No webhook URL configured. Set [webhooks] url in ~/.agency/config.toml "
+                   "or pass --url.", err=True)
+        raise SystemExit(1)
+
+    dispatcher = WebhookDispatcher(cfg)
+    click.echo(f"Sending test ping to {cfg.url} …")
+    ok = dispatcher.dispatch_sync("ping", {"source": "agency webhook test"})
+    if ok:
+        click.echo("✅ Webhook delivered successfully.")
+    else:
+        click.echo("❌ Webhook delivery failed (check URL and connectivity).", err=True)
+        raise SystemExit(1)
+
+
+# ------------------------------------------------------------------
+# agency update  — manual update check
+# ------------------------------------------------------------------
+
+@main.command("update")
+def update_cmd() -> None:
+    """Check PyPI for a newer agency version and show the changelog URL."""
+    from .updater import check_update, CURRENT_VERSION, get_changelog_url
+
+    click.echo(f"Current version : {CURRENT_VERSION}")
+    click.echo("Checking PyPI …")
+    newer = check_update(force=True)
+    if newer:
+        click.echo(f"⚠️  New version available: {newer}")
+        click.echo(f"Run: pip install --upgrade agency")
+    else:
+        click.echo("✅ You are on the latest version.")
+    click.echo(f"Changelog: {get_changelog_url()}")
+
+
+# ------------------------------------------------------------------
+# Improved agency doctor  (replaces the original)
+# ------------------------------------------------------------------
+
+def _ok(cond: bool, warn: bool = False) -> str:
+    if cond:
+        return "✅"
+    return "⚠️ " if warn else "❌"
+
+
+@main.command("doctor2")
+@click.pass_context
+def doctor2_cmd(ctx: click.Context) -> None:
+    """Comprehensive diagnostic table: Python, API key, config, skills, history, stats, webhook."""
+    import os
+    import sys
+    import pathlib
+
+    from .config import AgencyConfig, config_path_toml
+
+    rows: list[tuple[str, str, str]] = []  # (check, status, detail)
+
+    # Python version
+    vi = sys.version_info
+    py_ok = vi >= (3, 10)
+    rows.append((
+        "Python version",
+        _ok(py_ok),
+        f"{vi.major}.{vi.minor}.{vi.micro} {'(≥3.10 ✓)' if py_ok else '(need ≥3.10)'}",
+    ))
+
+    # API key
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    key_ok = bool(key)
+    rows.append(("API key", _ok(key_ok), f"set ({len(key)} chars)" if key_ok else "NOT SET"))
+
+    # Config file
+    cfg_path = config_path_toml()
+    cfg_exists = cfg_path.exists()
+    cfg_valid = False
+    cfg_detail = "not found"
+    if cfg_exists:
+        try:
+            AgencyConfig.load(cfg_path)
+            cfg_valid = True
+            cfg_detail = str(cfg_path)
+        except Exception as exc:
+            cfg_detail = f"parse error: {exc}"
+    rows.append(("Config file", _ok(cfg_valid, warn=not cfg_exists), cfg_detail))
+
+    # Skills dir
+    try:
+        root = ctx.obj.get("repo") or discover_repo_root()
+        registry = SkillRegistry.load(root)
+        n_skills = len(registry)
+        rows.append(("Skills dir", _ok(True), f"{n_skills} skills in {root}"))
+    except Exception as exc:
+        rows.append(("Skills dir", _ok(False), str(exc)))
+
+    # History dir
+    hist_dir = pathlib.Path.home() / ".agency" / "history"
+    hist_exists = hist_dir.exists()
+    if hist_exists:
+        sessions = list(hist_dir.glob("*.jsonl"))
+        rows.append(("History dir", _ok(True), f"{len(sessions)} sessions in {hist_dir}"))
+    else:
+        rows.append(("History dir", _ok(False, warn=True), f"not found ({hist_dir})"))
+
+    # Stats file
+    stats_file = pathlib.Path.home() / ".agency" / "stats.json"
+    rows.append((
+        "Stats file",
+        _ok(stats_file.exists(), warn=True),
+        str(stats_file) if stats_file.exists() else "not found",
+    ))
+
+    # Webhook
+    from .webhooks import load_webhook_config
+    wh_cfg = load_webhook_config()
+    rows.append((
+        "Webhook",
+        _ok(wh_cfg is not None, warn=True),
+        f"url={wh_cfg.url}" if wh_cfg else "not configured (optional)",
+    ))
+
+    # Print table
+    click.echo("\n=== Agency Doctor ===\n")
+    col_w = max(len(r[0]) for r in rows) + 2
+    for check, status, detail in rows:
+        click.echo(f"  {check:<{col_w}}  {status}  {detail}")
+    click.echo()
