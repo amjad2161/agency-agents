@@ -1,0 +1,162 @@
+name: Build & Deploy JARVIS Cloud
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "runtime/**"
+      - "jarvis/**"
+      - "specialized/**"
+      - "runtime/Dockerfile"
+      - "docker-compose*.yml"
+      - ".github/workflows/cd.yml"
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: "Force deploy even without code changes"
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ── 1. Run all tests first ──────────────────────────────────────────────
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - run: pip install -e runtime[dev]
+      - run: python -m pytest runtime/tests -q --tb=short
+      - name: Smoke CLI
+        env:
+          ANTHROPIC_API_KEY: ""
+        run: |
+          agency list | head -5
+          agency doctor
+
+  # ── 2. Build & push Docker image to GHCR ──────────────────────────────
+  build:
+    name: Build Docker image
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=stable,enable={{is_default_branch}}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: runtime/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 3. Deploy to cloud (Railway / VPS / self-hosted runner) ───────────
+  deploy:
+    name: Deploy to cloud
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Option A: Railway ──────────────────────────────────────────────
+      - name: Deploy to Railway
+        if: ${{ vars.DEPLOY_TARGET == 'railway' }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          npm install -g @railway/cli
+          railway up --service jarvis --detach
+
+      # ── Option B: Self-hosted VPS via SSH ─────────────────────────────
+      - name: Deploy to VPS
+        if: ${{ vars.DEPLOY_TARGET == 'vps' }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/jarvis
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f
+            echo "✅ JARVIS deployed — $(date)"
+
+      # ── Option C: Render (auto-deploy via webhook) ────────────────────
+      - name: Trigger Render deploy
+        if: ${{ vars.DEPLOY_TARGET == 'render' }}
+        run: |
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+
+      # ── Health check after deploy ─────────────────────────────────────
+      - name: Health check
+        if: ${{ vars.JARVIS_CLOUD_URL != '' }}
+        run: |
+          echo "Waiting 30s for startup..."
+          sleep 30
+          STATUS=$(curl -sf "${{ vars.JARVIS_CLOUD_URL }}/healthz" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','unknown'))")
+          echo "Cloud JARVIS status: $STATUS"
+          if [ "$STATUS" != "ok" ]; then exit 1; fi
+
+  # ── 4. Notify on failure ───────────────────────────────────────────────
+  notify:
+    name: Notify on failure
+    needs: [test, build, deploy]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post failure summary
+        run: |
+          echo "❌ JARVIS CD pipeline failed on branch ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Actor: ${{ github.actor }}"

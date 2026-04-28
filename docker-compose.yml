@@ -1,0 +1,109 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# JARVIS — Local + Cloud unified stack
+# ═══════════════════════════════════════════════════════════════════════════
+# Local dev (mirrors cloud exactly):
+#   docker compose up
+#
+# With cloud sync (bidirectional local ↔ cloud state):
+#   docker compose --profile sync up
+#
+# Full stack with monitoring dashboard:
+#   docker compose --profile sync --profile monitor up
+
+version: "3.9"
+
+x-jarvis-env: &jarvis-env
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY in .env}
+  AGENCY_PROVIDER: ${AGENCY_PROVIDER:-anthropic}
+  AGENCY_MODEL: ${AGENCY_MODEL:-claude-opus-4-7}
+  AGENCY_PLANNER_MODEL: ${AGENCY_PLANNER_MODEL:-claude-haiku-4-5}
+  AGENCY_MAX_TOKENS: ${AGENCY_MAX_TOKENS:-16000}
+  AGENCY_TRUST_LEVEL: ${AGENCY_TRUST_LEVEL:-trusted}
+  JARVIS_ENV: ${JARVIS_ENV:-local}
+  TZ: Asia/Jerusalem
+
+services:
+  # ── Primary JARVIS runtime ─────────────────────────────────────────────
+  jarvis:
+    build:
+      context: .
+      dockerfile: runtime/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY:-amjad2161/agency-agents}:${IMAGE_TAG:-latest}
+    container_name: jarvis-local
+    ports:
+      - "${JARVIS_PORT:-8765}:8765"
+    environment:
+      <<: *jarvis-env
+    volumes:
+      - jarvis_data:/root/.agency
+      # live-reload: mount source so edits reflect without rebuild
+      - ./runtime/agency:/app/runtime/agency:ro
+      - ./jarvis:/app/jarvis:ro
+      - ./specialized:/app/specialized:ro
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8765/healthz')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    labels:
+      jarvis.role: "runtime"
+      jarvis.env: "local"
+
+  # ── Cloud sync daemon (bidirectional local ↔ cloud) ────────────────────
+  jarvis-sync:
+    build:
+      context: .
+      dockerfile: runtime/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY:-amjad2161/agency-agents}:${IMAGE_TAG:-latest}
+    container_name: jarvis-sync
+    depends_on:
+      jarvis:
+        condition: service_healthy
+    environment:
+      <<: *jarvis-env
+      JARVIS_LOCAL_URL: "http://jarvis:8765"
+      JARVIS_CLOUD_URL: ${JARVIS_CLOUD_URL:-}
+      JARVIS_SYNC_INTERVAL: ${JARVIS_SYNC_INTERVAL:-30}
+      JARVIS_SYNC_SECRET: ${JARVIS_SYNC_SECRET:-}
+    volumes:
+      - jarvis_data:/root/.agency
+      - ./scripts:/app/scripts:ro
+    entrypoint:
+      ["python", "/app/scripts/cloud_sync.py", "--daemon"]
+    restart: unless-stopped
+    profiles:
+      - sync
+    labels:
+      jarvis.role: "sync"
+
+  # ── Watchtower — auto-pulls new cloud images when pushed ───────────────
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: jarvis-watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_POLL_INTERVAL: 300
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_NOTIFICATIONS_LEVEL: "info"
+    command: --label-enable
+    restart: unless-stopped
+    profiles:
+      - monitor
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+volumes:
+  jarvis_data:
+    driver: local
+    labels:
+      jarvis.data: "state"

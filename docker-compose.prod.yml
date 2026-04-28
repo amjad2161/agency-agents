@@ -1,0 +1,55 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# JARVIS — Production / Cloud overrides
+# ═══════════════════════════════════════════════════════════════════════════
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file is layered on top of docker-compose.yml.
+# It tightens security, enables persistent volumes, and sets prod defaults.
+
+version: "3.9"
+
+services:
+  jarvis:
+    restart: always
+    environment:
+      JARVIS_ENV: production
+      AGENCY_TRUST_LEVEL: ${AGENCY_TRUST_LEVEL:-operator}
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 10
+        window: 120s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      jarvis.env: "production"
+      com.centurylinklabs.watchtower.enable: "true"
+
+  jarvis-sync:
+    restart: always
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+
+volumes:
+  jarvis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${JARVIS_DATA_PATH:-/opt/jarvis/data}
