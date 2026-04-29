@@ -7,6 +7,7 @@ on:
       - "runtime/**"
       - "jarvis/**"
       - "specialized/**"
+      - "scripts/**"
       - "runtime/Dockerfile"
       - "docker-compose*.yml"
       - ".github/workflows/cd.yml"
@@ -94,10 +95,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── 3. Deploy to cloud (Railway / VPS / self-hosted runner) ───────────
+  # ── 3. Deploy to cloud ─────────────────────────────────────────────────
   deploy:
     name: Deploy to cloud
     needs: build
+    # Run on push to main OR when force_deploy is true
+    if: ${{ github.event_name == 'push' || inputs.force_deploy == true }}
     runs-on: ubuntu-latest
     environment: production
     concurrency:
@@ -125,7 +128,12 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -e
             cd /opt/jarvis
+            # Update repo so bind-free prod stack gets the latest compose files
+            git fetch origin main
+            git reset --hard origin/main
+            # Pull latest image from GHCR
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
@@ -144,7 +152,7 @@ jobs:
         run: |
           echo "Waiting 30s for startup..."
           sleep 30
-          STATUS=$(curl -sf "${{ vars.JARVIS_CLOUD_URL }}/healthz" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','unknown'))")
+          STATUS=$(curl -sf "${{ vars.JARVIS_CLOUD_URL }}/api/health" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','unknown'))")
           echo "Cloud JARVIS status: $STATUS"
           if [ "$STATUS" != "ok" ]; then exit 1; fi
 

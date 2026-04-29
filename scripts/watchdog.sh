@@ -14,13 +14,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 JARVIS_URL="${JARVIS_URL:-http://localhost:8765}"
-LOG_PREFIX="[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] JARVIS-WATCHDOG"
 
-log() { echo "${LOG_PREFIX} $*"; }
+log() {
+  local ts
+  ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  echo "[${ts}] JARVIS-WATCHDOG $*"
+}
 
 check_health() {
   local status
-  status=$(curl -sf --max-time 5 "${JARVIS_URL}/healthz" \
+  status=$(curl -sf --max-time 5 "${JARVIS_URL}/api/health" \
     | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','down'))" 2>/dev/null || echo "down")
   echo "$status"
 }
@@ -39,16 +42,14 @@ pull_latest() {
 }
 
 # ── Main ────────────────────────────────────────────────────────────────────
-log "Health check → ${JARVIS_URL}/healthz"
+log "Health check → ${JARVIS_URL}/api/health"
 STATUS=$(check_health)
 log "Status: ${STATUS}"
 
 if [ "$STATUS" != "ok" ]; then
   log "JARVIS is DOWN (status=${STATUS}) — attempting recovery"
 
-  # Try pulling latest first (maybe a fresh image fixes it)
   pull_latest || log "Pull failed (continuing anyway)"
-
   restart_stack
 
   # Wait up to 60s for JARVIS to come back

@@ -5,16 +5,16 @@ JARVIS Cloud-Local Sync Daemon
 Keeps a local JARVIS instance and a cloud JARVIS instance in sync as one unit.
 
 Syncs:
-  - Character state (persona, mood, mode)
-  - Lessons ledger (learned behaviours)
-  - Trust scores
-  - Session export / history
+  - Character profile (full text replacement)
+  - Lessons ledger (append-only merge — new entries propagated both ways)
+  - Trust mode (mode string)
 
 Run standalone:
   python scripts/cloud_sync.py --once
   python scripts/cloud_sync.py --daemon          # loop every JARVIS_SYNC_INTERVAL seconds
   python scripts/cloud_sync.py --push-to-cloud   # one-shot local → cloud
   python scripts/cloud_sync.py --pull-from-cloud # one-shot cloud → local
+  python scripts/cloud_sync.py --status          # health check both sides
 """
 
 import argparse
@@ -25,19 +25,12 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
-from pathlib import Path
 
 
 LOCAL_URL = os.getenv("JARVIS_LOCAL_URL", "http://localhost:8765")
 CLOUD_URL = os.getenv("JARVIS_CLOUD_URL", "")
 SYNC_INTERVAL = int(os.getenv("JARVIS_SYNC_INTERVAL", "30"))
 SYNC_SECRET = os.getenv("JARVIS_SYNC_SECRET", "")
-
-SYNC_ENDPOINTS = [
-    "/lessons",
-    "/trust",
-    "/profile",
-]
 
 
 # ── HTTP helpers ────────────────────────────────────────────────────────────
@@ -64,59 +57,65 @@ def _post(base: str, path: str, body: dict, timeout: int = 10) -> dict:
 
 def _health(base: str) -> bool:
     try:
-        data = _get(base, "/healthz", timeout=5)
+        data = _get(base, "/api/health", timeout=5)
         return data.get("status") == "ok"
     except Exception:
         return False
 
 
-# ── Sync logic ──────────────────────────────────────────────────────────────
+# ── Per-endpoint sync ───────────────────────────────────────────────────────
 
 def _log(msg: str) -> None:
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     print(f"[{ts}] {msg}", flush=True)
 
 
-def sync_endpoint(src: str, dst: str, path: str) -> bool:
-    """Pull data from src, push to dst. Returns True on success."""
-    try:
-        data = _get(src, path)
-        _post(dst, path, data)
-        return True
-    except urllib.error.HTTPError as e:
-        _log(f"  HTTP {e.code} syncing {path}: {e.reason}")
-        return False
-    except Exception as e:
-        _log(f"  Error syncing {path}: {e}")
-        return False
-
-
 def sync_lessons(src: str, dst: str) -> bool:
-    """Merge lessons from both sides to avoid data loss."""
+    """Append to dst any lesson lines present in src but not in dst."""
     try:
-        src_data = _get(src, "/lessons")
-        dst_data = _get(dst, "/lessons")
+        src_text = (_get(src, "/api/lessons").get("text") or "").strip()
+        dst_text = (_get(dst, "/api/lessons").get("text") or "").strip()
 
-        src_lessons = src_data.get("lessons", [])
-        dst_lessons = dst_data.get("lessons", [])
+        src_lines = {l.strip() for l in src_text.splitlines() if l.strip() and not l.startswith("#")}
+        dst_lines = {l.strip() for l in dst_text.splitlines() if l.strip() and not l.startswith("#")}
+        new_lines = src_lines - dst_lines
 
-        # Merge: union by content string
-        seen = set()
-        merged = []
-        for lesson in src_lessons + dst_lessons:
-            key = lesson if isinstance(lesson, str) else json.dumps(lesson, sort_keys=True)
-            if key not in seen:
-                seen.add(key)
-                merged.append(lesson)
+        for line in sorted(new_lines):
+            _post(dst, "/api/lessons", {"text": line})
 
-        if len(merged) > len(dst_lessons):
-            _post(dst, "/lessons", {"lessons": merged})
-            _log(f"  Merged {len(merged) - len(dst_lessons)} new lessons → {dst}")
+        if new_lines:
+            _log(f"  lessons: pushed {len(new_lines)} new line(s) → {dst}")
         return True
     except Exception as e:
-        _log(f"  Error syncing lessons: {e}")
+        _log(f"  lessons sync error: {e}")
         return False
 
+
+def sync_trust(src: str, dst: str) -> bool:
+    """Copy trust mode from src to dst."""
+    try:
+        mode = _get(src, "/api/trust").get("mode", "")
+        if mode:
+            _post(dst, "/api/trust", {"mode": mode})
+        return True
+    except Exception as e:
+        _log(f"  trust sync error: {e}")
+        return False
+
+
+def sync_profile(src: str, dst: str) -> bool:
+    """Copy full profile text from src to dst (full replacement)."""
+    try:
+        text = _get(src, "/api/profile").get("text", "")
+        if text:
+            _post(dst, "/api/profile", {"text": text})
+        return True
+    except Exception as e:
+        _log(f"  profile sync error: {e}")
+        return False
+
+
+# ── Orchestration ───────────────────────────────────────────────────────────
 
 def run_sync(direction: str = "both") -> dict:
     """
@@ -128,7 +127,7 @@ def run_sync(direction: str = "both") -> dict:
 
     if not CLOUD_URL:
         _log("JARVIS_CLOUD_URL not set — skipping cloud sync")
-        results["skipped"] = len(SYNC_ENDPOINTS)
+        results["skipped"] = 3
         return results
 
     local_up = _health(LOCAL_URL)
@@ -143,20 +142,26 @@ def run_sync(direction: str = "both") -> dict:
 
     _log(f"Sync started ({direction}) local={LOCAL_URL} cloud={CLOUD_URL}")
 
-    # Lessons: always merge bidirectionally to preserve both sides
-    ok = sync_lessons(LOCAL_URL, CLOUD_URL)
-    if direction in ("both", "pull"):
-        ok = ok and sync_lessons(CLOUD_URL, LOCAL_URL)
-    results["ok" if ok else "fail"] += 1
+    def _run(fn, *args):
+        ok = fn(*args)
+        results["ok" if ok else "fail"] += 1
 
-    # Trust and profile
-    for path in ["/trust", "/profile"]:
-        if direction in ("push", "both"):
-            ok = sync_endpoint(LOCAL_URL, CLOUD_URL, path)
-            results["ok" if ok else "fail"] += 1
-        if direction in ("pull", "both"):
-            ok = sync_endpoint(CLOUD_URL, LOCAL_URL, path)
-            results["ok" if ok else "fail"] += 1
+    # Lessons: always merge both ways to preserve all knowledge
+    _run(sync_lessons, LOCAL_URL, CLOUD_URL)
+    if direction in ("pull", "both"):
+        _run(sync_lessons, CLOUD_URL, LOCAL_URL)
+
+    # Trust: local is authoritative on push, cloud on pull
+    if direction in ("push", "both"):
+        _run(sync_trust, LOCAL_URL, CLOUD_URL)
+    if direction == "pull":
+        _run(sync_trust, CLOUD_URL, LOCAL_URL)
+
+    # Profile: local is authoritative on push, cloud on pull
+    if direction in ("push", "both"):
+        _run(sync_profile, LOCAL_URL, CLOUD_URL)
+    if direction == "pull":
+        _run(sync_profile, CLOUD_URL, LOCAL_URL)
 
     _log(f"Sync done — ok={results['ok']} fail={results['fail']}")
     return results

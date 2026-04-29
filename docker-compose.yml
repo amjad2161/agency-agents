@@ -7,7 +7,7 @@
 # With cloud sync (bidirectional local ↔ cloud state):
 #   docker compose --profile sync up
 #
-# Full stack with monitoring dashboard:
+# Full stack with auto-update monitoring:
 #   docker compose --profile sync --profile monitor up
 
 version: "3.9"
@@ -31,12 +31,13 @@ services:
     image: ghcr.io/${GITHUB_REPOSITORY:-amjad2161/agency-agents}:${IMAGE_TAG:-latest}
     container_name: jarvis-local
     ports:
-      - "${JARVIS_PORT:-8765}:8765"
+      - "${AGENCY_PORT:-8765}:8765"
     environment:
       <<: *jarvis-env
     volumes:
       - jarvis_data:/root/.agency
-      # live-reload: mount source so edits reflect without rebuild
+      # live-reload: mount source so edits reflect without rebuild (dev only)
+      # In production these are overridden by docker-compose.prod.yml
       - ./runtime/agency:/app/runtime/agency:ro
       - ./jarvis:/app/jarvis:ro
       - ./specialized:/app/specialized:ro
@@ -47,7 +48,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8765/healthz')",
+          "import urllib.request,json,sys; r=urllib.request.urlopen('http://localhost:8765/api/health',timeout=5); d=json.loads(r.read()); sys.exit(0 if d.get('status')=='ok' else 1)",
         ]
       interval: 30s
       timeout: 10s
@@ -75,6 +76,7 @@ services:
       JARVIS_SYNC_SECRET: ${JARVIS_SYNC_SECRET:-}
     volumes:
       - jarvis_data:/root/.agency
+      # scripts/ is baked into the image; mount here only for local dev iteration
       - ./scripts:/app/scripts:ro
     entrypoint:
       ["python", "/app/scripts/cloud_sync.py", "--daemon"]
@@ -94,7 +96,6 @@ services:
       WATCHTOWER_POLL_INTERVAL: 300
       WATCHTOWER_CLEANUP: "true"
       WATCHTOWER_LABEL_ENABLE: "true"
-      WATCHTOWER_NOTIFICATIONS_LEVEL: "info"
     command: --label-enable
     restart: unless-stopped
     profiles:

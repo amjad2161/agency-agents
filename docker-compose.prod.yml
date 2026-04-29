@@ -4,31 +4,27 @@
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-# This file is layered on top of docker-compose.yml.
-# It tightens security, enables persistent volumes, and sets prod defaults.
+# This file layers on top of docker-compose.yml:
+#   - Removes dev source bind-mounts so the pulled image code runs (not host)
+#   - Applies resource limits using plain Compose fields (mem_limit, cpus)
+#   - Uses restart: always and tighter logging
+#   - Binds persistent state to a host path you control
 
 version: "3.9"
 
 services:
   jarvis:
     restart: always
+    # Override volumes: drop dev source bind-mounts so `docker compose pull`
+    # actually updates the running code (image code wins, not host files).
+    volumes:
+      - jarvis_data:/root/.agency
     environment:
       JARVIS_ENV: production
       AGENCY_TRUST_LEVEL: ${AGENCY_TRUST_LEVEL:-operator}
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          cpus: "2"
-          memory: 2G
-        reservations:
-          cpus: "0.5"
-          memory: 512M
-      restart_policy:
-        condition: any
-        delay: 5s
-        max_attempts: 10
-        window: 120s
+    # Plain Compose resource limits (docker compose, not Swarm)
+    mem_limit: 2g
+    cpus: "2.0"
     logging:
       driver: "json-file"
       options:
@@ -40,11 +36,11 @@ services:
 
   jarvis-sync:
     restart: always
-    deploy:
-      restart_policy:
-        condition: any
-        delay: 10s
-        max_attempts: 5
+    # Drop the dev scripts bind-mount: use the version baked into the image
+    volumes:
+      - jarvis_data:/root/.agency
+    mem_limit: 256m
+    cpus: "0.25"
 
 volumes:
   jarvis_data:
