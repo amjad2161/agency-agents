@@ -13,7 +13,6 @@ Run with::
 from __future__ import annotations
 
 import argparse
-import datetime
 import signal
 import sys
 import threading

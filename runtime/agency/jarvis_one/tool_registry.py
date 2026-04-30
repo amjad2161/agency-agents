@@ -8,7 +8,7 @@ the MCP ``tools/list`` + ``tools/call`` shape at the JSON surface.
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 

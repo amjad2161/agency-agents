@@ -9,7 +9,7 @@ based on topological sort + tiebreak by name.
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 NodeFn = Callable[[dict[str, Any]], dict[str, Any]]

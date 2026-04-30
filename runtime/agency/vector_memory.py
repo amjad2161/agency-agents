@@ -37,7 +37,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Iterable
 
 # Default location: ~/.agency/vector_memory.db
 DEFAULT_DB = Path.home() / ".agency" / "vector_memory.db"
