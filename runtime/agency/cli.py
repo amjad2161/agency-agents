@@ -9,7 +9,6 @@ import click
 
 from .amjad_jarvis_cli import amjad_group
 from .executor import Executor
-from .jarvis_one.cli import jarvis_group, map_cmd, singularity_cmd
 from .llm import AnthropicLLM, LLMConfig, LLMError
 from .logging import configure as configure_logging
 from .memory import MemoryStore, Session
@@ -52,9 +51,6 @@ def main(ctx: click.Context, repo: Path | None, verbose: int) -> None:
 
 
 main.add_command(amjad_group, "amjad")
-main.add_command(jarvis_group)
-main.add_command(map_cmd)
-main.add_command(singularity_cmd)
 
 
 @main.command("list")
@@ -654,6 +650,121 @@ def jarvis_status_cmd() -> None:
 
     system = initialise_character_system()
     click.echo(_json.dumps(system.status(), indent=2, ensure_ascii=False))
+
+
+# ---------------------------------------------------------------------------
+# JARVIS One — GOD-MODE subcommands (ask / create / chat / personas).
+# Layered on top of the persona runtime so the unified interface in
+# `agency.jarvis_one` is reachable from the CLI without duplicating boot.
+# ---------------------------------------------------------------------------
+@jarvis_group.command("ask")
+@click.argument("message", nargs=-1, required=True)
+@click.option("--persona", "persona_slug", default=None,
+              help="Force a specific senior expert persona slug.")
+@click.option("--json", "as_json", is_flag=True,
+              help="Emit machine-readable JSON.")
+@click.pass_context
+def jarvis_ask_cmd(ctx: click.Context, message: tuple[str, ...],
+                   persona_slug: str | None, as_json: bool) -> None:
+    """Ask JARVIS One a single question."""
+    import json as _json
+    from .jarvis_one import build_default_interface
+
+    jarvis = build_default_interface(repo=ctx.obj.get("repo"))
+    ans = jarvis.ask(" ".join(message), persona_slug=persona_slug)
+    if as_json:
+        click.echo(_json.dumps(ans.to_dict(), ensure_ascii=False, indent=2))
+        return
+    click.echo(ans.response)
+
+
+@jarvis_group.command("create")
+@click.argument("request", nargs=-1, required=True)
+@click.option("--want", multiple=True,
+              type=click.Choice(["text", "diagram", "audio", "document"]),
+              default=("text", "diagram", "document"))
+@click.option("--out", "out_dir",
+              type=click.Path(file_okay=False, path_type=Path), default=None,
+              help="Write artefacts to this directory.")
+@click.option("--format", "doc_format", default="markdown",
+              type=click.Choice(["markdown", "html", "pdf",
+                                 "docx", "pptx", "xlsx"]))
+@click.pass_context
+def jarvis_create_cmd(ctx: click.Context, request: tuple[str, ...],
+                      want: tuple[str, ...], out_dir: Path | None,
+                      doc_format: str) -> None:
+    """Generate a multimodal artefact bundle for REQUEST."""
+    import base64
+    from .jarvis_one import build_default_interface
+
+    jarvis = build_default_interface(repo=ctx.obj.get("repo"))
+    bundle = jarvis.create(" ".join(request), want=want,
+                           document_format=doc_format)
+    if out_dir is None:
+        for art in bundle.artifacts:
+            click.echo(f"== {art.kind} ({art.mime}) ==")
+            preview = art.payload[:400]
+            click.echo(preview + ("…" if len(art.payload) > 400 else ""))
+        return
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ext_map = {
+        "text/plain": "txt", "image/svg+xml": "svg",
+        "audio/wav": "wav", "text/markdown": "md",
+        "text/html": "html", "application/pdf": "pdf",
+    }
+    for art in bundle.artifacts:
+        path = out_dir / f"{art.kind}.{ext_map.get(art.mime, 'bin')}"
+        if art.meta.get("binary") or art.kind == "audio":
+            path.write_bytes(base64.b64decode(art.payload))
+        else:
+            path.write_text(art.payload, encoding="utf-8")
+        click.echo(f"wrote {path}")
+
+
+@jarvis_group.command("chat")
+@click.option("--turns", default=0, type=int,
+              help="Stop after N turns (0 = until EOF).")
+@click.pass_context
+def jarvis_chat_cmd(ctx: click.Context, turns: int) -> None:
+    """Interactive chat REPL backed by JARVIS One."""
+    from .jarvis_one import build_default_interface
+
+    jarvis = build_default_interface(repo=ctx.obj.get("repo"))
+    click.echo("JARVIS One chat — Ctrl+D / EOF to exit.")
+    n = 0
+    try:
+        while True:
+            try:
+                line = input("you> ").strip()
+            except EOFError:
+                break
+            if not line:
+                continue
+            turn = jarvis.chat(line)
+            click.echo(f"[{turn.persona} | {turn.sentiment}] {turn.assistant}")
+            n += 1
+            if turns and n >= turns:
+                break
+    except KeyboardInterrupt:
+        pass
+
+
+@jarvis_group.command("personas")
+@click.option("--json", "as_json", is_flag=True)
+@click.pass_context
+def jarvis_personas_cmd(ctx: click.Context, as_json: bool) -> None:
+    """List the senior expert personas (lawyer / engineer / doctor / …)."""
+    import json as _json
+    from .jarvis_one import build_default_interface
+
+    jarvis = build_default_interface(repo=ctx.obj.get("repo"))
+    catalog = jarvis.personas()
+    if as_json:
+        click.echo(_json.dumps(catalog, ensure_ascii=False, indent=2))
+        return
+    for p in catalog:
+        click.echo(f"  {p['slug']:<22}  {p['display_name']:<28}  "
+                   f"{p['role']}  ({p['domain_count']} domains)")
 
 
 @main.command("singularity")

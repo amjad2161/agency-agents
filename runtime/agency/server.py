@@ -648,38 +648,11 @@ def build_app(repo: Path | None = None) -> FastAPI:
         }
 
     # ------------------------------------------------------------------
-    # JARVIS One — singularity endpoints (Stages 3 & 4)
+    # JARVIS One — extra POST/WS endpoints (the GET ones are above).
     # ------------------------------------------------------------------
     from .jarvis_one import build_default_interface as _build_jarvis_one
 
     _jarvis = _build_jarvis_one(repo=root)
-    _dashboard_path = Path(__file__).parent / "static" / "dashboard.html"
-
-    @app.get("/dashboard", response_class=HTMLResponse)
-    def dashboard_endpoint() -> str:
-        try:
-            return _dashboard_path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return (
-                "<!doctype html><meta charset='utf-8'>"
-                "<title>JARVIS One — Dashboard</title>"
-                "<h1>JARVIS One Dashboard</h1>"
-                "<p>dashboard.html missing in static/</p>"
-            )
-
-    @app.get("/singularity")
-    def singularity_endpoint() -> dict[str, Any]:
-        """Unified status: every category, every persona, full routing table."""
-        snap = _jarvis.status()
-        return {
-            "version": snap["version"],
-            "skills": snap["skills"],
-            "personas": snap["personas"],
-            "subsystems": snap["subsystems"],
-            "core_brain_routes": [
-                s.slug for s in registry.all() if s.category == "jarvis"
-            ],
-        }
 
     @app.post("/api/jarvis/ask")
     def jarvis_ask_endpoint(body: dict[str, Any]) -> dict[str, Any]:
