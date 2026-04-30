@@ -7,7 +7,7 @@ $Runtime = Join-Path $Root "runtime"
 $Venv = Join-Path $Root ".venv"
 
 Write-Host ""
-Write-Host " [JARVIS] Supreme Brainiac — Setup"
+Write-Host " [JARVIS] One — Setup"
 Write-Host " ==================================="
 Write-Host ""
 
