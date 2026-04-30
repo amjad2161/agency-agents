@@ -17,6 +17,15 @@ JARVIS is organized as a modular system where each module provides deep capabili
 | 🎨 **Design & Creative** | [`jarvis-design-creative.md`](jarvis-design-creative.md) | UI/UX, brand design, motion, video/audio, generative AI art |
 | 🌍 **AR/XR/Spatial** | [`jarvis-ar-xr-spatial.md`](jarvis-ar-xr-spatial.md) | Augmented reality, VR/MR, 3D reconstruction, spatial intelligence |
 | 🎯 **Strategy & Ops** | [`jarvis-strategy-ops.md`](jarvis-strategy-ops.md) | Product strategy, project management, business ops, leadership |
+| 🚀 **Autonomous Executor** | [`jarvis-autonomous-executor.md`](jarvis-autonomous-executor.md) | End-to-end goal execution without human checkpoints |
+| 🎯 **Goal Decomposer** | [`jarvis-goal-decomposer.md`](jarvis-goal-decomposer.md) | Structured task-tree planning with dependencies and milestones |
+| 🛠️ **Self-Healing Engine** | [`jarvis-self-healing-engine.md`](jarvis-self-healing-engine.md) | Fault diagnosis, root-cause analysis, auto-repair loop |
+| 📚 **Self-Learner** | [`jarvis-self-learner.md`](jarvis-self-learner.md) | Lesson extraction, cross-session learning, behavior calibration |
+| 🔭 **Curiosity Engine** | [`jarvis-curiosity-engine.md`](jarvis-curiosity-engine.md) | Proactive knowledge exploration and gap detection |
+| 🔬 **Research Director** | [`jarvis-research-director.md`](jarvis-research-director.md) | Multi-source deep research with evidence quality evaluation |
+| 🔗 **Knowledge Synthesizer** | [`jarvis-knowledge-synthesizer.md`](jarvis-knowledge-synthesizer.md) | Cross-domain insight synthesis and connection discovery |
+| 🔧 **Tool Master** | [`jarvis-tool-master.md`](jarvis-tool-master.md) | Universal tool composition, wiring, and integration |
+| 💎 **Amjad Unified Brain** | [`jarvis-amjad-unified-brain.md`](jarvis-amjad-unified-brain.md) | All 117 modules through Amjad's personal context and operating mode |
 
 ## 🚀 Quick Start
 

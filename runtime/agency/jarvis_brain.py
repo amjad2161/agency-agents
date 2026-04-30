@@ -272,6 +272,66 @@ KEYWORD_SLUG_BOOST: dict[str, dict[str, float]] = {
     "data analysis": {"data": 10.0},
     "data visualization": {"data": 9.0},
     "dashboard": {"data": 8.0},
+
+    # Autonomous execution
+    "autonomous": {"autonomous-executor": 8.0},
+    "execute autonomously": {"autonomous-executor": 9.0},
+    "run without checkpoint": {"autonomous-executor": 9.0},
+    "without human": {"autonomous-executor": 8.0},
+
+    # Goal decomposition / planning
+    "decompose goal": {"goal-decomposer": 9.0, "autonomous-executor": 5.0},
+    "goal decomposition": {"goal-decomposer": 9.0},
+    "task tree": {"goal-decomposer": 8.0},
+    "break down goal": {"goal-decomposer": 8.0},
+    "milestones": {"goal-decomposer": 7.0, "project-management": 5.0},
+    "critical path": {"goal-decomposer": 8.0, "project-management": 5.0},
+    "acceptance criteria": {"goal-decomposer": 7.0, "testing-qa": 5.0},
+
+    # Self-healing
+    "self-heal": {"self-healing-engine": 10.0},
+    "self heal": {"self-healing-engine": 10.0},
+    "auto-repair": {"self-healing-engine": 9.0},
+    "auto repair": {"self-healing-engine": 9.0},
+    "fix error": {"self-healing-engine": 8.0, "omega-engineer": 7.0},
+    "root cause": {"self-healing-engine": 8.0},
+    "stack trace": {"self-healing-engine": 7.0, "omega-engineer": 6.0},
+
+    # Self-learning / lessons
+    "extract lessons": {"self-learner": 9.0},
+    "lessons learned": {"self-learner": 8.0},
+    "learn from": {"self-learner": 8.0},
+    "lessons journal": {"self-learner": 9.0},
+
+    # Curiosity / exploration
+    "curiosity": {"curiosity-engine": 8.0},
+    "explore topic": {"curiosity-engine": 7.0},
+    "adjacent knowledge": {"curiosity-engine": 8.0},
+    "proactive": {"curiosity-engine": 7.0},
+
+    # Knowledge synthesis
+    "synthesize knowledge": {"knowledge-synthesizer": 9.0},
+    "cross-domain": {"knowledge-synthesizer": 9.0},
+    "cross domain": {"knowledge-synthesizer": 8.0},
+    "connect insights": {"knowledge-synthesizer": 8.0},
+    "bridge domains": {"knowledge-synthesizer": 8.0},
+
+    # Research direction
+    "deep research": {"research-director": 10.0},
+    "multi-source research": {"research-director": 9.0},
+    "investigate": {"research-director": 7.0, "journalism-research": 5.0},
+    "literature review": {"research-director": 8.0},
+    "state of the art": {"research-director": 7.0},
+
+    # Tool mastery
+    "tool integration": {"tool-master": 9.0},
+    "compose tools": {"tool-master": 8.0},
+    "wire together": {"tool-master": 8.0},
+
+    # Personal unified brain
+    "amjad": {"amjad-unified-brain": 10.0, "brainiac": 7.0},
+    "unified brain": {"amjad-unified-brain": 10.0},
+    "personal jarvis": {"amjad-unified-brain": 9.0, "brainiac": 7.0},
 }
 
 

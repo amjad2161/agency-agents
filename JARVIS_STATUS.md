@@ -1,5 +1,37 @@
 # J.A.R.V.I.S — Supreme Brainiac Personal Agent
-## Status Report — 2026-04-27
+## Status Report — 2026-04-30
+
+### Test Results
+- **Total tests:** 688
+- **Passing:** 688
+- **Failing:** 0
+- **Errors:** 0
+
+---
+
+### Pass 4 — 9 Missing Autonomous-Operation Agents (2026-04-30)
+
+All 9 JARVIS domain modules documented in `JARVIS_CAPABILITIES.md` but absent from `jarvis/` have been created.
+
+| New Agent | Slug | Purpose |
+|-----------|------|---------|
+| JARVIS Amjad Unified Brain | `jarvis-amjad-unified-brain` | All 117 modules through Amjad's personal context |
+| JARVIS Autonomous Executor | `jarvis-autonomous-executor` | End-to-end goal execution without human checkpoints |
+| JARVIS Goal Decomposer | `jarvis-goal-decomposer` | Structured task-tree planning with dependencies/milestones |
+| JARVIS Self-Healing Engine | `jarvis-self-healing-engine` | Root-cause diagnosis + auto-repair loop |
+| JARVIS Self-Learner | `jarvis-self-learner` | Lesson extraction + cross-session behavioral calibration |
+| JARVIS Curiosity Engine | `jarvis-curiosity-engine` | Proactive knowledge exploration and gap detection |
+| JARVIS Research Director | `jarvis-research-director` | Multi-source deep research with evidence quality tiers |
+| JARVIS Knowledge Synthesizer | `jarvis-knowledge-synthesizer` | Cross-domain insight bridges and unified model synthesis |
+| JARVIS Tool Master | `jarvis-tool-master` | Universal tool composition and integration |
+
+**Updates also made:**
+- `jarvis/jarvis-core-brain.md` — routing table expanded with 5 new capability domains covering all 9 agents
+- `runtime/agency/jarvis_brain.py` — `KEYWORD_SLUG_BOOST` extended with 40+ new keyword mappings for the 9 agents
+- `jarvis/README.md` — module architecture table updated
+- `JARVIS_STATUS.md` — this file
+
+---
 
 ### Test Results
 - **Total tests:** 688
@@ -48,7 +80,7 @@ All 6 files were truncated mid-function — root cause of the CI startup failure
 | `MultimodalProcessor` | ✅ |
 | `UnifiedBridge` (process → dict, 21 subsystems) | ✅ |
 | CLI (`agency list`, `agency plan`, `agency doctor`) | ✅ |
-| `SkillRegistry` (323 skills loaded) | ✅ |
+| `SkillRegistry` (324 skills loaded) | ✅ |
 | `VectorMemory` | ✅ |
 | `TrustLayer` | ✅ |
 
@@ -70,7 +102,7 @@ All 6 files were truncated mid-function — root cause of the CI startup failure
 ---
 
 ### What JARVIS Can Do Right Now
-- Route 323 skills via keyword matching (offline, no API key needed)
+- Route 324 skills via keyword matching (offline, no API key needed)
 - Run 688 tests — all green
 - Classify task complexity (trivial → very_complex) deterministically
 - Manage 6 persona modes with system prompts

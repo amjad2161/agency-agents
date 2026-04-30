@@ -101,14 +101,14 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 | Engineering & Coding | `jarvis-engineering`, `engineering-senior-developer`, `engineering-frontend-developer`, `engineering-backend-architect` |
 | AI / ML / AGI | `jarvis-ai-ml`, `engineering-ai-engineer` |
 | Automation & Orchestration | `jarvis-automation`, `agents-orchestrator` |
-| Computer Use & Tool Mastery | `jarvis-computer-use` |
+| Computer Use & Tool Mastery | `jarvis-computer-use`, `jarvis-tool-master` |
 | Design & Creative | `jarvis-design-creative`, `design-ui-designer`, `design-ux-architect` |
 | AR / XR / Spatial | `jarvis-ar-xr-spatial`, `visionos-spatial-engineer`, `xr-immersive-developer` |
 | Strategy & Ops | `jarvis-strategy-ops`, `specialized-chief-of-staff`, `project-manager-senior` |
 | Voice & Speech | `jarvis-voice-speech` |
 | Security & Cyber | `jarvis-security-cyber`, `engineering-security-engineer`, `blockchain-security-auditor` |
 | Data Intelligence | `jarvis-data-intelligence`, `engineering-data-engineer`, `engineering-database-optimizer` |
-| Knowledge & Research | `jarvis-knowledge-research` |
+| Knowledge & Research | `jarvis-knowledge-research`, `jarvis-research-director`, `jarvis-knowledge-synthesizer` |
 | Human Interface & Emotion AI | `jarvis-human-interface` |
 | Content & Media | `jarvis-content-media`, `marketing-content-creator` |
 | IoT & Robotics | `jarvis-iot-robotics`, `engineering-embedded-firmware-engineer` |
@@ -203,6 +203,11 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 | **OMEGA: Omniscient Engineer** | `jarvis-omega-engineer` |
 | **OMEGA: Omniscient Creative Director** | `jarvis-omega-creative` |
 | **OMEGA: Autonomous Operator** | `jarvis-omega-operator` |
+| **Autonomous Execution** | `jarvis-autonomous-executor`, `jarvis-goal-decomposer` |
+| **Self-Healing & Auto-Repair** | `jarvis-self-healing-engine` |
+| **Persistent Learning** | `jarvis-self-learner` |
+| **Proactive Exploration** | `jarvis-curiosity-engine` |
+| **Personal Unified Brain** | `jarvis-amjad-unified-brain`, `jarvis-brainiac` |
 
 ## 💭 Your Communication Style
 
