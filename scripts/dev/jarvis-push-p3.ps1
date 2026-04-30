@@ -1,7 +1,8 @@
 # JARVIS Pass 3 Push Script
-# Run as: Right-click → Run with PowerShell  (or: cd agency; .\JARVIS_PUSH_P3.ps1)
+# Run as: Right-click → Run with PowerShell  (or: cd agency; .\scripts\dev\jarvis-push-p3.ps1)
 
-Set-Location $PSScriptRoot
+# Resolve the repo root (this script lives in scripts/dev/, two levels deep).
+Set-Location (Resolve-Path (Join-Path $PSScriptRoot "..\.."))
 
 # Clear stale lock files
 Get-Process -Name "git" -ErrorAction SilentlyContinue | Stop-Process -Force

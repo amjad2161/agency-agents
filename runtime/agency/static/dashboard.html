@@ -128,7 +128,7 @@ a { color:#c084fc; }
 
   <!-- LEFT: agent grid -->
   <div class="grid-pane">
-    <div class="grid-title">340 agents · all categories</div>
+    <div class="grid-title" id="gridTitle">… agents · all categories</div>
     <div class="core-banner">
       <div class="head">⚡ JARVIS-core · meta-router</div>
       <div class="body">
@@ -216,6 +216,8 @@ async function loadSingularity() {
 function renderCategories(data) {
   const root = document.getElementById('categories');
   root.innerHTML = '';
+  document.getElementById('gridTitle').textContent =
+    `${data.totals.skills} agents · ${data.totals.categories} categories`;
   // Render JARVIS-core (jarvis category) first.
   const cats = data.categories.slice().sort((a, b) => {
     if (a.name === 'jarvis') return -1;
