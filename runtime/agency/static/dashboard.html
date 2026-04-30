@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JARVIS — Singularity Dashboard</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root { color-scheme: dark; }
+body { background:#0a0a0f; font-family:'SF Mono','Fira Code',Consolas,monospace; color:#e2e8f0; font-size:13px; }
+a { color:#c084fc; }
+
+.app { display:grid; grid-template-columns:240px 1fr 280px; grid-template-rows:52px 1fr 220px; height:100vh;
+       grid-template-areas:
+         "topbar topbar topbar"
+         "grid   chat   right"
+         "grid   pulse  right"; }
+
+/* Top bar */
+.topbar { grid-area:topbar; background:#0d0d1a; border-bottom:1px solid #1e1e3a;
+          display:flex; align-items:center; padding:0 18px; gap:18px; }
+.logo-icon { width:32px; height:32px; background:linear-gradient(135deg,#7c3aed,#2563eb);
+             border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; }
+.logo-text { font-size:15px; font-weight:800; letter-spacing:3px; color:#c084fc; }
+.logo-sub  { font-size:9px; color:#475569; letter-spacing:1px; }
+.topbar-status { margin-left:auto; display:flex; gap:14px; align-items:center; }
+.status-pill { display:flex; align-items:center; gap:6px; background:#0e2b1f; border:1px solid #059669;
+               border-radius:20px; padding:4px 12px; font-size:10px; color:#34d399; }
+.status-pill.warn { background:#2b210e; border-color:#b45309; color:#fbbf24; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+.dot { width:7px; height:7px; border-radius:50%; background:#34d399; animation:blink 2s infinite; }
+.status-pill.warn .dot { background:#fbbf24; }
+
+/* Grid (left): 340 agents grouped by category */
+.grid-pane { grid-area:grid; background:#0d0d1a; border-right:1px solid #1e1e3a; overflow-y:auto; padding:14px 12px; }
+.grid-title { font-size:11px; color:#94a3b8; letter-spacing:1.5px; text-transform:uppercase;
+              padding:6px 6px 12px; font-weight:600; }
+.cat { margin-bottom:10px; }
+.cat-head { display:flex; align-items:center; justify-content:space-between;
+            font-size:10px; padding:5px 6px; color:#c084fc; cursor:pointer; }
+.cat-head .count { color:#475569; }
+.cat-body { display:grid; grid-template-columns:repeat(8, 1fr); gap:3px; padding:2px 4px 6px; }
+.agent { width:100%; aspect-ratio:1/1; border-radius:5px; background:#111122; border:1px solid #1e1e3a;
+         display:flex; align-items:center; justify-content:center; font-size:13px; cursor:pointer;
+         transition:border-color .15s, transform .15s; }
+.agent:hover { border-color:#7c3aed; transform:scale(1.12); z-index:1; }
+.agent.core { background:linear-gradient(135deg,#7c3aed,#2563eb); border-color:#c084fc; color:#fff; }
+
+.core-banner { background:#1a1a2e; border:1px solid #3b2d6b; border-radius:8px; padding:10px;
+               margin:0 4px 12px; }
+.core-banner .head { font-size:10px; color:#c084fc; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:5px; }
+.core-banner .body { font-size:10px; color:#94a3b8; line-height:1.5; }
+
+/* Chat (center, top) */
+.chat-pane { grid-area:chat; display:flex; flex-direction:column; overflow:hidden; }
+.chat-area { flex:1; overflow-y:auto; padding:18px 22px; display:flex; flex-direction:column; gap:12px; }
+.msg { display:flex; gap:10px; }
+.msg.user { flex-direction:row-reverse; }
+.avatar { width:30px; height:30px; border-radius:50%; flex-shrink:0;
+          display:flex; align-items:center; justify-content:center; font-size:14px; margin-top:2px; }
+.avatar.jarvis { background:linear-gradient(135deg,#7c3aed,#2563eb); }
+.avatar.user { background:#1e3a5f; font-size:11px; color:#60a5fa; font-weight:700; }
+.bubble { max-width:78%; padding:11px 14px; border-radius:12px; line-height:1.55; font-size:12px;
+          white-space:pre-wrap; word-wrap:break-word; }
+.bubble.jarvis { background:#1e1b4b; border:1px solid #3b2d6b; color:#e2e8f0; border-bottom-left-radius:3px; }
+.bubble.user   { background:#1e3a5f; border:1px solid #2563eb; color:#bfdbfe; border-bottom-right-radius:3px; }
+.meta { font-size:9px; color:#475569; margin-top:5px; }
+.tag  { display:inline-block; border-radius:4px; padding:1px 7px; font-size:9px; margin-top:5px; margin-right:4px;
+        background:#0e2b1f; border:1px solid #059669; color:#34d399; }
+.input-area { padding:12px 18px; border-top:1px solid #1e1e3a; background:#0d0d1a; }
+.input-row { display:flex; gap:8px; align-items:center; background:#1a1a2e;
+             border:1px solid #2d2d4e; border-radius:12px; padding:10px 14px; }
+.input-row input { flex:1; background:transparent; border:none; outline:none; color:#e2e8f0; font: inherit; }
+.input-row input::placeholder { color:#475569; }
+.send-btn { background:#7c3aed; border:none; border-radius:8px; color:#fff; padding:6px 14px;
+            font: inherit; font-weight:600; cursor:pointer; }
+.send-btn:disabled { opacity:.5; cursor:not-allowed; }
+
+/* Pulse (center, bottom) — embeds the spatial HUD */
+.pulse-pane { grid-area:pulse; border-top:1px solid #1e1e3a; background:#0d0d1a;
+              display:flex; flex-direction:column; }
+.pulse-head { padding:8px 18px; font-size:10px; color:#c084fc; letter-spacing:1.5px;
+              text-transform:uppercase; display:flex; justify-content:space-between; align-items:center; }
+.pulse-head a { font-size:9px; color:#64748b; text-decoration:none; }
+.pulse-head a:hover { color:#c084fc; }
+.pulse-body { flex:1; overflow:hidden; }
+.pulse-body iframe { width:100%; height:100%; border:0; opacity:.85; }
+
+/* Right panel */
+.right-panel { grid-area:right; background:#0d0d1a; border-left:1px solid #1e1e3a;
+               overflow-y:auto; padding:14px 12px; display:flex; flex-direction:column; gap:10px; }
+.section-card { background:#111122; border:1px solid #1e1e3a; border-radius:8px; padding:12px; }
+.panel-title { font-size:10px; color:#475569; letter-spacing:1.5px; text-transform:uppercase;
+               margin-bottom:8px; font-weight:600; }
+.metrics-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.metric { background:#0d0d1a; border-radius:6px; padding:9px; }
+.metric-val { font-size:20px; font-weight:800; color:#7c3aed; }
+.metric-label { font-size:8px; color:#475569; margin-top:2px; text-transform:uppercase; letter-spacing:.5px; }
+.kv { display:flex; justify-content:space-between; font-size:10px; padding:3px 0; color:#94a3b8; }
+.kv .v { color:#c084fc; }
+
+/* Tooltip */
+.tip { position:fixed; background:#0d0d1a; border:1px solid #3b2d6b; border-radius:6px;
+       padding:6px 10px; font-size:10px; color:#e2e8f0; pointer-events:none; z-index:10; display:none; }
+
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-thumb { background:#2d2d4e; border-radius:3px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <div class="logo-text">J.A.R.V.I.S</div>
+        <div class="logo-sub">Singularity Dashboard · one runtime, one registry, one screen</div>
+      </div>
+    </div>
+    <div class="topbar-status">
+      <div id="llm-pill" class="status-pill warn"><div class="dot"></div><span>LLM: …</span></div>
+      <div id="skills-pill" class="status-pill"><div class="dot"></div><span>skills: …</span></div>
+      <div id="version-pill" style="font-size:9px;color:#475569;">v…</div>
+    </div>
+  </div>
+
+  <!-- LEFT: agent grid -->
+  <div class="grid-pane">
+    <div class="grid-title">340 agents · all categories</div>
+    <div class="core-banner">
+      <div class="head">⚡ JARVIS-core · meta-router</div>
+      <div class="body">
+        Every request is scored against the <code>SkillRegistry</code> by the keyword-weighted
+        <code>SupremeJarvisBrain</code>; the core specialists below act as the meta-router for the
+        rest of the catalogue. The grid is the entire agency at a glance.
+      </div>
+    </div>
+    <div id="categories"></div>
+  </div>
+
+  <!-- CENTER TOP: chat -->
+  <div class="chat-pane">
+    <div class="chat-area" id="chatArea">
+      <div class="msg">
+        <div class="avatar jarvis">⚡</div>
+        <div>
+          <div class="bubble jarvis">JARVIS online. Type a request below — it will be routed to the right specialist and streamed back here.</div>
+          <div class="meta">singularity · live</div>
+        </div>
+      </div>
+    </div>
+    <div class="input-area">
+      <div class="input-row">
+        <span style="color:#7c3aed;font-size:16px;">⚡</span>
+        <input id="chatInput" type="text" placeholder="Ask JARVIS anything — code, research, planning, analysis…" autofocus>
+        <button id="sendBtn" class="send-btn">Send ↑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER BOTTOM: spatial HUD pulse -->
+  <div class="pulse-pane">
+    <div class="pulse-head">
+      <span>📡 Spatial HUD pulse</span>
+      <a href="/spatial" target="_blank">open full HUD ↗</a>
+    </div>
+    <div class="pulse-body">
+      <iframe src="/spatial" title="Spatial HUD"></iframe>
+    </div>
+  </div>
+
+  <!-- RIGHT: live stats -->
+  <div class="right-panel">
+    <div class="section-card">
+      <div class="panel-title">📊 Runtime</div>
+      <div class="metrics-grid">
+        <div class="metric"><div class="metric-val" id="m-skills">…</div><div class="metric-label">skills</div></div>
+        <div class="metric"><div class="metric-val" id="m-cats">…</div><div class="metric-label">categories</div></div>
+        <div class="metric"><div class="metric-val" id="m-jarvis">…</div><div class="metric-label">jarvis specialists</div></div>
+        <div class="metric"><div class="metric-val" id="m-domains">…</div><div class="metric-label">routing domains</div></div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="panel-title">🟢 Health</div>
+      <div id="health"></div>
+    </div>
+
+    <div class="section-card">
+      <div class="panel-title">📚 Last lesson</div>
+      <div id="lessons" style="font-size:10px;color:#94a3b8;line-height:1.5;">(loading…)</div>
+    </div>
+  </div>
+</div>
+
+<div id="tip" class="tip"></div>
+
+<script>
+const tip = document.getElementById('tip');
+function showTip(text, x, y) {
+  tip.textContent = text;
+  tip.style.display = 'block';
+  tip.style.left = (x + 12) + 'px';
+  tip.style.top  = (y + 12) + 'px';
+}
+function hideTip() { tip.style.display = 'none'; }
+
+async function loadSingularity() {
+  const r = await fetch('/singularity');
+  if (!r.ok) throw new Error('singularity endpoint failed: ' + r.status);
+  return r.json();
+}
+
+function renderCategories(data) {
+  const root = document.getElementById('categories');
+  root.innerHTML = '';
+  // Render JARVIS-core (jarvis category) first.
+  const cats = data.categories.slice().sort((a, b) => {
+    if (a.name === 'jarvis') return -1;
+    if (b.name === 'jarvis') return 1;
+    return a.name.localeCompare(b.name);
+  });
+  for (const cat of cats) {
+    const wrap = document.createElement('div');
+    wrap.className = 'cat';
+    const head = document.createElement('div');
+    head.className = 'cat-head';
+    head.innerHTML = `<span>${cat.name}</span><span class="count">${cat.count}</span>`;
+    wrap.appendChild(head);
+    const body = document.createElement('div');
+    body.className = 'cat-body';
+    for (const a of cat.agents) {
+      const cell = document.createElement('div');
+      cell.className = 'agent' + (a.is_core ? ' core' : '');
+      cell.textContent = a.emoji || '🤖';
+      cell.addEventListener('mousemove', (e) => showTip(`${a.name} (${a.slug})`, e.clientX, e.clientY));
+      cell.addEventListener('mouseleave', hideTip);
+      body.appendChild(cell);
+    }
+    wrap.appendChild(body);
+    root.appendChild(wrap);
+  }
+}
+
+function renderRight(data) {
+  document.getElementById('m-skills').textContent = data.totals.skills;
+  document.getElementById('m-cats').textContent   = data.totals.categories;
+  document.getElementById('m-jarvis').textContent = data.totals.jarvis_specialists;
+  document.getElementById('m-domains').textContent = data.totals.routing_domains;
+  document.getElementById('version-pill').textContent = 'v' + data.runtime.version;
+
+  const health = document.getElementById('health');
+  health.innerHTML = '';
+  const rows = [
+    ['skill registry', data.runtime.registry_loaded ? 'ok' : 'down'],
+    ['llm configured', data.runtime.api_key_set ? 'ok' : 'missing'],
+    ['execution model', data.runtime.execution_model],
+    ['planner model',   data.runtime.planner_model],
+    ['trust mode',      data.runtime.trust_mode],
+  ];
+  for (const [k, v] of rows) {
+    const row = document.createElement('div');
+    row.className = 'kv';
+    row.innerHTML = `<span>${k}</span><span class="v">${v}</span>`;
+    health.appendChild(row);
+  }
+
+  const llmPill = document.getElementById('llm-pill');
+  if (data.runtime.api_key_set) {
+    llmPill.classList.remove('warn');
+    llmPill.querySelector('span').textContent = 'LLM: online';
+  } else {
+    llmPill.querySelector('span').textContent = 'LLM: offline';
+  }
+  document.getElementById('skills-pill').querySelector('span').textContent =
+    `skills: ${data.totals.skills}`;
+
+  const lessons = document.getElementById('lessons');
+  if (data.lessons.last) {
+    lessons.textContent = data.lessons.last;
+  } else {
+    lessons.textContent = '(no lessons yet — run `agency lessons add ...`)';
+  }
+}
+
+// --- Chat: SSE-based, reuses /api/run/stream so the dashboard talks to the
+//     same executor REPL the CLI uses. ----------------------------------
+function appendBubble(text, who, tags) {
+  const area = document.getElementById('chatArea');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg' + (who === 'user' ? ' user' : '');
+  const inner = `
+    <div class="avatar ${who === 'user' ? 'user' : 'jarvis'}">${who === 'user' ? 'YOU' : '⚡'}</div>
+    <div>
+      <div class="bubble ${who === 'user' ? 'user' : 'jarvis'}"></div>
+      <div class="tags"></div>
+      <div class="meta">${new Date().toLocaleTimeString()}</div>
+    </div>`;
+  wrap.innerHTML = inner;
+  wrap.querySelector('.bubble').textContent = text;
+  if (tags) {
+    for (const t of tags) {
+      const span = document.createElement('span');
+      span.className = 'tag';
+      span.textContent = t;
+      wrap.querySelector('.tags').appendChild(span);
+    }
+  }
+  area.appendChild(wrap);
+  area.scrollTop = area.scrollHeight;
+  return wrap.querySelector('.bubble');
+}
+
+function parseSSE(buf) {
+  const events = [];
+  let idx;
+  while ((idx = buf.indexOf("\n\n")) !== -1) {
+    const block = buf.slice(0, idx);
+    buf = buf.slice(idx + 2);
+    let event = "message", data = "";
+    for (const line of block.split("\n")) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) data += line.slice(5).trim();
+    }
+    try { events.push({event, data: JSON.parse(data)}); }
+    catch { events.push({event, data}); }
+  }
+  return [events, buf];
+}
+
+async function send() {
+  const input = document.getElementById('chatInput');
+  const btn   = document.getElementById('sendBtn');
+  const msg   = input.value.trim();
+  if (!msg) return;
+  appendBubble(msg, 'user');
+  input.value = '';
+  btn.disabled = true;
+
+  const bubble = appendBubble('', 'jarvis');
+  let tagsRendered = false;
+
+  try {
+    const r = await fetch('/api/run/stream', {
+      method: 'POST',
+      headers: {'content-type':'application/json', 'accept':'text/event-stream'},
+      body: JSON.stringify({message: msg}),
+    });
+    if (!r.ok) {
+      bubble.textContent = `Error ${r.status}: ${await r.text()}`;
+      return;
+    }
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const {value, done} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream:true});
+      let events;
+      [events, buf] = parseSSE(buf);
+      for (const ev of events) {
+        if (ev.event === 'plan' && !tagsRendered) {
+          const parent = bubble.parentElement;
+          const tags = parent.querySelector('.tags');
+          const t1 = document.createElement('span');
+          t1.className = 'tag';
+          t1.textContent = `→ ${ev.data.skill.emoji || ''} ${ev.data.skill.name} (${ev.data.skill.slug})`;
+          tags.appendChild(t1);
+          tagsRendered = true;
+        } else if (ev.event === 'text_delta') {
+          bubble.textContent += ev.data;
+        } else if (ev.event === 'error') {
+          bubble.textContent += `\n[error] ${ev.data.message || ev.data}`;
+        }
+      }
+      document.getElementById('chatArea').scrollTop = document.getElementById('chatArea').scrollHeight;
+    }
+  } catch (e) {
+    bubble.textContent = `Network error: ${e}`;
+  } finally {
+    btn.disabled = false;
+    input.focus();
+  }
+}
+
+document.getElementById('sendBtn').addEventListener('click', send);
+document.getElementById('chatInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+// Boot
+loadSingularity().then(d => {
+  renderCategories(d);
+  renderRight(d);
+}).catch(e => {
+  document.getElementById('categories').innerHTML =
+    `<div style="padding:12px;color:#f87171;">Failed to load /singularity: ${e}</div>`;
+});
+</script>
+</body>
+</html>

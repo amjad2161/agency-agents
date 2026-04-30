@@ -179,6 +179,13 @@ def boot(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Backward-compatible shim — delegates to `agency jarvis run`.
+
+    The supreme_main entry-point is kept so external callers and the
+    `agency-supreme` wrapper script keep working, but the canonical
+    surface is now `agency jarvis run` (see `agency.cli`). Anything you
+    can do here you can also do there with the same flags.
+    """
     parser = argparse.ArgumentParser(prog="agency-supreme")
     parser.add_argument(
         "--mode",
