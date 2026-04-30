@@ -24,7 +24,7 @@ from .profile import (
     profile_path,
 )
 from .skills import SkillRegistry, discover_repo_root
-from .jarvis_greeting import get_startup_banner, get_farewell, get_greeting
+from .jarvis_greeting import get_startup_banner, get_farewell
 
 
 def _registry(repo: Path | None) -> SkillRegistry:
