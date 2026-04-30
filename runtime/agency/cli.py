@@ -9,6 +9,7 @@ import click
 
 from .amjad_jarvis_cli import amjad_group
 from .executor import Executor
+from .jarvis_one.cli import jarvis_group, map_cmd, singularity_cmd
 from .llm import AnthropicLLM, LLMConfig, LLMError
 from .logging import configure as configure_logging
 from .memory import MemoryStore, Session
@@ -51,6 +52,9 @@ def main(ctx: click.Context, repo: Path | None, verbose: int) -> None:
 
 
 main.add_command(amjad_group, "amjad")
+main.add_command(jarvis_group)
+main.add_command(map_cmd)
+main.add_command(singularity_cmd)
 
 
 @main.command("list")

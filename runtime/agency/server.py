@@ -544,6 +544,82 @@ def build_app(repo: Path | None = None) -> FastAPI:
             "session_id": session.session_id if session else None,
         }
 
+    # ------------------------------------------------------------------
+    # JARVIS One — singularity endpoints (Stages 3 & 4)
+    # ------------------------------------------------------------------
+    from .jarvis_one import build_default_interface as _build_jarvis_one
+
+    _jarvis = _build_jarvis_one(repo=root)
+    _dashboard_path = Path(__file__).parent / "static" / "dashboard.html"
+
+    @app.get("/dashboard", response_class=HTMLResponse)
+    def dashboard_endpoint() -> str:
+        try:
+            return _dashboard_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return (
+                "<!doctype html><meta charset='utf-8'>"
+                "<title>JARVIS One — Dashboard</title>"
+                "<h1>JARVIS One Dashboard</h1>"
+                "<p>dashboard.html missing in static/</p>"
+            )
+
+    @app.get("/singularity")
+    def singularity_endpoint() -> dict[str, Any]:
+        """Unified status: every category, every persona, full routing table."""
+        snap = _jarvis.status()
+        return {
+            "version": snap["version"],
+            "skills": snap["skills"],
+            "personas": snap["personas"],
+            "subsystems": snap["subsystems"],
+            "core_brain_routes": [
+                s.slug for s in registry.all() if s.category == "jarvis"
+            ],
+        }
+
+    @app.post("/api/jarvis/ask")
+    def jarvis_ask_endpoint(body: dict[str, Any]) -> dict[str, Any]:
+        message = str(body.get("message", "")).strip()
+        if not message:
+            raise HTTPException(status_code=400, detail="message is required")
+        persona = body.get("persona")
+        ans = _jarvis.ask(message, persona_slug=persona)
+        return ans.to_dict()
+
+    @app.post("/api/jarvis/create")
+    def jarvis_create_endpoint(body: dict[str, Any]) -> dict[str, Any]:
+        request = str(body.get("request", "")).strip()
+        if not request:
+            raise HTTPException(status_code=400, detail="request is required")
+        want = body.get("want") or ["text", "diagram", "document"]
+        bundle = _jarvis.create(request, want=tuple(want),
+                                document_format=body.get("format", "markdown"))
+        return bundle.to_dict()
+
+    @app.websocket("/ws/jarvis")
+    async def jarvis_ws(ws: WebSocket) -> None:
+        await ws.accept()
+        try:
+            while True:
+                payload = await ws.receive_text()
+                try:
+                    data = json.loads(payload)
+                except json.JSONDecodeError:
+                    data = {"message": payload}
+                msg = str(data.get("message", "")).strip()
+                if not msg:
+                    await ws.send_json({"type": "error",
+                                        "detail": "message required"})
+                    continue
+                turn = _jarvis.chat(msg)
+                await ws.send_json({"type": "turn", **turn.to_dict()})
+        except Exception:  # noqa: BLE001 — WebSocket close
+            try:
+                await ws.close()
+            except Exception:
+                pass
+
     return app
 
 

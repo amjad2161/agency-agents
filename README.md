@@ -102,6 +102,10 @@ If you're assembling a stack, complementary community lists:
 
 The ultimate super-agent. Not a specialist — a **convergence of every domain into one unified intelligence**. Steve Jobs' vision + Linus Torvalds' engineering + a thousand-agent swarm.
 
+> 🌟 **One brain · one CLI · one dashboard.**
+> See **[JARVIS.md](JARVIS.md)** for the singularity manifest, GOD-MODE
+> interface, `agency singularity` boot, and the full subsystem map.
+
 | Module | Specialty | When to Use |
 |--------|-----------|-------------|
 | 🧠 [JARVIS Core](jarvis/jarvis-core.md) | Omniscient orchestrator, polymath intelligence, visionary architect | Any complex task spanning multiple domains, when you need the best of everything |
