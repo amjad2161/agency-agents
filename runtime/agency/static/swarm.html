@@ -514,7 +514,6 @@ const AGENTS = [
   // Science & Health
   {id:'jarvis-biotech-medicine',name:'Biotech',cat:'Science',color:'#44ff99',emoji:'🧬'},
   {id:'jarvis-neuroscience-bci',name:'Neuroscience',cat:'Science',color:'#44ff99',emoji:'🧪'},
-  {id:'jarvis-quantum-computing',name:'Quantum',cat:'Science',color:'#aa44ff',emoji:'⚛️'},
   {id:'jarvis-space-aerospace',name:'Space',cat:'Science',color:'#44aaff',emoji:'🚀'},
   {id:'jarvis-health-biometrics',name:'Health',cat:'Science',color:'#44ff99',emoji:'❤️'},
   {id:'jarvis-mental-health',name:'Mental Health',cat:'Science',color:'#44ff99',emoji:'🧠'},
@@ -771,7 +770,7 @@ const RESPONSES={
 
 function detectIntent(txt){
   const t=txt.toLowerCase();
-  if(/trade|trading|מסח|שוק|חנות|invest/.test(t)) return 'trade';
+  if(/trade|trading|מסח|שוק|מסחר|invest/.test(t)) return 'trade';
   if(/business|עסק|startup|רווח/.test(t)) return 'business';
   if(/income|הכנסה|פסיב|passive|money|כסף/.test(t)) return 'income';
   if(/osint|report|enrich|cyber|hack|security|אבטח/.test(t)) return 'osint';
