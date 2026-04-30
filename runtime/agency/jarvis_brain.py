@@ -488,7 +488,7 @@ class SupremeJarvisBrain:
         for cat in sorted(by_cat):
             lines.append(f"## {cat}")
             for s in sorted(by_cat[cat], key=lambda x: x.slug):
-                lines.append(f"- \`{s.slug}\` — {s.name}: {s.description[:120]}")
+                lines.append(f"- `{s.slug}` — {s.name}: {s.description[:120]}")
         return "\n".join(lines)
 
 
