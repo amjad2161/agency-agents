@@ -18,17 +18,17 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from agency.autonomous_loop import AutonomousLoop, LoopRun, LoopStatus
-from agency.capability_evolver import CapabilityEvolver, DomainProfile
-from agency.context_manager import ContextEntry, ContextManager
-from agency.knowledge_expansion import KnowledgeChunk, KnowledgeExpansion
+from agency.autonomous_loop import AutonomousLoop, LoopStatus
+from agency.capability_evolver import CapabilityEvolver
+from agency.context_manager import ContextManager
+from agency.knowledge_expansion import KnowledgeExpansion
 from agency.meta_reasoner import MetaReasoningEngine, ReasoningStep
 from agency.multimodal import (
     ModalityType,
     MultimodalPayload,
     MultimodalProcessor,
 )
-from agency.self_learner_engine import Lesson, SelfLearnerEngine
+from agency.self_learner_engine import SelfLearnerEngine
 
 
 # ---------------------------------------------------------------------------

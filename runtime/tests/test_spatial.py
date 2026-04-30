@@ -349,7 +349,8 @@ def test_send_failure_other_than_disconnect_still_cancels_worker(monkeypatch):
     from agency import spatial as spatial_mod
     from dataclasses import dataclass
     from typing import Any
-    import threading, time
+    import threading
+    import time
 
     proceed_to_call_2 = threading.Event()
     call_count = {"n": 0}

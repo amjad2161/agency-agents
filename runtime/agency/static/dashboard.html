@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>J.A.R.V.I.S One — Singularity Dashboard</title>
+<style>
+  :root {
+    --bg: #0a0a0f; --panel: #11121a; --border: #1e1e3a;
+    --accent: #7c3aed; --accent2: #2563eb; --ok: #34d399;
+    --text: #e2e8f0; --muted: #64748b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text); font-size: 13px;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center; font-weight: 800;
+  }
+  h1 { font-size: 16px; margin: 0; letter-spacing: 2px; color: #c084fc; }
+  .sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .pill {
+    margin-left: auto; padding: 4px 12px; border-radius: 20px;
+    background: #064e3b; border: 1px solid #059669; color: var(--ok); font-size: 11px;
+  }
+  main { display: grid; grid-template-columns: 1fr 380px; gap: 16px; padding: 16px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; min-height: 120px;
+  }
+  .panel h2 { margin: 0 0 10px; font-size: 13px; color: #c084fc; letter-spacing: 1.4px; }
+  .grid {
+    display: grid; gap: 6px;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+  .cat {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+    background: #0d1020; cursor: default;
+  }
+  .cat .name { font-weight: 600; color: var(--text); }
+  .cat .count { color: var(--ok); font-size: 11px; margin-top: 2px; }
+  .core {
+    border: 2px solid var(--accent); background: #1c1739;
+  }
+  .core .name { color: #c084fc; }
+  .agents-list { max-height: 280px; overflow-y: auto; margin-top: 8px;
+    padding: 6px; background: #07080d; border-radius: 6px; }
+  .agent { padding: 3px 6px; color: var(--muted); font-family: monospace;
+    font-size: 11px; }
+  .agent:hover { color: var(--text); background: #1e1e3a; }
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .stat { padding: 6px 10px; background: #0d1020; border: 1px solid var(--border);
+    border-radius: 6px; min-width: 100px; }
+  .stat .k { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+  .stat .v { color: var(--ok); font-size: 18px; font-weight: 700; }
+  .chat { display: flex; flex-direction: column; height: 600px; }
+  .log { flex: 1; overflow-y: auto; padding: 6px;
+    background: #07080d; border-radius: 6px; margin-bottom: 8px; }
+  .turn { padding: 6px 8px; margin: 4px 0; border-radius: 6px; }
+  .turn.user { background: #1e1b4b; color: #c084fc; }
+  .turn.bot { background: #0d2c2c; color: var(--ok); }
+  .turn .meta { font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .compose { display: flex; gap: 6px; }
+  .compose input { flex: 1; padding: 8px 10px; background: #0d1020;
+    border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+  .compose button { padding: 8px 14px; background: var(--accent); color: white;
+    border: 0; border-radius: 6px; cursor: pointer; }
+  .pulse { display: inline-block; width: 8px; height: 8px;
+    background: var(--ok); border-radius: 50%; margin-inline-end: 6px;
+    animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  iframe.hud { width: 100%; height: 280px; border: 1px solid var(--border);
+    border-radius: 6px; background: #000; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">J</div>
+  <div>
+    <h1>J.A.R.V.I.S One — Singularity</h1>
+    <div class="sub">All agents · One brain · One dashboard (JARVIS One)</div>
+  </div>
+  <div class="pill"><span class="pulse"></span><span id="status">connecting…</span></div>
+</header>
+
+<main>
+  <section>
+    <div class="panel">
+      <h2>Live Runtime</h2>
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Agent Categories (JARVIS-core at the center)</h2>
+      <div class="grid" id="categories"></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>JARVIS Specialists</h2>
+      <div class="grid" id="personas"></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Spatial HUD pulse</h2>
+      <iframe class="hud" src="/spatial" loading="lazy"
+              title="Spatial HUD"></iframe>
+    </div>
+  </section>
+
+  <aside class="panel chat">
+    <h2>JARVIS Chat (WebSocket)</h2>
+    <div class="log" id="log"></div>
+    <form class="compose" id="compose">
+      <input id="msg" placeholder="שלח הודעה ל-JARVIS… / Type a message…"
+             autocomplete="off">
+      <button type="submit">Send</button>
+    </form>
+  </aside>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function statCard(k, v) {
+  const el = document.createElement('div');
+  el.className = 'stat';
+  el.innerHTML = `<div class="k">${k}</div><div class="v">${v}</div>`;
+  return el;
+}
+
+function categoryCard(name, count, isCore) {
+  const el = document.createElement('div');
+  el.className = 'cat' + (isCore ? ' core' : '');
+  el.innerHTML = `<div class="name">${name}</div>` +
+                 `<div class="count">${count} agents</div>`;
+  return el;
+}
+
+function personaCard(a) {
+  const el = document.createElement('div');
+  el.className = 'cat' + (a.is_core ? ' core' : '');
+  el.innerHTML = `<div class="name">${a.emoji ? a.emoji + ' ' : ''}${a.name}</div>` +
+                 `<div class="count">${a.slug}</div>`;
+  return el;
+}
+
+async function loadStatus() {
+  try {
+    const r = await fetch('/singularity');
+    const data = await r.json();
+
+    const stats = $('stats');
+    stats.innerHTML = '';
+    stats.append(statCard('Skills', data.totals.skills));
+    stats.append(statCard('Categories', data.totals.categories));
+    stats.append(statCard('JARVIS', data.totals.jarvis_specialists));
+    stats.append(statCard('Version', data.runtime.version));
+
+    const cats = $('categories');
+    cats.innerHTML = '';
+    const sorted = [...data.categories].sort((a, b) => b.count - a.count);
+    for (const cat of sorted) {
+      const isCore = Array.isArray(cat.agents) && cat.agents.some(a => a.is_core);
+      cats.append(categoryCard(cat.name, cat.count, isCore));
+    }
+
+    const personas = $('personas');
+    personas.innerHTML = '';
+    const jarvisCat = data.categories.find(c => c.name === 'jarvis');
+    if (jarvisCat && Array.isArray(jarvisCat.agents)) {
+      for (const a of jarvisCat.agents) {
+        personas.append(personaCard(a));
+      }
+    }
+
+    $('status').textContent = 'live';
+  } catch (e) {
+    $('status').textContent = 'offline';
+  }
+}
+
+// ---- WebSocket chat ----
+let ws = null;
+function appendTurn(cls, text, meta) {
+  const log = $('log');
+  const t = document.createElement('div');
+  t.className = 'turn ' + cls;
+  t.textContent = text;
+  if (meta) {
+    const m = document.createElement('div');
+    m.className = 'meta';
+    m.textContent = meta;
+    t.append(m);
+  }
+  log.append(t);
+  log.scrollTop = log.scrollHeight;
+}
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws/jarvis`);
+  ws.onmessage = ev => {
+    try {
+      const data = JSON.parse(ev.data);
+      if (data.type === 'turn') {
+        appendTurn('bot', data.assistant,
+                   `${data.persona} · ${data.sentiment}` +
+                   (data.crisis ? ' · ⚠ crisis' : ''));
+      } else if (data.type === 'error') {
+        appendTurn('bot', '[error] ' + data.detail);
+      }
+    } catch (_) { /* ignore */ }
+  };
+  ws.onclose = () => setTimeout(connect, 2000);
+}
+
+$('compose').addEventListener('submit', ev => {
+  ev.preventDefault();
+  const v = $('msg').value.trim();
+  if (!v || !ws || ws.readyState !== 1) return;
+  appendTurn('user', v);
+  ws.send(JSON.stringify({ message: v }));
+  $('msg').value = '';
+});
+
+loadStatus();
+connect();
+setInterval(loadStatus, 5000);
+</script>
+</body>
+</html>

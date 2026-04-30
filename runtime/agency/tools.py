@@ -16,7 +16,6 @@ from __future__ import annotations
 import os
 import shlex
 import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -643,7 +642,7 @@ def _computer_use(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
 
         import pyautogui  # type: ignore[import-not-found]
         from PIL import Image  # noqa: F401 — used only to verify install
-    except ImportError as e:
+    except ImportError:
         return ToolResult(
             "Missing deps: pip install -e 'runtime[computer]' (pyautogui, pillow).",
             is_error=True,

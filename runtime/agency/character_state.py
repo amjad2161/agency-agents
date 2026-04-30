@@ -17,11 +17,16 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 _DEFAULT_STATE_PATH = Path(__file__).parent.parent / "data" / "character_state.json"
+
+
+def _utcnow() -> datetime:
+    """Return a naive UTC datetime (timezone-aware ``utcnow()`` replacement)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 # Valid moods and modes
 VALID_MOODS = frozenset({"focused", "alert", "standby", "engaged", "guardian"})
@@ -59,7 +64,7 @@ class CharacterState:
     current_mode: str = "supreme_brainiac"
     session_context: list[dict[str, Any]] = field(default_factory=list)
     owner_name: str = "Amjad"
-    active_since: datetime = field(default_factory=datetime.utcnow)
+    active_since: datetime = field(default_factory=_utcnow)
     total_interactions: int = 0
     expertise_history: dict[str, int] = field(default_factory=dict)
     mood: str = "focused"
@@ -152,7 +157,7 @@ class CharacterState:
 
     def uptime_seconds(self) -> float:
         """Seconds since active_since."""
-        return (datetime.utcnow() - self.active_since).total_seconds()
+        return (_utcnow() - self.active_since).total_seconds()
 
     def snapshot(self) -> dict[str, Any]:
         """Return a JSON-serialisable snapshot of current state."""

@@ -8,7 +8,6 @@ import pytest
 
 from agency.llm import AnthropicLLM
 from agency.profile import (
-    PROFILE_TEMPLATE,
     ensure_default_profile,
     load_profile_text,
     profile_path,
@@ -208,7 +207,7 @@ def test_executor_inherits_profile_in_subagent(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("AGENCY_PROFILE", str(tmp_path / "absent.md"))
 
     from tests.test_executor import (
-        _ScriptedLLM, _Resp, _TextBlock, _ToolUseBlock, _registry_with_one_skill,
+        _ScriptedLLM, _Resp, _TextBlock, _ToolUseBlock,
     )
     from agency.executor import Executor
     from agency.skills import SkillRegistry, discover_repo_root

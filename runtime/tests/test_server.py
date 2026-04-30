@@ -477,7 +477,7 @@ def test_health_endpoint_returns_200_even_when_internals_blow_up(monkeypatch):
 def test_optional_deps_status_reports_errors_separately():
     """A non-ImportError at import time should land in errors, not missing."""
     import sys
-    from agency.diagnostics import optional_deps_status, OPTIONAL_DEP_GROUPS
+    from agency.diagnostics import optional_deps_status
 
     # Build a fake import that raises a non-ImportError when imported.
     class _ExplodingFinder:

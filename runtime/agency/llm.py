@@ -42,7 +42,8 @@ class LLMConfig:
 
     @classmethod
     def from_env(cls) -> "LLMConfig":
-        import json, os
+        import json
+        import os
         cfg = cls()
         if (m := os.environ.get("AGENCY_MODEL")):
             cfg.model = m

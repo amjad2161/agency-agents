@@ -15,7 +15,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -29,8 +28,8 @@ from agency.amjad_jarvis_meta_orchestrator import (
 )
 from agency.cli import main
 from agency.executor import ExecutionResult, Usage
-from agency.memory import MemoryStore, Session
-from agency.skills import Skill, SkillRegistry, discover_repo_root
+from agency.memory import MemoryStore
+from agency.skills import Skill, SkillRegistry
 
 
 # ---------------------------------------------------------------------------

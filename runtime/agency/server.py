@@ -142,6 +142,109 @@ def build_app(repo: Path | None = None) -> FastAPI:
             ws, registry=registry, memory=memory, llm_factory=_require_llm,
         )
 
+    @app.get("/dashboard", response_class=HTMLResponse)
+    def dashboard_page() -> str:
+        """Serve the unified Singularity dashboard.
+
+        Single HTML page that renders every loaded agent in a grid grouped
+        by category (with JARVIS-core highlighted), live runtime status,
+        a chat field wired to the same `/api/run/stream` executor the CLI
+        uses, and an embedded pulse of the spatial HUD.
+        """
+        html_path = Path(__file__).parent / "static" / "dashboard.html"
+        return html_path.read_text(encoding="utf-8")
+
+    @app.get("/singularity")
+    def singularity() -> dict[str, Any]:
+        """One-shot snapshot of the entire agency.
+
+        Returns every loaded skill bucketed into its category (with
+        JARVIS-core flagged as the meta-router), the JARVIS routing
+        table, totals, and the current runtime/LLM status. The
+        Singularity Dashboard fetches this on load to render itself.
+        """
+        from .jarvis_brain import KEYWORD_SLUG_BOOST
+        from .trust import current as trust_current
+
+        try:
+            cfg = LLMConfig.from_env()
+            execution_model = cfg.model
+            planner_model = cfg.planner_model
+        except Exception:  # noqa: BLE001 — degrade gracefully if env is bad
+            execution_model = "(unset)"
+            planner_model = "(unset)"
+
+        skills = registry.all()
+        # Bucket skills by category, preserving sort order, and tag the
+        # JARVIS core router(s) so the dashboard can highlight them.
+        core_slugs = {"jarvis-core", "jarvis-core-brain"}
+        cats_map: dict[str, list[Any]] = {}
+        for s in skills:
+            cats_map.setdefault(s.category, []).append(s)
+
+        categories_payload = []
+        for name in sorted(cats_map):
+            items = sorted(cats_map[name], key=lambda x: x.slug)
+            categories_payload.append({
+                "name": name,
+                "count": len(items),
+                "agents": [
+                    {
+                        "slug": s.slug,
+                        "name": s.name,
+                        "emoji": s.emoji,
+                        "description": s.description,
+                        "is_core": s.slug in core_slugs,
+                    }
+                    for s in items
+                ],
+            })
+
+        # Compact view of the routing table: every keyword the brain knows
+        # mapped to its weighted slug targets. The dashboard doesn't
+        # render this directly, but external clients (and the
+        # `agency map` CLI) consume it to inspect routing.
+        routing_table = {
+            keyword: dict(targets)
+            for keyword, targets in sorted(KEYWORD_SLUG_BOOST.items())
+        }
+
+        # Last lesson, if any — tiny one-liner for the side panel.
+        from .lessons import load_lessons_text
+        lessons_text = load_lessons_text() or ""
+        last_lesson_line = ""
+        for line in reversed(lessons_text.splitlines()):
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                last_lesson_line = stripped[:240]
+                break
+
+        jarvis_specialists = sum(1 for s in skills if s.category == "jarvis")
+
+        return {
+            "totals": {
+                "skills": len(skills),
+                "categories": len(categories_payload),
+                "jarvis_specialists": jarvis_specialists,
+                "routing_domains": len(routing_table),
+            },
+            "runtime": {
+                "version": __version__,
+                "registry_loaded": len(skills) > 0,
+                "api_key_set": bool(_os.environ.get("ANTHROPIC_API_KEY")),
+                "execution_model": execution_model,
+                "planner_model": planner_model,
+                "trust_mode": trust_current().value,
+            },
+            "categories": categories_payload,
+            "routing_table": routing_table,
+            "core_slugs": sorted(core_slugs & {s.slug for s in skills}),
+            "lessons": {
+                "present": bool(lessons_text),
+                "last": last_lesson_line,
+            },
+        }
+
     @app.get("/api/skills")
     def list_skills() -> dict[str, Any]:
         return {
@@ -543,6 +646,55 @@ def build_app(repo: Path | None = None) -> FastAPI:
             "turns": result.turns,
             "session_id": session.session_id if session else None,
         }
+
+    # ------------------------------------------------------------------
+    # JARVIS One — extra POST/WS endpoints (the GET ones are above).
+    # ------------------------------------------------------------------
+    from .jarvis_one import build_default_interface as _build_jarvis_one
+
+    _jarvis = _build_jarvis_one(repo=root)
+
+    @app.post("/api/jarvis/ask")
+    def jarvis_ask_endpoint(body: dict[str, Any]) -> dict[str, Any]:
+        message = str(body.get("message", "")).strip()
+        if not message:
+            raise HTTPException(status_code=400, detail="message is required")
+        persona = body.get("persona")
+        ans = _jarvis.ask(message, persona_slug=persona)
+        return ans.to_dict()
+
+    @app.post("/api/jarvis/create")
+    def jarvis_create_endpoint(body: dict[str, Any]) -> dict[str, Any]:
+        request = str(body.get("request", "")).strip()
+        if not request:
+            raise HTTPException(status_code=400, detail="request is required")
+        want = body.get("want") or ["text", "diagram", "document"]
+        bundle = _jarvis.create(request, want=tuple(want),
+                                document_format=body.get("format", "markdown"))
+        return bundle.to_dict()
+
+    @app.websocket("/ws/jarvis")
+    async def jarvis_ws(ws: WebSocket) -> None:
+        await ws.accept()
+        try:
+            while True:
+                payload = await ws.receive_text()
+                try:
+                    data = json.loads(payload)
+                except json.JSONDecodeError:
+                    data = {"message": payload}
+                msg = str(data.get("message", "")).strip()
+                if not msg:
+                    await ws.send_json({"type": "error",
+                                        "detail": "message required"})
+                    continue
+                turn = _jarvis.chat(msg)
+                await ws.send_json({"type": "turn", **turn.to_dict()})
+        except Exception:  # noqa: BLE001 — WebSocket close
+            try:
+                await ws.close()
+            except Exception:
+                pass
 
     return app
 

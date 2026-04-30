@@ -130,7 +130,7 @@ class TestBrainRouting:
     def test_routing(self, brain, query, expected_fragment):
         result = brain.skill_for(query)
         assert expected_fragment in result.skill.slug, (
-            f"Request: {request!r}\n"
+            f"Query: {query!r}\n"
             f"Expected fragment: {expected_fragment!r}\n"
             f"Got slug: {result.skill.slug!r}"
         )
