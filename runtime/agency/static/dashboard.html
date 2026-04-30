@@ -103,7 +103,7 @@
     </div>
 
     <div class="panel" style="margin-top:16px">
-      <h2>Senior Expert Personas</h2>
+      <h2>JARVIS Specialists</h2>
       <div class="grid" id="personas"></div>
     </div>
 
@@ -143,11 +143,11 @@ function categoryCard(name, count, isCore) {
   return el;
 }
 
-function personaCard(p) {
+function personaCard(a) {
   const el = document.createElement('div');
-  el.className = 'cat';
-  el.innerHTML = `<div class="name">${p.display_name}</div>` +
-                 `<div class="count">${p.role} · ${p.domain_count} domains</div>`;
+  el.className = 'cat' + (a.is_core ? ' core' : '');
+  el.innerHTML = `<div class="name">${a.emoji ? a.emoji + ' ' : ''}${a.name}</div>` +
+                 `<div class="count">${a.slug}</div>`;
   return el;
 }
 
@@ -158,23 +158,26 @@ async function loadStatus() {
 
     const stats = $('stats');
     stats.innerHTML = '';
-    stats.append(statCard('Skills', data.skills.count));
-    stats.append(statCard('Categories', data.skills.categories.length));
-    stats.append(statCard('Personas', data.personas.count));
-    stats.append(statCard('Version', data.version));
+    stats.append(statCard('Skills', data.totals.skills));
+    stats.append(statCard('Categories', data.totals.categories));
+    stats.append(statCard('JARVIS', data.totals.jarvis_specialists));
+    stats.append(statCard('Version', data.runtime.version));
 
     const cats = $('categories');
     cats.innerHTML = '';
-    const entries = Object.entries(data.skills.by_category);
-    entries.sort((a, b) => b[1] - a[1]);
-    for (const [name, count] of entries) {
-      cats.append(categoryCard(name, count, name === 'jarvis'));
+    const sorted = [...data.categories].sort((a, b) => b.count - a.count);
+    for (const cat of sorted) {
+      const isCore = Array.isArray(cat.agents) && cat.agents.some(a => a.is_core);
+      cats.append(categoryCard(cat.name, cat.count, isCore));
     }
 
     const personas = $('personas');
     personas.innerHTML = '';
-    for (const p of data.personas.catalog) {
-      personas.append(personaCard(p));
+    const jarvisCat = data.categories.find(c => c.name === 'jarvis');
+    if (jarvisCat && Array.isArray(jarvisCat.agents)) {
+      for (const a of jarvisCat.agents) {
+        personas.append(personaCard(a));
+      }
     }
 
     $('status').textContent = 'live';
