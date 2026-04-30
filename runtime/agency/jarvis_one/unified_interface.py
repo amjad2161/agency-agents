@@ -16,11 +16,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from .advisor_brain import AdvisorBrain
 from .collaborative_workflow import Transcript
 from .decision_engine import Decision
 from .document_generator import Document
-from .drawing_engine import Diagram, quick_diagram
+from .drawing_engine import Diagram
 from .expert_personas import ExpertPersona
 from .multi_agent_orchestrator import OrchestrationResult
 from .multimodal_output import MultimodalBundle, SUPPORTED_MODALITIES

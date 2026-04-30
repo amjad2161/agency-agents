@@ -16,12 +16,11 @@ Usage::
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any
 
-from .jarvis_soul import JARVIS_SOUL, get_communication_style
+from .jarvis_soul import JARVIS_SOUL
 
 _DEFAULT_PREFS_PATH = (
     Path(__file__).parent.parent / "data" / "jarvis_preferences.json"

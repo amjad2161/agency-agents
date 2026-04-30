@@ -1005,8 +1005,8 @@ def evolve_cmd(ctx: click.Context, rewrite: bool, dry_run: bool) -> None:
     d = tools_dir()
     if not d.is_dir():
         click.echo(f"No tools directory at {d}.")
-        click.echo(f"Create one and drop *.py files with run(input) + BENCH "
-                   f"defined to enable evolution.")
+        click.echo("Create one and drop *.py files with run(input) + BENCH "
+                   "defined to enable evolution.")
         return
 
     llm = None
@@ -1146,7 +1146,6 @@ def context_cmd(ctx: click.Context) -> None:
               show_default=True, help="Seconds before expiry. 0 = never.")
 def context_store_cmd(key: str, value: str, domain: str,
                       ttl_seconds: int) -> None:
-    from .context_manager import ContextManager
     cm = _shared_context_manager()
     cm.store(key, value, domain=domain, ttl_seconds=ttl_seconds)
     click.echo(f"stored {domain}:{key} (ttl={ttl_seconds}s)")
@@ -1298,8 +1297,6 @@ def chat_cmd(
     ANTHROPIC_API_KEY is set, deterministic otherwise), then filters
     the response through the JARVIS soul to strip forbidden phrases.
     """
-    import sys
-
     from .jarvis_greeting import get_startup_banner, get_greeting, get_farewell
     from .jarvis_soul import filter_response
     from .jarvis_brain import SupremeJarvisBrain

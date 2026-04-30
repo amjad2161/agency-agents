@@ -31,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .executor import Executor, ExecutionResult
 from .llm import AnthropicLLM, LLMConfig
 from .memory import MemoryStore, Session
-from .skills import Skill, SkillRegistry, load_skills
+from .skills import Skill, SkillRegistry
 from .logging import get_logger
 
 

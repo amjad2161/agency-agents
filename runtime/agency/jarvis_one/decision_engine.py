@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from ..skills import Skill, SkillRegistry
+from ..skills import SkillRegistry
 
 _HEBREW = re.compile(r"[\u0590-\u05FF]")
 
