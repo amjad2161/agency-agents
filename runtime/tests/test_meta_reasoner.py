@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from agency.meta_reasoner import MetaReasoningEngine, ReasoningStep
 
 

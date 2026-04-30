@@ -11,7 +11,7 @@ correct shape, and (with a session) memory persists user/assistant turns.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -387,7 +387,6 @@ def test_executor_honors_tools_allowed_whitelist(tmp_path: Path):
 def test_delegate_depth_cap_blocks_fourth_hop(tmp_path: Path):
     """A -> B -> C is allowed; the next hop must raise via the delegate tool."""
     from agency.executor import Executor as _Exec, MAX_DELEGATION_DEPTH
-    from agency.tools import ToolContext, ToolResult
 
     assert MAX_DELEGATION_DEPTH == 2
     reg, skill = _registry_with_one_skill()
@@ -480,8 +479,8 @@ def test_executor_sums_usage_across_turns(tmp_path: Path):
 def test_parallel_tools_actually_run_concurrently(tmp_path: Path):
     """Three slow read-only tool calls should finish close to single-tool latency."""
     import time
-    from agency.tools import Tool, ToolResult, ToolContext, _read_file
-    from agency.executor import Executor, PARALLEL_SAFE_TOOLS
+    from agency.tools import Tool, ToolResult
+    from agency.executor import Executor
 
     # Register a sleepy tool and mark it parallel-safe for this test.
     def _slow(args, ctx):

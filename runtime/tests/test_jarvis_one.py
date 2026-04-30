@@ -6,7 +6,6 @@ All tests are hermetic — no network, no heavy deps, no side effects.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest

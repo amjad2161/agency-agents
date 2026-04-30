@@ -6,7 +6,6 @@ run() surfaces a useful error message when no API key is set.
 
 from __future__ import annotations
 
-import os
 
 import pytest
 from click.testing import CliRunner
@@ -111,7 +110,6 @@ def test_doctor_shows_both_missing_and_errors_for_same_group(runner, no_api_key,
     Stub `optional_deps_status` to return one group with both kinds of failure
     and assert the rendered line includes both.
     """
-    from agency import cli as cli_mod
 
     def _stub() -> dict:
         return {

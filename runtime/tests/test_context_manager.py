@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import time
-import tempfile
-from pathlib import Path
 
 import pytest
 from agency.context_manager import ContextManager, ContextEntry

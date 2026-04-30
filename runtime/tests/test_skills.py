@@ -1,6 +1,5 @@
 """Skill loader tests against real persona files in this repo."""
 
-from pathlib import Path
 
 from agency.skills import SkillRegistry, discover_repo_root, load_skills
 
