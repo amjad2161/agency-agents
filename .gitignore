@@ -57,6 +57,11 @@ dist/
 build/
 *.egg-info/
 
+# Distribution archives (release artifacts; never commit to source)
+*.zip
+*.tar.gz
+*.tgz
+
 # Personal notes and scratch files
 scratch/
 notes/

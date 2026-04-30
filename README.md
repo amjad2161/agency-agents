@@ -2,6 +2,8 @@
 
 > **A complete AI agency at your fingertips** - From frontend wizards to Reddit community ninjas, from whimsy injectors to reality checkers. Each agent is a specialized expert with personality, processes, and proven deliverables.
 
+> 🤖 **Looking for the runnable JARVIS?** See **[JARVIS.md](JARVIS.md)** — single source of truth for the unified runtime, the `agency singularity` entry-point, and the dashboard at `/dashboard`.
+
 [![GitHub stars](https://img.shields.io/github/stars/amjad2161/agency-agents?style=social)](https://github.com/amjad2161/agency-agents)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://makeapullrequest.com)

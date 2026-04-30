@@ -550,6 +550,285 @@ def serve_cmd(ctx: click.Context, host: str, port: int) -> None:
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
+# ---------------------------------------------------------------------------
+# Singularity: `agency map`, `agency jarvis`, `agency singularity`
+# ---------------------------------------------------------------------------
+
+
+@main.command("map")
+@click.option("--json", "as_json", is_flag=True, default=False,
+              help="Emit machine-readable JSON instead of the text table.")
+@click.pass_context
+def map_cmd(ctx: click.Context, as_json: bool) -> None:
+    """Print a single unified view of the agency: categories | agents | total.
+
+    Highlights `jarvis-core` / `jarvis-core-brain` as the meta-routers.
+    Pair with `agency singularity --check` to verify that the runtime,
+    the registry, and the dashboard all see the same agency.
+    """
+    import json as _json
+
+    from .jarvis_brain import KEYWORD_SLUG_BOOST
+
+    registry = _registry(ctx.obj.get("repo"))
+    skills = registry.all()
+
+    by_cat: dict[str, list] = {}
+    for s in skills:
+        by_cat.setdefault(s.category, []).append(s)
+
+    core_slugs = {"jarvis-core", "jarvis-core-brain"} & {s.slug for s in skills}
+
+    if as_json:
+        payload = {
+            "categories": [
+                {
+                    "name": c,
+                    "agents": len(by_cat[c]),
+                    "slugs": sorted(s.slug for s in by_cat[c]),
+                }
+                for c in sorted(by_cat)
+            ],
+            "totals": {
+                "categories": len(by_cat),
+                "agents": len(skills),
+                "routing_domains": len(KEYWORD_SLUG_BOOST),
+            },
+            "jarvis_core": sorted(core_slugs),
+        }
+        click.echo(_json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+
+    click.echo("=== Agency map ===\n")
+    width = max((len(c) for c in by_cat), default=10)
+    # JARVIS first so the meta-router is visually anchored.
+    cats_sorted = sorted(by_cat, key=lambda c: (c != "jarvis", c))
+    for cat in cats_sorted:
+        marker = " ← JARVIS-core (meta-router)" if cat == "jarvis" else ""
+        click.echo(f"  {cat:<{width}}  {len(by_cat[cat]):>4} agents{marker}")
+    click.echo(
+        f"\n  {'TOTAL':<{width}}  {len(skills):>4} agents across "
+        f"{len(by_cat)} categories"
+    )
+    click.echo(f"  routing-domains in jarvis-core-brain: {len(KEYWORD_SLUG_BOOST)}")
+    if core_slugs:
+        click.echo(f"  jarvis-core slugs present: {', '.join(sorted(core_slugs))}")
+
+
+@main.group("jarvis", invoke_without_command=True)
+@click.pass_context
+def jarvis_group(ctx: click.Context) -> None:
+    """JARVIS persona runtime — replaces the standalone `supreme_main` entry-point.
+
+    Bare `agency jarvis` prints the current status; subcommands:
+      run    — boot the JARVIS persona loop (optionally serve the HUD)
+      status — print the persona/character/memory snapshot as JSON
+    """
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(jarvis_status_cmd)
+
+
+@jarvis_group.command("run")
+@click.option("--mode", default="supreme_brainiac", show_default=True,
+              type=click.Choice(["supreme_brainiac", "academic", "executor",
+                                  "guardian", "casual"]),
+              help="Persona mode to boot with.")
+@click.option("--serve", is_flag=True, default=False,
+              help="Also start the FastAPI control server.")
+@click.option("--host", default="127.0.0.1")
+@click.option("--port", default=8001, type=int)
+def jarvis_run_cmd(mode: str, serve: bool, host: str, port: int) -> None:
+    """Boot the JARVIS persona runtime — what `supreme_main.py` used to do."""
+    from .supreme_main import boot
+    rc = boot(mode=mode, start_server=serve, host=host, port=port)
+    if rc:
+        raise click.exceptions.Exit(rc)
+
+
+@jarvis_group.command("status")
+def jarvis_status_cmd() -> None:
+    """Print the JARVIS persona/character/memory snapshot as JSON."""
+    import json as _json
+
+    from .supreme_main import initialise_character_system
+
+    system = initialise_character_system()
+    click.echo(_json.dumps(system.status(), indent=2, ensure_ascii=False))
+
+
+@main.command("singularity")
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--port", default=8765, type=int, show_default=True)
+@click.option("--no-browser", is_flag=True, default=False,
+              help="Don't auto-open the dashboard.")
+@click.option("--no-server", is_flag=True, default=False,
+              help="Skip the FastAPI server (REPL only).")
+@click.option("--check", is_flag=True, default=False,
+              help="Validate registry + endpoints + scripts and exit. "
+                   "Does not start the server or REPL.")
+@click.pass_context
+def singularity_cmd(
+    ctx: click.Context,
+    host: str,
+    port: int,
+    no_browser: bool,
+    no_server: bool,
+    check: bool,
+) -> None:
+    """Boot the entire system in one shot.
+
+    Loads every skill, prints the bilingual JARVIS greeting, opens the
+    Singularity Dashboard at http://<host>:<port>/dashboard in a browser,
+    and drops you into the chat REPL. Pass `--check` to validate
+    everything is wired up and exit (used by tests and CI).
+    """
+    from pathlib import Path as _Path
+
+    repo_root = ctx.obj.get("repo") or discover_repo_root()
+    registry = _registry(ctx.obj.get("repo"))
+
+    # `--check` short-circuits: validate every promise of the
+    # singularity (registry loaded, endpoints registered, repo root is
+    # clean of legacy artifacts, dashboard html present) and exit 0/1.
+    if check:
+        problems: list[str] = []
+        if len(registry) == 0:
+            problems.append("registry: 0 skills loaded")
+        if not registry.categories():
+            problems.append("registry: no categories present")
+
+        # Endpoints — confirm the singularity routes are wired into the app.
+        try:
+            from .server import build_app
+            app = build_app(repo_root)
+            paths = {getattr(r, "path", "") for r in app.routes}
+            for required in ("/dashboard", "/singularity",
+                             "/api/run/stream", "/spatial"):
+                if required not in paths:
+                    problems.append(f"server: missing route {required}")
+        except Exception as e:  # noqa: BLE001
+            problems.append(f"server: build_app failed — {e}")
+
+        # Dashboard asset — server route reads it from disk.
+        dash_html = _Path(__file__).parent / "static" / "dashboard.html"
+        if not dash_html.is_file():
+            problems.append(f"dashboard: missing {dash_html}")
+
+        # Repo hygiene: nothing zip-shaped or stray .bat at the root.
+        for entry in repo_root.iterdir():
+            if entry.is_file() and entry.suffix.lower() == ".zip":
+                problems.append(f"root: stray zip artifact {entry.name}")
+            if entry.is_file() and entry.suffix.lower() == ".bat":
+                problems.append(f"root: stray .bat script {entry.name} "
+                                "(should live in scripts/)")
+
+        if problems:
+            click.echo("singularity check: FAIL", err=True)
+            for p in problems:
+                click.echo(f"  - {p}", err=True)
+            raise click.exceptions.Exit(1)
+
+        click.echo("singularity check: OK")
+        click.echo(f"  skills        : {len(registry)}")
+        click.echo(f"  categories    : {len(registry.categories())}")
+        click.echo(f"  dashboard     : {dash_html}")
+        click.echo(f"  bind hint     : http://{host}:{port}/dashboard")
+        return
+
+    # ---- normal boot path ------------------------------------------------
+    from .jarvis_greeting import get_startup_banner, get_greeting, get_farewell
+    from .jarvis_soul import filter_response
+
+    n_skills = len(registry)
+    banner = get_startup_banner({
+        "mode": "supreme_brainiac",
+        "systems_ok": n_skills,
+        "systems_total": n_skills,
+    })
+    click.echo(banner)
+    click.echo()
+    click.echo(get_greeting())
+    click.echo()
+
+    llm = _maybe_llm()
+    llm_status = "LLM: online" if llm else "LLM: offline (deterministic routing)"
+    click.echo(f"[{llm_status} | {n_skills} skills | dashboard: http://{host}:{port}/dashboard]\n")
+
+    server_thread = None
+    if not no_server:
+        try:
+            import socket as _socket
+            import threading as _threading
+            import time as _time
+            import uvicorn  # type: ignore
+
+            from .server import build_app
+
+            app = build_app(repo_root)
+            config = uvicorn.Config(app, host=host, port=port, log_level="warning")
+            server = uvicorn.Server(config)
+            server_thread = _threading.Thread(target=server.run, daemon=True)
+            server_thread.start()
+
+            # Wait for the port to actually accept connections before opening
+            # the browser, so the user doesn't get an "unable to connect" page.
+            for _ in range(40):
+                _time.sleep(0.1)
+                try:
+                    with _socket.create_connection((host, port), timeout=0.25):
+                        break
+                except OSError:
+                    continue
+
+            if not no_browser:
+                import webbrowser as _wb
+                _wb.open(f"http://{host}:{port}/dashboard")
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"[singularity] dashboard server failed to start: {exc}", err=True)
+            click.echo("[singularity] continuing in REPL-only mode", err=True)
+            server_thread = None
+
+    # ---- REPL ------------------------------------------------------------
+    planner = Planner(registry, llm=llm)
+    memory_store = MemoryStore(Path.home() / ".agency" / "sessions")
+
+    while True:
+        try:
+            raw = click.prompt("Amjad", prompt_suffix=" ❯ ", default="", show_default=False)
+        except click.Abort:
+            click.echo()
+            click.echo(get_farewell())
+            break
+
+        request = raw.strip()
+        if not request:
+            continue
+        if request.lower() in ("exit", "quit", "bye", "!q"):
+            click.echo(get_farewell())
+            break
+        if request.lower() in ("help", "?"):
+            click.echo("Commands: exit/quit/bye | dashboard URL: "
+                       f"http://{host}:{port}/dashboard")
+            continue
+
+        try:
+            plan = planner.plan(request)
+            click.echo(
+                f"  → {plan.skill.emoji} {plan.skill.name} ({plan.skill.slug})",
+                err=True,
+            )
+            executor = Executor(registry, llm, memory=memory_store)
+            result = executor.run(plan.skill, request)
+            click.echo(filter_response(result.text))
+        except KeyboardInterrupt:
+            click.echo()
+            click.echo(get_farewell())
+            break
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"[JARVIS ERROR] {type(exc).__name__}: {exc}", err=True)
+        click.echo()
+
+
 @main.command("hud")
 @click.option("--host", default="127.0.0.1")
 @click.option("--port", default=8765, type=int)
