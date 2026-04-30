@@ -173,6 +173,30 @@ Every incoming request is routed to the best domain module using a weighted keyw
 ### Specialized Verticals (remaining 30+ modules)
 Agriculture, AR/XR/Spatial Computing, Automotive/EV, Construction/PropTech, Cognitive Learning, Customer Experience, Disaster/Emergency Management, E-Commerce/Retail, Elder Care, Esports/Gaming Industry, Event Tech, Future of Work, Game World Design, Geospatial/Mapping, Healthcare Ops, Human Interface Design, Insurance Risk, Manufacturing/Industry, Parenting/Family, Pet Care Tech, Philanthropy, Sports Analytics, Sports Performance, Supply Chain/Logistics, Transportation/Mobility, Travel/Hospitality, Translation/Localization, Veterinary/Animal Science, Voice/Speech AI, Web3/Blockchain, Wellness/Fitness Tech.
 
+### New Modules (2026-04-30)
+| Module | What It Does |
+|--------|-------------|
+| `jarvis-osint360` | **Full OSINT360 Cyber Intelligence**: OSINT collection (/report, /enrich, /profile, /timeline), DFIR (forensic triage, malware analysis, chain of custody), Red/Blue/Purple teaming, OPSEC & privacy engineering, dark web intelligence, STIX 2.1 export, MITRE ATT&CK mapping. Full command reference with 20+ slash commands. |
+| `jarvis-trading-automation` | **Autonomous Trading System**: Designs and backtests systematic strategies (trend-following, mean-reversion, factor, ML), integrates with live broker APIs (IBKR, Alpaca, ccxt/100+ crypto exchanges), manages positions with real-time risk controls (daily drawdown circuit breaker, position limits, volatility-adjusted sizing), 24/7 autonomous operation. |
+| `jarvis-passive-income` | **Passive Income Architect**: Designs diversified income stacks across 7 categories (digital products, content monetization, affiliate, SaaS micro-products, investment income, automated businesses, licensing). Every stream automated to Level 3–4 within 90 days. Target: $3,000–$10,000+/month in 12 months. |
+| `jarvis-wealth-builder` | **Wealth Building Intelligence**: Comprehensive long-term wealth strategy — investment portfolios, real estate, tax optimization, entity structure, estate planning. Four-phase framework: Foundation ($0→$100K), Acceleration ($100K→$500K), Critical Mass ($500K→$2M), Financial Independence ($2M+). |
+| `jarvis-business-creator` | **Autonomous Business Creator**: Validates opportunities, builds MVPs, executes go-to-market, automates operations. 90-day playbook: validation (week 1–2) → MVP (week 3–6) → launch + first revenue (week 7–12) → scale (month 4–12). Target: $10,000/month net income in 12 months. |
+| `jarvis-swarm-commander` | **Swarm Orchestration Master**: Coordinates up to 324 agents simultaneously in parallel workstreams. Five scale tiers from Micro Swarm (2–5 agents) to Supreme Swarm (all 324). Resolves inter-agent conflicts, merges parallel outputs, maintains full swarm state. |
+
+---
+
+## Swarm Command Center (UI)
+
+`GET /swarm` — Cinematic multi-agent visualization dashboard
+
+Features:
+- **Interactive agent network graph**: all 117 JARVIS agents rendered as animated nodes with physics simulation, color-coded by domain, with travelling data-packet animations on active edges
+- **Integrated chat**: full JARVIS chat with auto-routing to Finance, OSINT360, Ops, and default Brainiac modes
+- **Real-time metrics**: active agents, tasks/hour, uptime, system health panel
+- **Live activity log**: streaming system event log with timestamps
+- **Holographic aesthetic**: dark sci-fi design with scan lines, glow effects, animated central JARVIS hub, Jerusalem time clock
+- **Fully bilingual**: Hebrew-first interface with English system labels
+
 ---
 
 ## The 324 Specialist Agents (16 Categories)
@@ -346,4 +370,4 @@ agency/
 ├── engineering/               # 38 engineering specialist agents
 ├── marketing/                 # 30 marketing agents
 ├── game-development/          # 20 game dev agents
-�
+�

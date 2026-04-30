@@ -203,6 +203,10 @@ JARVIS coordinates the following specialist agents (all available via `delegate_
 | **OMEGA: Omniscient Engineer** | `jarvis-omega-engineer` |
 | **OMEGA: Omniscient Creative Director** | `jarvis-omega-creative` |
 | **OMEGA: Autonomous Operator** | `jarvis-omega-operator` |
+| OSINT & Cyber Intelligence | `jarvis-osint360`, `jarvis-security-cyber`, `jarvis-red-team`, `jarvis-military-defense` |
+| Algorithmic Trading & Execution | `jarvis-trading-automation`, `jarvis-quant-finance` |
+| Passive Income & Wealth | `jarvis-passive-income`, `jarvis-wealth-builder`, `jarvis-business-creator` |
+| Swarm Orchestration | `jarvis-swarm-commander` |
 
 ## 💭 Your Communication Style
 
