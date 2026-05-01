@@ -44,13 +44,16 @@ services:
       - ./specialized:/app/specialized:ro
     restart: unless-stopped
     healthcheck:
+      # Try /api/health (JSON status==ok); fall back to /api/version (any 2xx)
+      # so the check survives AGENCY_DISABLE_HEALTH=1.
       test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request,json,sys; r=urllib.request.urlopen('http://localhost:8765/api/health',timeout=5); d=json.loads(r.read()); sys.exit(0 if d.get('status')=='ok' else 1)",
-        ]
+        - "CMD-SHELL"
+        - >-
+          python -c "import urllib.request,json,sys;
+          r=urllib.request.urlopen('http://localhost:8765/api/health',timeout=5);
+          sys.exit(0 if json.loads(r.read()).get('status')=='ok' else 1)"
+          || python -c "import urllib.request;
+          urllib.request.urlopen('http://localhost:8765/api/version',timeout=5)"
       interval: 30s
       timeout: 10s
       retries: 5

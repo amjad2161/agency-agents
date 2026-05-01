@@ -44,6 +44,8 @@ def _get(base: str, path: str, timeout: int = 10) -> dict:
     url = base.rstrip("/") + path
     req = urllib.request.Request(url)
     if SYNC_SECRET:
+        # Forwarded for reverse-proxy enforcement (e.g. nginx/Caddy header checks).
+        # The JARVIS API endpoints don't validate this header internally.
         req.add_header("X-Sync-Secret", SYNC_SECRET)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read())
