@@ -876,8 +876,176 @@ def _require_llm() -> AnthropicLLM:
     return llm
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+# ---------------------------------------------------------------------------
+# `agency plugin` — manage .py plugins in ~/.agency/plugins/
+# ---------------------------------------------------------------------------
+
+@main.group("plugin", invoke_without_command=True)
+@click.pass_context
+def plugin_cmd(ctx: click.Context) -> None:
+    """Manage JARVIS plugins (~/.agency/plugins/).
+
+    Subcommands: list, install <path-or-url>, remove <name>.
+    """
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(plugin_list_cmd)
+
+
+@plugin_cmd.command("list")
+def plugin_list_cmd() -> None:
+    """List installed plugins."""
+    from .plugins import PluginRegistry
+    reg = PluginRegistry()
+    plugins = reg.list_plugins()
+    if not plugins:
+        click.echo("No plugins installed.")
+        return
+    click.echo(f"{len(plugins)} plugin(s):")
+    for p in plugins:
+        meta = p.get("meta", {})
+        name = meta.get("name", p["file"])
+        version = meta.get("version", "?")
+        desc = meta.get("description", "")
+        click.echo(f"  {p['file']:30s}  {name} v{version}  {desc}")
+
+
+@plugin_cmd.command("install")
+@click.argument("path_or_url")
+def plugin_install_cmd(path_or_url: str) -> None:
+    """Install a plugin from a local .py file or URL."""
+    from .plugins import PluginRegistry
+    reg = PluginRegistry()
+    try:
+        result = reg.install(path_or_url)
+    except (FileNotFoundError, OSError) as e:
+        raise click.ClickException(str(e))
+    meta = result.get("meta", {})
+    name = meta.get("name", result["installed"])
+    version = meta.get("version", "?")
+    click.echo(f"Installed: {result['installed']}  ({name} v{version})")
+
+
+@plugin_cmd.command("remove")
+@click.argument("name")
+def plugin_remove_cmd(name: str) -> None:
+    """Remove a plugin by filename or plugin name."""
+    from .plugins import PluginRegistry
+    reg = PluginRegistry()
+    if reg.remove(name):
+        click.echo(f"Removed plugin: {name}")
+    else:
+        raise click.ClickException(f"No plugin found matching: {name}")
+
+
+# ---------------------------------------------------------------------------
+# `agency rate-status` — show token-bucket rate limiter status
+# ---------------------------------------------------------------------------
+
+@main.command("rate-status")
+def rate_status_cmd() -> None:
+    """Show the current rate limiter token-bucket status."""
+    from .rate_limiter import RateLimiter
+    rl = RateLimiter()
+    status = rl.status()
+    import time
+    reset_in = status.get("reset_in_seconds", 0)
+    click.echo(f"tokens remaining : {status['tokens_remaining']} / {status['capacity']}")
+    click.echo(f"reset in         : {reset_in:.1f}s")
+    used = status["capacity"] - status["tokens_remaining"]
+    pct = (used / status["capacity"] * 100) if status["capacity"] > 0 else 0
+    click.echo(f"used             : {used} ({pct:.0f}%)")
+
+
+# ---------------------------------------------------------------------------
+# `agency webhook` — manage webhook endpoints
+# ---------------------------------------------------------------------------
+
+@main.group("webhook", invoke_without_command=True)
+@click.pass_context
+def webhook_cmd(ctx: click.Context) -> None:
+    """Manage webhook endpoints (~/.agency/webhooks.json).
+
+    Subcommands: list, add <url> [--secret <s>], test <url>.
+    """
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(webhook_list_cmd)
+
+
+@webhook_cmd.command("list")
+def webhook_list_cmd() -> None:
+    """List registered webhook endpoints."""
+    from .webhooks import WebhookDispatcher
+    wd = WebhookDispatcher()
+    hooks = wd.list_webhooks()
+    if not hooks:
+        click.echo("No webhooks registered.")
+        return
+    click.echo(f"{len(hooks)} webhook(s):")
+    for h in hooks:
+        click.echo(f"  {h['url']}")
+
+
+@webhook_cmd.command("add")
+@click.argument("url")
+@click.option("--secret", default="", help="HMAC secret for signing. Defaults to empty string.")
+def webhook_add_cmd(url: str, secret: str) -> None:
+    """Register a webhook endpoint URL."""
+    from .webhooks import WebhookDispatcher
+    wd = WebhookDispatcher()
+    result = wd.register(url, secret)
+    click.echo(f"{result['status'].capitalize()}: {url}")
+
+
+@webhook_cmd.command("remove")
+@click.argument("url")
+def webhook_remove_cmd(url: str) -> None:
+    """Remove a registered webhook by URL."""
+    from .webhooks import WebhookDispatcher
+    wd = WebhookDispatcher()
+    if wd.remove(url):
+        click.echo(f"Removed: {url}")
+    else:
+        raise click.ClickException(f"No webhook found for: {url}")
+
+
+@webhook_cmd.command("test")
+@click.argument("url", required=False)
+def webhook_test_cmd(url: str | None) -> None:
+    """Send a test ping to a specific URL (or all registered endpoints)."""
+    from .webhooks import WebhookDispatcher
+    wd = WebhookDispatcher()
+    if url:
+        # Temporarily register if not already there; just dispatch to that URL only.
+        registered = {h["url"] for h in wd.list_webhooks()}
+        if url not in registered:
+            wd.register(url, "")
+    results = wd.dispatch("jarvis.test", {"ping": True})
+    if not results:
+        click.echo("No endpoints to test.")
+        return
+    for r in results:
+        if r.get("ok"):
+            click.echo(f"  OK    {r['url']}  (HTTP {r.get('status', '?')})")
+        else:
+            click.echo(f"  FAIL  {r['url']}  {r.get('error', '')}")
+
+
+# ---------------------------------------------------------------------------
+# `agency check-update` — check PyPI for a newer version
+# ---------------------------------------------------------------------------
+
+@main.command("check-update")
+def check_update_cmd() -> None:
+    """Check PyPI for a newer version of agency-runtime."""
+    from .updater import check_for_updates
+    result = check_for_updates()
+    click.echo(f"current : {result['current']}")
+    click.echo(f"latest  : {result['latest']}")
+    if result["update_available"]:
+        click.echo(result["message"])
+        click.echo("Run `pip install --upgrade agency-runtime` to update.")
+    else:
+        click.echo(result["message"])
 
 
 # ---------------------------------------------------------------------------
@@ -1002,3 +1170,7 @@ def chat_cmd(
             click.echo(f"[JARVIS ERROR] {type(exc).__name__}: {exc}", err=True)
 
         click.echo()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
