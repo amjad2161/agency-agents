@@ -39,11 +39,15 @@ def test_remove(dispatcher):
 
 def test_dispatch_calls_endpoint(dispatcher, tmp_path):
     dispatcher.register("https://example.com/hook", "mysecret")
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    with patch("urllib.request.urlopen", return_value=mock_response):
+    # urlopen is used as a context manager; resp.status (not status_code) is read.
+    mock_resp = MagicMock()
+    mock_resp.status = 200
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    with patch("urllib.request.urlopen", return_value=mock_resp):
         results = dispatcher.dispatch("test.event", {"key": "value"})
     assert len(results) == 1
+    assert results[0]["ok"] is True
 
 
 def test_dispatch_no_endpoints(dispatcher):

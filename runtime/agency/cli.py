@@ -917,7 +917,7 @@ def plugin_install_cmd(path_or_url: str) -> None:
     reg = PluginRegistry()
     try:
         result = reg.install(path_or_url)
-    except (FileNotFoundError, OSError) as e:
+    except (FileNotFoundError, OSError, ValueError) as e:
         raise click.ClickException(str(e))
     meta = result.get("meta", {})
     name = meta.get("name", result["installed"])
@@ -1014,12 +1014,17 @@ def webhook_test_cmd(url: str | None) -> None:
     """Send a test ping to a specific URL (or all registered endpoints)."""
     from .webhooks import WebhookDispatcher
     wd = WebhookDispatcher()
+    added_for_test = False
     if url:
-        # Temporarily register if not already there; just dispatch to that URL only.
         registered = {h["url"] for h in wd.list_webhooks()}
         if url not in registered:
             wd.register(url, "")
-    results = wd.dispatch("jarvis.test", {"ping": True})
+            added_for_test = True
+    try:
+        results = wd.dispatch("jarvis.test", {"ping": True})
+    finally:
+        if added_for_test:
+            wd.remove(url)
     if not results:
         click.echo("No endpoints to test.")
         return

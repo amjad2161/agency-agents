@@ -73,6 +73,8 @@ class PluginRegistry:
             src = Path(path_or_url)
             if not src.exists():
                 raise FileNotFoundError(f"Plugin file not found: {src}")
+            if src.suffix != ".py":
+                raise ValueError(f"Plugin file must be a .py file: {src.name}")
             dest = self._dir / src.name
             shutil.copy2(src, dest)
 

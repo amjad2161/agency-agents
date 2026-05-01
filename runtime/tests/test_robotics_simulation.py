@@ -81,11 +81,10 @@ def test_step_does_not_raise(sim):
     sim.step()  # should not raise
 
 
-def test_step_advances_position(sim):
-    pos_before = sim.get_base_position()
+def test_step_does_not_raise_twice(sim):
+    # MOCK backend may or may not change position; verify no exception raised.
     sim.step()
-    pos_after = sim.get_base_position()
-    assert pos_after != pos_before or True  # mock may or may not move
+    sim.step()
 
 
 def test_get_base_position_returns_tuple(sim):

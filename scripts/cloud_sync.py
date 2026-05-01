@@ -76,6 +76,19 @@ def _normalize_entry(entry: str) -> str:
     return "\n".join(line.rstrip() for line in entry.strip().splitlines()).strip()
 
 
+def _entry_body(entry: str) -> str:
+    """Return the lesson body with only the leading ## timestamp header stripped.
+
+    Preserves any subsequent ## headings that are part of the lesson content.
+    Used as the deduplication key so that re-syncing after a fresh server
+    timestamp doesn't cause duplicate lesson posts.
+    """
+    lines = entry.splitlines()
+    if lines and lines[0].strip().startswith("## "):
+        lines = lines[1:]
+    return _normalize_entry("\n".join(lines))
+
+
 def _parse_lesson_entries(text: str) -> list[str]:
     """Split a lessons file into discrete entries delimited by '## <timestamp>' headers."""
     entries: list[str] = []
@@ -117,23 +130,18 @@ def sync_lessons(src: str, dst: str) -> bool:
         dst_text = _get(dst, "/api/lessons").get("text") or ""
 
         src_entries = _parse_lesson_entries(src_text)
-        dst_entry_set = {_normalize_entry(e) for e in _parse_lesson_entries(dst_text)}
+        # Dedupe by body only (sans timestamp header) so that a fresh timestamp
+        # written by the server on POST doesn't make the same lesson re-post on
+        # every sync cycle.
+        dst_body_set = {_entry_body(e) for e in _parse_lesson_entries(dst_text)}
 
         pushed = 0
         for entry in src_entries:
-            normalized = _normalize_entry(entry)
-            if normalized and normalized not in dst_entry_set:
-                # Strip the "## timestamp" header line — the server adds a
-                # fresh timestamp on POST to avoid double-wrapping.
-                body_lines = [
-                    line for line in entry.splitlines()
-                    if not line.strip().startswith("## ")
-                ]
-                body = "\n".join(body_lines).strip()
-                if body:
-                    _post(dst, "/api/lessons", {"text": body})
-                    dst_entry_set.add(normalized)
-                    pushed += 1
+            body = _entry_body(entry)
+            if body and body not in dst_body_set:
+                _post(dst, "/api/lessons", {"text": body})
+                dst_body_set.add(body)
+                pushed += 1
 
         if pushed:
             _log(f"  lessons: pushed {pushed} new entr{'y' if pushed == 1 else 'ies'} → {dst}")

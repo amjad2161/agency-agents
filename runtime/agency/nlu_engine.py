@@ -98,8 +98,12 @@ class NLUEngine:
         """Return the most likely :class:`Intent` for *text*.
 
         Priority order (highest first):
-        GREET → HELP → QUERY → CREATE → DELETE → UPDATE → NAVIGATE →
+        GREET → QUERY → HELP → CREATE → DELETE → UPDATE → NAVIGATE →
         COMMAND → UNKNOWN.
+
+        QUERY is checked before HELP so that question-word patterns ("what",
+        "how", "?") are classified as QUERY rather than the bare-"?" HELP
+        pattern.
         """
         if _GREET_WORDS.search(text) or _GREET_HE.search(text):
             return Intent.GREET
