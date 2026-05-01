@@ -32,7 +32,7 @@ _GREET_WORDS = re.compile(
 )
 _GREET_HE = re.compile(r"שלום")
 
-_HELP_WORDS = re.compile(r"\b(help|assist|support|guide|tutorial)\b|\?", re.IGNORECASE)
+_HELP_WORDS = re.compile(r"\b(help|assist|support|guide|tutorial)\b|^\s*\?\s*$", re.IGNORECASE)
 
 _QUERY_WORDS = re.compile(
     r"\b(what|who|how|when|where|why|which|tell\s+me|explain|describe|show\s+me)\b",
@@ -103,10 +103,10 @@ class NLUEngine:
         """
         if _GREET_WORDS.search(text) or _GREET_HE.search(text):
             return Intent.GREET
-        if _HELP_WORDS.search(text):
-            return Intent.HELP
         if _QUERY_WORDS.search(text):
             return Intent.QUERY
+        if _HELP_WORDS.search(text):
+            return Intent.HELP
         if _CREATE_WORDS.search(text):
             return Intent.CREATE
         if _DELETE_WORDS.search(text):

@@ -24,6 +24,8 @@ class RateLimiter:
         requests_per_minute: int = 60,
         state_path: Path | None = None,
     ) -> None:
+        if requests_per_minute < 1:
+            raise ValueError("requests_per_minute must be >= 1")
         self.capacity = float(requests_per_minute)
         self.refill_rate = self.capacity / 60.0  # tokens per second
         self._path = Path(state_path) if state_path else _DEFAULT_PATH
@@ -46,7 +48,7 @@ class RateLimiter:
                 return False
             self._tokens -= 1.0
             self._save()
-            used_fraction = 1.0 - (self._tokens / self.capacity)
+            used_fraction = 1.0 - (self._tokens / self.capacity) if self.capacity > 0 else 1.0
             if used_fraction > _WARN_THRESHOLD:
                 print("⚠️ מתקרב למגבלת הבקשות")  # noqa: T201
             return True

@@ -103,6 +103,9 @@ jobs:
     if: ${{ github.event_name == 'push' || inputs.force_deploy == true }}
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: read
+      packages: read
     concurrency:
       group: deploy-production
       cancel-in-progress: false

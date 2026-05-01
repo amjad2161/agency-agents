@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import shutil
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +17,33 @@ def _plugins_dir() -> Path:
     return _PLUGINS_DIR
 
 
+def _read_meta_ast(path: Path) -> dict:
+    """Extract PLUGIN_META from a .py file using AST — no code execution."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:
+        return {"name": path.stem, "version": "?", "description": "syntax error"}
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == "PLUGIN_META"
+            and isinstance(node.value, ast.Dict)
+        ):
+            try:
+                return ast.literal_eval(node.value)  # type: ignore[return-value]
+            except ValueError:
+                break
+    return {"name": path.stem, "version": "0.0.0", "description": ""}
+
+
 class PluginRegistry:
-    """Manages .py plugin files in ~/.agency/plugins/."""
+    """Manages .py plugin files in ~/.agency/plugins/.
+
+    Metadata is read via AST (no code execution) in list_plugins() and
+    install(). Actual plugin code runs only when load_all() is called.
+    """
 
     def __init__(self, plugins_dir: Path | None = None) -> None:
         self._dir = Path(plugins_dir) if plugins_dir else _plugins_dir()
@@ -32,12 +57,14 @@ class PluginRegistry:
     def install(self, path_or_url: str) -> dict:
         """Copy a local .py plugin file into the plugins directory.
 
-        For simplicity, URLs are downloaded via urllib if they start with
-        http(s)://; otherwise the argument is treated as a local path.
+        Remote URLs must use HTTPS. Metadata is read via AST after copy
+        (no code execution at install time).
         """
-        if path_or_url.startswith(("http://", "https://")):
+        if path_or_url.startswith("http://"):
+            raise ValueError("Only HTTPS URLs are accepted for plugin install")
+        if path_or_url.startswith("https://"):
             import urllib.request
-            filename = path_or_url.split("/")[-1]
+            filename = path_or_url.split("/")[-1] or "plugin.py"
             if not filename.endswith(".py"):
                 filename += ".py"
             dest = self._dir / filename
@@ -49,17 +76,14 @@ class PluginRegistry:
             dest = self._dir / src.name
             shutil.copy2(src, dest)
 
-        meta = self._load_meta(dest)
+        meta = _read_meta_ast(dest)
         return {"installed": dest.name, "meta": meta}
 
     def list_plugins(self) -> list[dict]:
-        """Return a list of info dicts for every plugin in the plugins dir."""
+        """Return info dicts for every plugin. Reads metadata via AST only."""
         results = []
         for path in sorted(self._dir.glob("*.py")):
-            try:
-                meta = self._load_meta(path)
-            except Exception as exc:  # noqa: BLE001
-                meta = {"name": path.stem, "version": "?", "description": str(exc)}
+            meta = _read_meta_ast(path)
             results.append({"file": path.name, "meta": meta})
         return results
 
@@ -69,15 +93,11 @@ class PluginRegistry:
             name = name + ".py"
         target = self._dir / name
         if not target.exists():
-            # Try to find by PLUGIN_META name
             for path in self._dir.glob("*.py"):
-                try:
-                    meta = self._load_meta(path)
-                    if meta.get("name") == name.replace(".py", ""):
-                        target = path
-                        break
-                except Exception:  # noqa: BLE001
-                    continue
+                meta = _read_meta_ast(path)
+                if meta.get("name") == name.replace(".py", ""):
+                    target = path
+                    break
         if target.exists():
             target.unlink()
             self._loaded.pop(target.stem, None)
@@ -85,7 +105,10 @@ class PluginRegistry:
         return False
 
     def load_all(self) -> list[dict]:
-        """Load every plugin and call activate(registry) on each."""
+        """Import every plugin and call activate(registry) on each.
+
+        This is the only method that executes plugin code.
+        """
         loaded = []
         for path in sorted(self._dir.glob("*.py")):
             try:
@@ -101,15 +124,8 @@ class PluginRegistry:
         return loaded
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Internal
     # ------------------------------------------------------------------
-
-    def _load_meta(self, path: Path) -> dict:
-        module = self._import_plugin(path)
-        meta = getattr(module, "PLUGIN_META", None)
-        if not isinstance(meta, dict):
-            return {"name": path.stem, "version": "0.0.0", "description": ""}
-        return meta
 
     @staticmethod
     def _import_plugin(path: Path) -> Any:

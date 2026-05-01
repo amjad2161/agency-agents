@@ -121,9 +121,17 @@ def sync_lessons(src: str, dst: str) -> bool:
         for entry in src_entries:
             normalized = _normalize_entry(entry)
             if normalized and normalized not in dst_entry_set:
-                _post(dst, "/api/lessons", {"text": entry})
-                dst_entry_set.add(normalized)
-                pushed += 1
+                # Strip the "## timestamp" header line — the server adds a
+                # fresh timestamp on POST to avoid double-wrapping.
+                body_lines = [
+                    line for line in entry.splitlines()
+                    if not line.strip().startswith("## ")
+                ]
+                body = "\n".join(body_lines).strip()
+                if body:
+                    _post(dst, "/api/lessons", {"text": body})
+                    dst_entry_set.add(normalized)
+                    pushed += 1
 
         if pushed:
             _log(f"  lessons: pushed {pushed} new entr{'y' if pushed == 1 else 'ies'} → {dst}")
@@ -146,11 +154,14 @@ def sync_trust(src: str, dst: str) -> bool:
 
 
 def sync_profile(src: str, dst: str) -> bool:
-    """Copy full profile text from src to dst (full replacement)."""
+    """Copy full profile text from src to dst (full replacement).
+
+    Always POSTs, even when text is empty — the server treats empty text
+    as a delete, which correctly propagates profile deletions.
+    """
     try:
         text = _get(src, "/api/profile").get("text", "")
-        if text:
-            _post(dst, "/api/profile", {"text": text})
+        _post(dst, "/api/profile", {"text": text})
         return True
     except Exception as e:
         _log(f"  profile sync error: {e}")
