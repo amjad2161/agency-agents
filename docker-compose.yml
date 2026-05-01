@@ -18,7 +18,8 @@ x-jarvis-env: &jarvis-env
   AGENCY_MODEL: ${AGENCY_MODEL:-claude-opus-4-7}
   AGENCY_PLANNER_MODEL: ${AGENCY_PLANNER_MODEL:-claude-haiku-4-5}
   AGENCY_MAX_TOKENS: ${AGENCY_MAX_TOKENS:-16000}
-  AGENCY_TRUST_LEVEL: ${AGENCY_TRUST_LEVEL:-trusted}
+  # Trust mode: off | on-my-machine | yolo
+  AGENCY_TRUST_MODE: ${AGENCY_TRUST_MODE:-on-my-machine}
   JARVIS_ENV: ${JARVIS_ENV:-local}
   TZ: Asia/Jerusalem
 
@@ -37,7 +38,7 @@ services:
     volumes:
       - jarvis_data:/root/.agency
       # live-reload: mount source so edits reflect without rebuild (dev only)
-      # In production these are overridden by docker-compose.prod.yml
+      # In production these are removed by docker-compose.prod.yml
       - ./runtime/agency:/app/runtime/agency:ro
       - ./jarvis:/app/jarvis:ro
       - ./specialized:/app/specialized:ro
@@ -57,6 +58,7 @@ services:
     labels:
       jarvis.role: "runtime"
       jarvis.env: "local"
+      com.centurylinklabs.watchtower.enable: "true"
 
   # ── Cloud sync daemon (bidirectional local ↔ cloud) ────────────────────
   jarvis-sync:
@@ -85,6 +87,7 @@ services:
       - sync
     labels:
       jarvis.role: "sync"
+      com.centurylinklabs.watchtower.enable: "true"
 
   # ── Watchtower — auto-pulls new cloud images when pushed ───────────────
   watchtower:
@@ -101,7 +104,7 @@ services:
     profiles:
       - monitor
     labels:
-      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.enable: "false"
 
 volumes:
   jarvis_data:

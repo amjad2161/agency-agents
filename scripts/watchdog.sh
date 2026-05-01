@@ -6,7 +6,10 @@
 #   crontab -e
 #   */5 * * * * /path/to/agency-agents/scripts/watchdog.sh >> /var/log/jarvis-watchdog.log 2>&1
 #
-# Or as a systemd service — see docs/CLOUD_SETUP.md
+# Environment variables:
+#   JARVIS_URL          Base URL of the local JARVIS instance (default: http://localhost:8765)
+#   JARVIS_HEALTH_PATH  Health endpoint path (default: /api/health)
+#                       Set to /api/version if AGENCY_DISABLE_HEALTH=1 on the server.
 
 set -euo pipefail
 
@@ -14,6 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 JARVIS_URL="${JARVIS_URL:-http://localhost:8765}"
+JARVIS_HEALTH_PATH="${JARVIS_HEALTH_PATH:-/api/health}"
 
 log() {
   local ts
@@ -22,9 +26,9 @@ log() {
 }
 
 check_health() {
-  local status
-  status=$(curl -sf --max-time 5 "${JARVIS_URL}/api/health" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','down'))" 2>/dev/null || echo "down")
+  local response status
+  response=$(curl -sf --max-time 5 "${JARVIS_URL}${JARVIS_HEALTH_PATH}" 2>/dev/null || echo "{}")
+  status=$(echo "$response" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('status','down'))" 2>/dev/null || echo "down")
   echo "$status"
 }
 
@@ -42,7 +46,7 @@ pull_latest() {
 }
 
 # ── Main ────────────────────────────────────────────────────────────────────
-log "Health check → ${JARVIS_URL}/api/health"
+log "Health check → ${JARVIS_URL}${JARVIS_HEALTH_PATH}"
 STATUS=$(check_health)
 log "Status: ${STATUS}"
 

@@ -8,6 +8,7 @@
 #   - Removes dev source bind-mounts so the pulled image code runs (not host)
 #   - Applies resource limits using plain Compose fields (mem_limit, cpus)
 #   - Uses restart: always and tighter logging
+#   - Sets trust mode to off (safest default for production)
 #   - Binds persistent state to a host path you control
 
 version: "3.9"
@@ -21,7 +22,8 @@ services:
       - jarvis_data:/root/.agency
     environment:
       JARVIS_ENV: production
-      AGENCY_TRUST_LEVEL: ${AGENCY_TRUST_LEVEL:-operator}
+      # Trust mode: off | on-my-machine | yolo  (off = safest for production)
+      AGENCY_TRUST_MODE: ${AGENCY_TRUST_MODE:-off}
     # Plain Compose resource limits (docker compose, not Swarm)
     mem_limit: 2g
     cpus: "2.0"
@@ -41,6 +43,8 @@ services:
       - jarvis_data:/root/.agency
     mem_limit: 256m
     cpus: "0.25"
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
 
 volumes:
   jarvis_data:

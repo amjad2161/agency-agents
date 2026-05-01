@@ -5,9 +5,14 @@ JARVIS Cloud-Local Sync Daemon
 Keeps a local JARVIS instance and a cloud JARVIS instance in sync as one unit.
 
 Syncs:
-  - Character profile (full text replacement)
-  - Lessons ledger (append-only merge — new entries propagated both ways)
-  - Trust mode (mode string)
+  - Lessons ledger (bidirectional append-only merge — new entries propagated both ways)
+  - Trust mode (local is authoritative in push/both; cloud in pull)
+  - User profile (local is authoritative in push/both; cloud in pull)
+
+Direction semantics:
+  push  — local → cloud (trust/profile/new lessons)
+  pull  — cloud → local (trust/profile/new lessons)
+  both  — lessons merged bidirectionally; local is authoritative for trust & profile
 
 Run standalone:
   python scripts/cloud_sync.py --once
@@ -63,6 +68,39 @@ def _health(base: str) -> bool:
         return False
 
 
+# ── Lesson entry parsing ────────────────────────────────────────────────────
+
+def _normalize_entry(entry: str) -> str:
+    return "\n".join(line.rstrip() for line in entry.strip().splitlines()).strip()
+
+
+def _parse_lesson_entries(text: str) -> list[str]:
+    """Split a lessons file into discrete entries delimited by '## <timestamp>' headers."""
+    entries: list[str] = []
+    current: list[str] = []
+
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if stripped.startswith("## "):
+            if current:
+                entry = _normalize_entry("\n".join(current))
+                if entry:
+                    entries.append(entry)
+            current = [stripped]
+        else:
+            if current:
+                current.append(raw_line.rstrip())
+            elif stripped:
+                current = [raw_line.rstrip()]
+
+    if current:
+        entry = _normalize_entry("\n".join(current))
+        if entry:
+            entries.append(entry)
+
+    return entries
+
+
 # ── Per-endpoint sync ───────────────────────────────────────────────────────
 
 def _log(msg: str) -> None:
@@ -71,20 +109,24 @@ def _log(msg: str) -> None:
 
 
 def sync_lessons(src: str, dst: str) -> bool:
-    """Append to dst any lesson lines present in src but not in dst."""
+    """Append to dst any lesson entries present in src but not in dst."""
     try:
-        src_text = (_get(src, "/api/lessons").get("text") or "").strip()
-        dst_text = (_get(dst, "/api/lessons").get("text") or "").strip()
+        src_text = _get(src, "/api/lessons").get("text") or ""
+        dst_text = _get(dst, "/api/lessons").get("text") or ""
 
-        src_lines = {l.strip() for l in src_text.splitlines() if l.strip() and not l.startswith("#")}
-        dst_lines = {l.strip() for l in dst_text.splitlines() if l.strip() and not l.startswith("#")}
-        new_lines = src_lines - dst_lines
+        src_entries = _parse_lesson_entries(src_text)
+        dst_entry_set = {_normalize_entry(e) for e in _parse_lesson_entries(dst_text)}
 
-        for line in sorted(new_lines):
-            _post(dst, "/api/lessons", {"text": line})
+        pushed = 0
+        for entry in src_entries:
+            normalized = _normalize_entry(entry)
+            if normalized and normalized not in dst_entry_set:
+                _post(dst, "/api/lessons", {"text": entry})
+                dst_entry_set.add(normalized)
+                pushed += 1
 
-        if new_lines:
-            _log(f"  lessons: pushed {len(new_lines)} new line(s) → {dst}")
+        if pushed:
+            _log(f"  lessons: pushed {pushed} new entr{'y' if pushed == 1 else 'ies'} → {dst}")
         return True
     except Exception as e:
         _log(f"  lessons sync error: {e}")
@@ -121,7 +163,8 @@ def run_sync(direction: str = "both") -> dict:
     """
     direction: 'push'  = local → cloud
                'pull'  = cloud → local
-               'both'  = bidirectional merge
+               'both'  = lessons merged bidirectionally;
+                         local is authoritative for trust & profile
     """
     results = {"ok": 0, "fail": 0, "skipped": 0}
 
@@ -146,21 +189,22 @@ def run_sync(direction: str = "both") -> dict:
         ok = fn(*args)
         results["ok" if ok else "fail"] += 1
 
-    # Lessons: always merge both ways to preserve all knowledge
-    _run(sync_lessons, LOCAL_URL, CLOUD_URL)
+    # Lessons: merge in the requested direction(s)
+    if direction in ("push", "both"):
+        _run(sync_lessons, LOCAL_URL, CLOUD_URL)
     if direction in ("pull", "both"):
         _run(sync_lessons, CLOUD_URL, LOCAL_URL)
 
-    # Trust: local is authoritative on push, cloud on pull
+    # Trust: directional — local authoritative on push/both, cloud on pull
     if direction in ("push", "both"):
         _run(sync_trust, LOCAL_URL, CLOUD_URL)
-    if direction == "pull":
+    elif direction == "pull":
         _run(sync_trust, CLOUD_URL, LOCAL_URL)
 
-    # Profile: local is authoritative on push, cloud on pull
+    # Profile: directional — local authoritative on push/both, cloud on pull
     if direction in ("push", "both"):
         _run(sync_profile, LOCAL_URL, CLOUD_URL)
-    if direction == "pull":
+    elif direction == "pull":
         _run(sync_profile, CLOUD_URL, LOCAL_URL)
 
     _log(f"Sync done — ok={results['ok']} fail={results['fail']}")
