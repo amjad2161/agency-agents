@@ -212,3 +212,99 @@ def test_hud_command_help(runner):
     assert r.exit_code == 0
     assert "GRAVIS HUD" in r.output or "HUD" in r.output
     assert "--no-browser" in r.output
+
+
+# ---------------------------------------------------------------------------
+# New module CLI commands
+# ---------------------------------------------------------------------------
+
+def test_plugin_list_empty(runner, tmp_path, monkeypatch):
+    """agency plugin list with no plugins installed."""
+    monkeypatch.setattr("agency.plugins._PLUGINS_DIR", tmp_path / "plugins")
+    result = runner.invoke(main, ["plugin", "list"])
+    assert result.exit_code == 0
+    assert "No plugins" in result.output
+
+
+def test_plugin_install_and_list(runner, tmp_path, monkeypatch):
+    """agency plugin install then list shows the plugin."""
+    plugins_dir = tmp_path / "plugins"
+    plugins_dir.mkdir()
+    monkeypatch.setattr("agency.plugins._PLUGINS_DIR", plugins_dir)
+    # Create a real plugin file to install
+    src = tmp_path / "demo.py"
+    src.write_text(
+        'PLUGIN_META = {"name": "demo", "version": "1.0.0", "description": "A demo"}\n'
+        'def activate(registry): pass\n',
+        encoding="utf-8",
+    )
+    install_result = runner.invoke(main, ["plugin", "install", str(src)])
+    assert install_result.exit_code == 0, install_result.output
+    assert "Installed" in install_result.output
+
+    list_result = runner.invoke(main, ["plugin", "list"])
+    assert list_result.exit_code == 0
+    assert "demo" in list_result.output.lower()
+
+
+def test_plugin_install_missing_file(runner, tmp_path, monkeypatch):
+    """agency plugin install with a non-existent file exits with error."""
+    monkeypatch.setattr("agency.plugins._PLUGINS_DIR", tmp_path / "plugins")
+    result = runner.invoke(main, ["plugin", "install", str(tmp_path / "ghost.py")])
+    assert result.exit_code != 0
+
+
+def test_rate_status_shows_tokens(runner):
+    """agency rate-status prints token counts."""
+    result = runner.invoke(main, ["rate-status"])
+    assert result.exit_code == 0
+    assert "tokens remaining" in result.output
+    assert "capacity" in result.output or "/" in result.output
+
+
+def test_webhook_list_empty(runner, tmp_path, monkeypatch):
+    """agency webhook list with no webhooks."""
+    monkeypatch.setattr("agency.webhooks._DEFAULT_PATH", tmp_path / "hooks.json")
+    result = runner.invoke(main, ["webhook", "list"])
+    assert result.exit_code == 0
+    assert "No webhooks" in result.output
+
+
+def test_webhook_add_and_list(runner, tmp_path, monkeypatch):
+    """agency webhook add then list shows the endpoint."""
+    monkeypatch.setattr("agency.webhooks._DEFAULT_PATH", tmp_path / "hooks.json")
+    add_result = runner.invoke(main, ["webhook", "add", "https://example.com/hook"])
+    assert add_result.exit_code == 0, add_result.output
+    assert "example.com" in add_result.output.lower() or "registered" in add_result.output.lower()
+
+    list_result = runner.invoke(main, ["webhook", "list"])
+    assert list_result.exit_code == 0
+    assert "example.com" in list_result.output
+
+
+def test_webhook_remove(runner, tmp_path, monkeypatch):
+    """agency webhook remove deletes a registered endpoint."""
+    monkeypatch.setattr("agency.webhooks._DEFAULT_PATH", tmp_path / "hooks.json")
+    runner.invoke(main, ["webhook", "add", "https://example.com/hook"])
+    remove_result = runner.invoke(main, ["webhook", "remove", "https://example.com/hook"])
+    assert remove_result.exit_code == 0
+    assert "Removed" in remove_result.output
+
+
+def test_check_update_shows_version(runner, tmp_path, monkeypatch):
+    """agency check-update prints current and latest version."""
+    from unittest.mock import patch
+    monkeypatch.setattr("agency.updater._CACHE_PATH", tmp_path / "update_check.json")
+    with patch("agency.updater._fetch_latest_pypi", return_value="0.1.0"):
+        result = runner.invoke(main, ["check-update"])
+    assert result.exit_code == 0
+    assert "current" in result.output
+    assert "latest" in result.output
+
+
+def test_main_help_lists_all_new_commands(runner):
+    """agency --help lists plugin, rate-status, webhook, check-update."""
+    result = runner.invoke(main, ["--help"])
+    assert result.exit_code == 0
+    for cmd in ("plugin", "rate-status", "webhook", "check-update"):
+        assert cmd in result.output, f"'{cmd}' missing from help output"

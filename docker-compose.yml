@@ -1,0 +1,116 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# JARVIS — Local + Cloud unified stack
+# ═══════════════════════════════════════════════════════════════════════════
+# Local dev (mirrors cloud exactly):
+#   docker compose up
+#
+# With cloud sync (bidirectional local ↔ cloud state):
+#   docker compose --profile sync up
+#
+# Full stack with auto-update monitoring:
+#   docker compose --profile sync --profile monitor up
+
+version: "3.9"
+
+x-jarvis-env: &jarvis-env
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY in .env}
+  AGENCY_PROVIDER: ${AGENCY_PROVIDER:-anthropic}
+  AGENCY_MODEL: ${AGENCY_MODEL:-claude-opus-4-7}
+  AGENCY_PLANNER_MODEL: ${AGENCY_PLANNER_MODEL:-claude-haiku-4-5}
+  AGENCY_MAX_TOKENS: ${AGENCY_MAX_TOKENS:-16000}
+  # Trust mode: off | on-my-machine | yolo
+  AGENCY_TRUST_MODE: ${AGENCY_TRUST_MODE:-on-my-machine}
+  JARVIS_ENV: ${JARVIS_ENV:-local}
+  TZ: Asia/Jerusalem
+
+services:
+  # ── Primary JARVIS runtime ─────────────────────────────────────────────
+  jarvis:
+    build:
+      context: .
+      dockerfile: runtime/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY:-amjad2161/agency-agents}:${IMAGE_TAG:-latest}
+    container_name: jarvis-local
+    ports:
+      - "${AGENCY_PORT:-8765}:8765"
+    environment:
+      <<: *jarvis-env
+    volumes:
+      - jarvis_data:/root/.agency
+      # live-reload: mount source so edits reflect without rebuild (dev only)
+      # In production these are removed by docker-compose.prod.yml
+      - ./runtime/agency:/app/runtime/agency:ro
+      - ./jarvis:/app/jarvis:ro
+      - ./specialized:/app/specialized:ro
+    restart: unless-stopped
+    healthcheck:
+      # Try /api/health (JSON status==ok); fall back to /api/version (any 2xx)
+      # so the check survives AGENCY_DISABLE_HEALTH=1.
+      test:
+        - "CMD-SHELL"
+        - >-
+          python -c "import urllib.request,json,sys;
+          r=urllib.request.urlopen('http://localhost:8765/api/health',timeout=5);
+          sys.exit(0 if json.loads(r.read()).get('status')=='ok' else 1)"
+          || python -c "import urllib.request;
+          urllib.request.urlopen('http://localhost:8765/api/version',timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    labels:
+      jarvis.role: "runtime"
+      jarvis.env: "local"
+      com.centurylinklabs.watchtower.enable: "true"
+
+  # ── Cloud sync daemon (bidirectional local ↔ cloud) ────────────────────
+  jarvis-sync:
+    build:
+      context: .
+      dockerfile: runtime/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY:-amjad2161/agency-agents}:${IMAGE_TAG:-latest}
+    container_name: jarvis-sync
+    depends_on:
+      jarvis:
+        condition: service_healthy
+    environment:
+      <<: *jarvis-env
+      JARVIS_LOCAL_URL: "http://jarvis:8765"
+      JARVIS_CLOUD_URL: ${JARVIS_CLOUD_URL:-}
+      JARVIS_SYNC_INTERVAL: ${JARVIS_SYNC_INTERVAL:-30}
+      JARVIS_SYNC_SECRET: ${JARVIS_SYNC_SECRET:-}
+    volumes:
+      - jarvis_data:/root/.agency
+      # scripts/ is baked into the image; mount here only for local dev iteration
+      - ./scripts:/app/scripts:ro
+    entrypoint:
+      ["python", "/app/scripts/cloud_sync.py", "--daemon"]
+    restart: unless-stopped
+    profiles:
+      - sync
+    labels:
+      jarvis.role: "sync"
+      com.centurylinklabs.watchtower.enable: "true"
+
+  # ── Watchtower — auto-pulls new cloud images when pushed ───────────────
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: jarvis-watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_POLL_INTERVAL: 300
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_LABEL_ENABLE: "true"
+    command: --label-enable
+    restart: unless-stopped
+    profiles:
+      - monitor
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+
+volumes:
+  jarvis_data:
+    driver: local
+    labels:
+      jarvis.data: "state"
