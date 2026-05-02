@@ -335,6 +335,7 @@ def doctor_cmd(ctx: click.Context) -> None:
 
     # Env flags
     flags = [
+        "AGENCY_BACKEND",
         "AGENCY_MODEL", "AGENCY_PLANNER_MODEL", "AGENCY_MAX_TOKENS",
         "AGENCY_TASK_BUDGET", "AGENCY_MCP_SERVERS",
         "AGENCY_ENABLE_WEB_SEARCH", "AGENCY_ENABLE_CODE_EXECUTION",

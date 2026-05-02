@@ -363,7 +363,7 @@ def test_brainiac_omega_directives_get_complex_model():
         tasks = await core.initialize_omega_premium()
         return tasks
 
-    tasks = asyncio.get_event_loop().run_until_complete(_run())
+    tasks = asyncio.run(_run())
     assert tasks, "omega should produce tasks"
     # At least the first directive has a heavy term (Audit/synthesize/optimize) →
     # model should NOT be haiku (which handles only trivial/simple)

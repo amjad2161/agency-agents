@@ -213,4 +213,183 @@ class PDREstimator:
         return PDRPose(self._x, self._y, self._heading, self._step_count)
 
 
-__all__ = ["MagneticMapper", "PDREstimator", "PDRPose"]
+# ------------------------------------------------------------------
+# Zero-velocity update (ZUPT) — SHOEstimator
+# ------------------------------------------------------------------
+
+
+class SHOEstimator:
+    """Stance-Hypothesis Optimal Estimator (a.k.a. SHOE) — Zero-Velocity Update.
+
+    The detector flags a stance phase when ``|a| < accel_threshold`` for
+    ``min_consecutive`` consecutive samples (default 3 samples,
+    threshold 0.1 m/s² above gravity-removed magnitude).  When a stance is
+    detected the integrated velocity should be reset to zero by the caller.
+    """
+
+    def __init__(
+        self,
+        accel_threshold_mps2: float = 0.1,
+        min_consecutive: int = 3,
+    ) -> None:
+        self.accel_threshold = float(accel_threshold_mps2)
+        self.min_consecutive = max(1, int(min_consecutive))
+        self._consec = 0
+        self._velocity = np.zeros(3, dtype=np.float64)
+
+    def update(self, accel_mag_residual: float, dt: float = 0.02) -> bool:
+        """Push one accelerometer-magnitude residual sample and integrate.
+
+        ``accel_mag_residual`` is |a| - g.  Returns True when ZUPT fires
+        (velocity has just been reset to zero).
+        """
+        a = abs(float(accel_mag_residual))
+        zupt = False
+        if a < self.accel_threshold:
+            self._consec += 1
+            if self._consec >= self.min_consecutive:
+                self._velocity[:] = 0.0
+                zupt = True
+        else:
+            self._consec = 0
+            # Naive 1-D integration along magnitude direction; callers may
+            # replace this with a 3-axis variant.
+            self._velocity[0] += float(accel_mag_residual) * float(dt)
+        return zupt
+
+    def detect_zero_velocity(self, samples: list[float]) -> bool:
+        """Convenience: classify a window of accel-magnitude residuals."""
+        if len(samples) < self.min_consecutive:
+            return False
+        tail = samples[-self.min_consecutive:]
+        return all(abs(float(s)) < self.accel_threshold for s in tail)
+
+    @property
+    def velocity(self) -> np.ndarray:
+        return self._velocity.copy()
+
+    def reset(self) -> None:
+        self._consec = 0
+        self._velocity[:] = 0.0
+
+
+# ------------------------------------------------------------------
+# Heading corrector with magnetometer calibration
+# ------------------------------------------------------------------
+
+
+class HeadingCorrector:
+    """Magnetometer soft-iron / hard-iron calibration via least-squares.
+
+    Fits an ellipsoid to a cloud of magnetometer samples and returns
+    ``(soft_iron_3x3, hard_iron_3vec)`` such that calibrated readings are::
+
+        m_cal = soft_iron @ (m_raw - hard_iron)
+
+    The fit is closed-form: the ellipsoid is parameterised as
+    ``(m - b)^T A (m - b) = 1`` and we recover B = sqrt(A) so the calibrated
+    samples lie on a unit sphere.
+    """
+
+    def __init__(self) -> None:
+        self.soft_iron = np.eye(3, dtype=np.float64)
+        self.hard_iron = np.zeros(3, dtype=np.float64)
+
+    def calibrate(self, mag_samples: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        samples = np.asarray(mag_samples, dtype=np.float64)
+        if samples.ndim != 2 or samples.shape[1] != 3:
+            raise ValueError("mag_samples must have shape (N, 3)")
+        if samples.shape[0] < 9:
+            raise ValueError("need at least 9 samples for ellipsoid fit")
+
+        # Hard-iron offset: centre of the cloud is a robust starting point.
+        b = samples.mean(axis=0)
+        centred = samples - b
+
+        # Solve for symmetric A in (m - b)^T A (m - b) = 1
+        # Build the design matrix on the upper-triangular elements of A.
+        x, y, z = centred[:, 0], centred[:, 1], centred[:, 2]
+        D = np.column_stack(
+            [x * x, y * y, z * z, 2 * x * y, 2 * x * z, 2 * y * z]
+        )
+        rhs = np.ones(samples.shape[0], dtype=np.float64)
+        coeffs, *_ = np.linalg.lstsq(D, rhs, rcond=None)
+        A = np.array(
+            [
+                [coeffs[0], coeffs[3], coeffs[4]],
+                [coeffs[3], coeffs[1], coeffs[5]],
+                [coeffs[4], coeffs[5], coeffs[2]],
+            ],
+            dtype=np.float64,
+        )
+        # Ensure positive-definite, then take symmetric square root.
+        evals, evecs = np.linalg.eigh(A)
+        evals = np.clip(evals, 1e-12, None)
+        sqrt_A = evecs @ np.diag(np.sqrt(evals)) @ evecs.T
+
+        self.hard_iron = b
+        self.soft_iron = sqrt_A
+        return self.soft_iron, self.hard_iron
+
+    def apply(self, mag_raw: np.ndarray) -> np.ndarray:
+        m = np.asarray(mag_raw, dtype=np.float64)
+        return self.soft_iron @ (m - self.hard_iron)
+
+
+# ------------------------------------------------------------------
+# Barometric altimeter
+# ------------------------------------------------------------------
+
+
+class BarometricAltimeter:
+    """Pressure-to-altitude converter + simple floor detector.
+
+    Uses the international barometric (hypsometric) formula::
+
+        h = (T0 / L) * (1 - (p / p0) ** (R*L / (g*M)))
+
+    With T0=288.15 K, L=0.0065 K/m, p0=101325 Pa,
+    g=9.80665 m/s², M=0.0289644 kg/mol, R=8.31446 J/(mol·K).
+    """
+
+    T0 = 288.15
+    L = 0.0065
+    G = 9.80665
+    M = 0.0289644
+    R = 8.31446
+
+    @classmethod
+    def pressure_to_altitude(cls, p_pa: float, p0_pa: float = 101325.0) -> float:
+        if p_pa <= 0 or p0_pa <= 0:
+            raise ValueError("pressures must be positive Pa")
+        exponent = (cls.R * cls.L) / (cls.G * cls.M)
+        return float((cls.T0 / cls.L) * (1.0 - (float(p_pa) / float(p0_pa)) ** exponent))
+
+    @staticmethod
+    def floor_detector(
+        alt_history: list[float],
+        floor_height_m: float = 3.0,
+        ground_alt_m: float = 0.0,
+    ) -> int:
+        """Return current floor (0 = ground) from a history of altitudes.
+
+        Uses the median of the last 10 samples to suppress short-term noise,
+        then quantises by ``floor_height_m``.
+        """
+        if not alt_history:
+            return 0
+        tail = alt_history[-10:]
+        sorted_tail = sorted(tail)
+        median = sorted_tail[len(sorted_tail) // 2]
+        rel = median - ground_alt_m
+        return int(rel // float(floor_height_m))
+
+
+__all__ = [
+    "MagneticMapper",
+    "PDREstimator",
+    "PDRPose",
+    "SHOEstimator",
+    "HeadingCorrector",
+    "BarometricAltimeter",
+]

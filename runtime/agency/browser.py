@@ -50,6 +50,7 @@ try:
     from bs4 import BeautifulSoup as _BS  # type: ignore
     _BS4_OK = True
 except ImportError:
+    _BS = None  # type: ignore[assignment]
     _BS4_OK = False
 
 

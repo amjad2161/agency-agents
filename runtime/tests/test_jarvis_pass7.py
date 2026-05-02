@@ -279,13 +279,24 @@ class TestPublicAPI:
 # ---------------------------------------------------------------------------
 
 def _agency_cmd() -> list[str]:
-    """Resolve the agency CLI: installed script or python -c entrypoint fallback."""
-    import shutil
-    ep = shutil.which("agency")
-    if ep:
-        return [ep]
-    # Fallback: call the click entrypoint directly via python
+    """Resolve the agency CLI: prefer python -m agency so it works without install."""
+    # Always invoke via python module so PYTHONPATH/sys.path resolves correctly,
+    # even when an installed `agency` shim exists for a different interpreter.
+    import os
+    runtime_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = runtime_dir + (os.pathsep + existing if existing else "")
     return [sys.executable, "-c", "from agency.cli import main; main()"]
+
+
+def _agency_env() -> dict:
+    import os
+    runtime_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = runtime_dir + (os.pathsep + existing if existing else "")
+    return env
 
 
 class TestCLI:
@@ -295,6 +306,7 @@ class TestCLI:
             _agency_cmd() + ["--help"],
             capture_output=True,
             text=True,
+            env=_agency_env(),
         )
         assert result.returncode == 0, f"--help exited {result.returncode}: {result.stderr}"
 
@@ -303,6 +315,7 @@ class TestCLI:
             _agency_cmd() + ["--help"],
             capture_output=True,
             text=True,
+            env=_agency_env(),
         )
         output = result.stdout + result.stderr
         assert "run" in output.lower(), "CLI help should mention 'run' command"
@@ -312,6 +325,7 @@ class TestCLI:
             _agency_cmd() + ["list"],
             capture_output=True,
             text=True,
+            env=_agency_env(),
         )
         assert result.returncode == 0, f"'list' exited {result.returncode}: {result.stderr}"
 

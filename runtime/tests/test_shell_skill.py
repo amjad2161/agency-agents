@@ -171,11 +171,12 @@ class TestYoloMode:
 
 class TestTimeout:
     @pytest.mark.slow
-    def test_timeout_raises_timed_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_timeout_raises_timed_out(self, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
         _set_trust(monkeypatch, "on-my-machine")
-        # python3 is in SAFE_ALLOWLIST; time.sleep(10) guarantees the process
-        # outlasts the 1-second timeout without needing enforce_allowlist=False.
-        result = _skill(timeout=1).execute("python3 -c 'import time; time.sleep(10)'")
+        # Use a temp script so quoting is portable across cmd.exe and POSIX shells.
+        script = tmp_path / "sleep10.py"
+        script.write_text("import time\ntime.sleep(10)\n", encoding="utf-8")
+        result = _skill(timeout=1).execute(f"python3 {script}")
         assert result.timed_out
         assert not result.ok
         assert "Timed out" in result.error
@@ -249,10 +250,6 @@ class TestShellResultProperties:
         assert "err" in r.output
 
     def test_output_includes_exit_code_on_failure(self) -> None:
-        r = ShellResult(command="cmd", returncode=2,
-                        trust_mode=TrustMode.ON_MY_MACHINE)
-        assert "exit: 2" in r.output
-def test_failure(self) -> None:
         r = ShellResult(command="cmd", returncode=2,
                         trust_mode=TrustMode.ON_MY_MACHINE)
         assert "exit: 2" in r.output
