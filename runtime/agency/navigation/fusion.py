@@ -503,5 +503,250 @@ class AdaptiveEKF(EKF):
         )
 
 
+# ---------------------------------------------------------------------------
+# Graph-SLAM pose graph optimizer (Round 3)
+# ---------------------------------------------------------------------------
+
+try:  # numpy is already a hard dep elsewhere in the package
+    import numpy as _np
+except Exception:  # pragma: no cover
+    _np = None
+
+
+@dataclass
+class _PoseNode:
+    pose_id: int
+    x: float
+    y: float
+    theta: float
+
+
+@dataclass
+class _PoseConstraint:
+    from_id: int
+    to_id: int
+    dx: float
+    dy: float
+    dtheta: float
+    info: list  # 3x3 information matrix
+
+
+def _wrap_pi(a: float) -> float:
+    while a > math.pi:
+        a -= 2 * math.pi
+    while a < -math.pi:
+        a += 2 * math.pi
+    return a
+
+
+class PoseGraphOptimizer:
+    """2D pose-graph optimizer (Gauss-Newton on SE(2)).
+
+    Nodes are (x, y, theta) poses indexed by ``pose_id``.  Edges are
+    relative-motion constraints with a 3x3 information matrix.  ``optimize``
+    runs Gauss-Newton iterations until the global cost change drops below
+    ``1e-6`` or ``max_iterations`` is reached.
+
+    Sparse linear solver uses ``numpy.linalg.solve`` on the dense
+    information matrix — sufficient for the test-scale graphs used here.
+    The first node added is anchored (gauge fixed) to remove the global
+    translation/rotation freedom.
+    """
+
+    def __init__(self) -> None:
+        if _np is None:  # pragma: no cover
+            raise RuntimeError("PoseGraphOptimizer requires numpy")
+        self._nodes: dict[int, _PoseNode] = {}
+        self._order: list[int] = []
+        self._edges: list[_PoseConstraint] = []
+        self._last_cost: float = 0.0
+        self._converged: bool = False
+
+    # -- mutation -----------------------------------------------------------
+    def add_pose(self, pose_id: int, x: float, y: float, theta: float) -> None:
+        if pose_id in self._nodes:
+            raise ValueError(f"pose {pose_id} already exists")
+        self._nodes[pose_id] = _PoseNode(pose_id, float(x), float(y),
+                                         _wrap_pi(float(theta)))
+        self._order.append(pose_id)
+
+    def add_constraint(
+        self,
+        from_id: int,
+        to_id: int,
+        dx: float,
+        dy: float,
+        dtheta: float,
+        info_matrix: list,
+    ) -> None:
+        if from_id not in self._nodes or to_id not in self._nodes:
+            raise ValueError("both endpoints must be added first")
+        self._edges.append(_PoseConstraint(
+            from_id, to_id,
+            float(dx), float(dy), _wrap_pi(float(dtheta)),
+            [list(row) for row in info_matrix],
+        ))
+
+    # -- optimization -------------------------------------------------------
+    def _compute_residual_and_J(
+        self, edge: _PoseConstraint,
+    ):
+        """Residual r and Jacobians J_i, J_j for one binary edge."""
+        ni = self._nodes[edge.from_id]
+        nj = self._nodes[edge.to_id]
+        c, s = math.cos(ni.theta), math.sin(ni.theta)
+        dx_w = nj.x - ni.x
+        dy_w = nj.y - ni.y
+        # measured - predicted (in i's frame)
+        pred_dx =  c * dx_w + s * dy_w
+        pred_dy = -s * dx_w + c * dy_w
+        pred_dt = _wrap_pi(nj.theta - ni.theta)
+        r = _np.array([
+            edge.dx - pred_dx,
+            edge.dy - pred_dy,
+            _wrap_pi(edge.dtheta - pred_dt),
+        ], dtype=float)
+        # Jacobians (∂pred/∂x_i, ∂pred/∂x_j); residual = meas - pred so
+        # ∂r/∂x_i = -∂pred/∂x_i.
+        J_i = _np.array([
+            [ c,  s, -s * dx_w + c * dy_w],
+            [-s,  c, -c * dx_w - s * dy_w],
+            [ 0,  0,  1.0],
+        ], dtype=float)
+        J_j = _np.array([
+            [-c, -s, 0.0],
+            [ s, -c, 0.0],
+            [ 0,  0, -1.0],
+        ], dtype=float)
+        return r, J_i, J_j
+
+    def optimize(self, max_iterations: int = 100, tol: float = 1e-6) -> dict:
+        """Gauss-Newton optimization.  Returns diagnostics."""
+        if not self._edges:
+            return {"iterations": 0, "final_cost": 0.0,
+                    "converged": True, "delta": 0.0}
+        n = len(self._order)
+        index = {pid: i for i, pid in enumerate(self._order)}
+        prev_cost = float("inf")
+        iters = 0
+        converged = False
+        delta_norm = float("inf")
+        for iters in range(1, max_iterations + 1):
+            H = _np.zeros((3 * n, 3 * n), dtype=float)
+            b = _np.zeros(3 * n, dtype=float)
+            cost = 0.0
+            for edge in self._edges:
+                r, J_i, J_j = self._compute_residual_and_J(edge)
+                Omega = _np.array(edge.info, dtype=float)
+                cost += float(r @ Omega @ r)
+                i = index[edge.from_id]
+                j = index[edge.to_id]
+                # Block updates.
+                Hii = J_i.T @ Omega @ J_i
+                Hjj = J_j.T @ Omega @ J_j
+                Hij = J_i.T @ Omega @ J_j
+                bi = J_i.T @ Omega @ r
+                bj = J_j.T @ Omega @ r
+                H[3*i:3*i+3, 3*i:3*i+3] += Hii
+                H[3*j:3*j+3, 3*j:3*j+3] += Hjj
+                H[3*i:3*i+3, 3*j:3*j+3] += Hij
+                H[3*j:3*j+3, 3*i:3*i+3] += Hij.T
+                b[3*i:3*i+3] += bi
+                b[3*j:3*j+3] += bj
+            # Anchor first node — add identity block.
+            H[0:3, 0:3] += _np.eye(3) * 1e6
+            try:
+                dx = _np.linalg.solve(H, -b)
+            except _np.linalg.LinAlgError:
+                break
+            delta_norm = float(_np.linalg.norm(dx))
+            for k, pid in enumerate(self._order):
+                node = self._nodes[pid]
+                node.x += float(dx[3*k])
+                node.y += float(dx[3*k+1])
+                node.theta = _wrap_pi(node.theta + float(dx[3*k+2]))
+            if abs(prev_cost - cost) < tol:
+                converged = True
+                self._last_cost = cost
+                break
+            prev_cost = cost
+            self._last_cost = cost
+        self._converged = converged
+        return {
+            "iterations": iters,
+            "final_cost": self._last_cost,
+            "converged": converged,
+            "delta": delta_norm,
+        }
+
+    # -- queries ------------------------------------------------------------
+    def get_pose(self, pose_id: int) -> tuple:
+        n = self._nodes[pose_id]
+        return (n.x, n.y, n.theta)
+
+    def detect_loop_closure(
+        self,
+        pose_id: int,
+        radius_m: float = 10.0,
+        min_id_gap: int = 5,
+    ) -> list:
+        """Return candidate pose IDs whose Euclidean distance from
+        ``pose_id`` is below ``radius_m`` and whose index gap is at least
+        ``min_id_gap`` (avoids matching neighbours along the trajectory).
+        """
+        if pose_id not in self._nodes:
+            return []
+        ref = self._nodes[pose_id]
+        out = []
+        for other_id, n in self._nodes.items():
+            if other_id == pose_id:
+                continue
+            if abs(other_id - pose_id) < min_id_gap:
+                continue
+            d = math.hypot(n.x - ref.x, n.y - ref.y)
+            if d <= radius_m:
+                out.append(other_id)
+        return out
+
+    def marginal_covariance(self, pose_id: int) -> list:
+        """Extract a 3x3 covariance block from the inverse of the joint
+        information matrix accumulated at the last linearisation point.
+        """
+        if not self._edges or pose_id not in self._nodes:
+            return [[0.0]*3 for _ in range(3)]
+        n = len(self._order)
+        index = {pid: i for i, pid in enumerate(self._order)}
+        H = _np.zeros((3 * n, 3 * n), dtype=float)
+        for edge in self._edges:
+            _, J_i, J_j = self._compute_residual_and_J(edge)
+            Omega = _np.array(edge.info, dtype=float)
+            i = index[edge.from_id]
+            j = index[edge.to_id]
+            Hii = J_i.T @ Omega @ J_i
+            Hjj = J_j.T @ Omega @ J_j
+            Hij = J_i.T @ Omega @ J_j
+            H[3*i:3*i+3, 3*i:3*i+3] += Hii
+            H[3*j:3*j+3, 3*j:3*j+3] += Hjj
+            H[3*i:3*i+3, 3*j:3*j+3] += Hij
+            H[3*j:3*j+3, 3*i:3*i+3] += Hij.T
+        H[0:3, 0:3] += _np.eye(3) * 1e6
+        try:
+            cov = _np.linalg.inv(H)
+        except _np.linalg.LinAlgError:
+            return [[0.0]*3 for _ in range(3)]
+        k = index[pose_id]
+        block = cov[3*k:3*k+3, 3*k:3*k+3]
+        return block.tolist()
+
+    @property
+    def n_poses(self) -> int:
+        return len(self._nodes)
+
+    @property
+    def n_edges(self) -> int:
+        return len(self._edges)
+
+
 __all__ = ["EKF","UKF","ParticleFilter","SensorFusion",
-           "AdaptiveEKF","RAIMResult","CHI2_3_95"]
+           "AdaptiveEKF","RAIMResult","CHI2_3_95",
+           "PoseGraphOptimizer"]

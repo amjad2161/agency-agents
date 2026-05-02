@@ -473,6 +473,204 @@ class SonarSLAM:
         yaw = math.atan2(R[1, 0], R[0, 0])
         return Pose3D(x=float(t[0]), y=float(t[1]), yaw=yaw)
 
+    # ---------------------------------------------------------------- NDT --
+    def scan_matching_ndt(
+        self,
+        scan_a: np.ndarray,
+        scan_b: np.ndarray,
+        cell_size: float = 1.0,
+        max_iter: int = 20,
+    ) -> Dict[str, object]:
+        """Normal Distribution Transform scan matching.
+
+        Fits 2-D Gaussians to cells of ``scan_a`` then runs Newton steps to
+        find the rigid (R, t) that maximises the likelihood of points in
+        ``scan_b`` under those Gaussians.  Faster than ICP for sparse sonar
+        scans because it avoids the O(N*M) nearest-neighbour search.
+
+        Returns dict with ``R`` (2x2), ``t`` (2,), ``score``, ``iterations``.
+        """
+        a = np.asarray(scan_a, dtype=float)
+        b = np.asarray(scan_b, dtype=float)
+        if (a.ndim != 2 or a.shape[1] != 2 or b.ndim != 2 or b.shape[1] != 2
+                or a.shape[0] == 0 or b.shape[0] == 0):
+            return {"R": np.eye(2), "t": np.zeros(2),
+                    "score": 0.0, "iterations": 0}
+        cells = self._build_ndt_cells(a, cell_size)
+        # Pose parameter: (tx, ty, theta).  Initialise at zero.
+        p = np.zeros(3, dtype=float)
+        score = 0.0
+        iters = 0
+        for iters in range(1, max_iter + 1):
+            R = self._rot2d(p[2])
+            t = p[:2]
+            transformed = (R @ b.T).T + t
+            score, grad, H = self._ndt_score_and_hessian(
+                transformed, b, cells, p[2],
+            )
+            # Levenberg-style damping for stability.
+            H_d = H + np.eye(3) * 1e-3
+            try:
+                dp = np.linalg.solve(H_d, -grad)
+            except np.linalg.LinAlgError:
+                break
+            p = p + dp
+            if np.linalg.norm(dp) < 1e-6:
+                break
+        R = self._rot2d(p[2])
+        return {
+            "R": R,
+            "t": p[:2],
+            "score": float(score),
+            "iterations": iters,
+        }
+
+    @staticmethod
+    def _rot2d(theta: float) -> np.ndarray:
+        c, s = math.cos(theta), math.sin(theta)
+        return np.array([[c, -s], [s, c]], dtype=float)
+
+    @staticmethod
+    def _build_ndt_cells(points: np.ndarray, cell_size: float) -> Dict:
+        """Bin ``points`` into cells of size ``cell_size`` and fit a Gaussian
+        per cell.  Cells with fewer than 3 points are skipped.  Returns
+        dict mapping (ix, iy) → (mean (2,), inv_cov (2x2))."""
+        cs = max(float(cell_size), 1e-6)
+        groups: Dict[Tuple[int, int], List[np.ndarray]] = {}
+        for pt in points:
+            key = (int(math.floor(pt[0] / cs)), int(math.floor(pt[1] / cs)))
+            groups.setdefault(key, []).append(pt)
+        cells: Dict[Tuple[int, int], Tuple[np.ndarray, np.ndarray]] = {}
+        for key, pts in groups.items():
+            if len(pts) < 3:
+                continue
+            arr = np.array(pts, dtype=float)
+            mu = arr.mean(axis=0)
+            cov = np.cov(arr.T) + np.eye(2) * 1e-3
+            try:
+                inv = np.linalg.inv(cov)
+            except np.linalg.LinAlgError:
+                continue
+            cells[key] = (mu, inv)
+        return cells
+
+    @staticmethod
+    def _ndt_score_and_hessian(
+        transformed: np.ndarray,
+        original: np.ndarray,
+        cells: Dict,
+        theta: float,
+    ) -> Tuple[float, np.ndarray, np.ndarray]:
+        """Compute NDT score, gradient (3,) and Hessian (3x3) wrt (tx,ty,θ)."""
+        if not cells:
+            return 0.0, np.zeros(3), np.eye(3)
+        score = 0.0
+        grad = np.zeros(3, dtype=float)
+        H = np.zeros((3, 3), dtype=float)
+        s, c = math.sin(theta), math.cos(theta)
+        for i, q in enumerate(transformed):
+            # Find nearest cell mean (cheap: round to cell index of q).
+            best_key = None
+            best_d = float("inf")
+            for key in cells:
+                mu, _ = cells[key]
+                d = (q[0] - mu[0]) ** 2 + (q[1] - mu[1]) ** 2
+                if d < best_d:
+                    best_d = d
+                    best_key = key
+            if best_key is None:
+                continue
+            mu, inv = cells[best_key]
+            r = q - mu
+            e = math.exp(-0.5 * float(r @ inv @ r))
+            score += e
+            # Jacobian of q wrt (tx, ty, theta)
+            x0, y0 = original[i]
+            J = np.array([
+                [1.0, 0.0, -s * x0 - c * y0],
+                [0.0, 1.0,  c * x0 - s * y0],
+            ], dtype=float)
+            g_local = -e * (inv @ r) @ J
+            grad += g_local
+            H += e * (J.T @ inv @ J)
+        return score, grad, H
+
+    # ----------------------------------------------------- loop closure ----
+    def bathymetric_loop_closure(
+        self,
+        map_store: "BathymetricMatcher",
+        depth_profile: np.ndarray,
+        heading: float = 0.0,
+        threshold: float = 0.85,
+    ) -> Dict[str, object]:
+        """Compare ``depth_profile`` against ``map_store``'s grid and trigger
+        loop closure when normalised cross-correlation exceeds ``threshold``.
+        """
+        if map_store.depth_grid is None:
+            return {"closed": False, "score": 0.0, "lat": 0.0, "lon": 0.0,
+                    "reason": "no_map"}
+        prof = np.asarray(depth_profile, dtype=float).ravel()
+        if prof.size < 2:
+            return {"closed": False, "score": 0.0, "lat": 0.0, "lon": 0.0,
+                    "reason": "profile_too_small"}
+        H, W = map_store.depth_grid.shape
+        L = prof.size
+        best_score = -float("inf")
+        best_ix, best_iy = 0, 0
+        cos_h = math.cos(heading)
+        sin_h = math.sin(heading)
+        for iy in range(H):
+            for ix in range(W):
+                xs = ix + np.arange(L) * sin_h
+                ys = iy + np.arange(L) * cos_h
+                xi = np.clip(np.round(xs).astype(int), 0, W - 1)
+                yi = np.clip(np.round(ys).astype(int), 0, H - 1)
+                ref = map_store.depth_grid[yi, xi]
+                m0 = prof - prof.mean()
+                r0 = ref - ref.mean()
+                denom = float(np.linalg.norm(m0) * np.linalg.norm(r0))
+                if denom < 1e-12:
+                    continue
+                ncc = float(np.dot(m0, r0) / denom)
+                if ncc > best_score:
+                    best_score = ncc
+                    best_ix, best_iy = ix, iy
+        meters_per_deg_lat = 111_320.0
+        meters_per_deg_lon = 111_320.0 * max(
+            0.01, math.cos(math.radians(map_store.origin_lat)),
+        )
+        lat = map_store.origin_lat + (best_iy * map_store.resolution_m) / meters_per_deg_lat
+        lon = map_store.origin_lon + (best_ix * map_store.resolution_m) / meters_per_deg_lon
+        closed = best_score >= float(threshold)
+        return {
+            "closed": closed,
+            "score": float(best_score),
+            "lat": float(lat),
+            "lon": float(lon),
+            "threshold": float(threshold),
+        }
+
+    # -------------------------------------------------- uncertainty prop ---
+    def uncertainty_propagation(
+        self,
+        scan_jacobian: Optional[np.ndarray] = None,
+        prior_cov: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        """Propagate prior pose covariance through scan-matching Jacobian.
+
+        Returns a 3x3 covariance.  Defaults: identity Jacobian and unit
+        prior — useful for runtime monitoring rather than estimation.
+        """
+        J = (np.asarray(scan_jacobian, dtype=float) if scan_jacobian is not None
+             else np.eye(3))
+        P = (np.asarray(prior_cov, dtype=float) if prior_cov is not None
+             else np.eye(3) * 0.1)
+        if J.shape != (3, 3) or P.shape != (3, 3):
+            return np.eye(3) * 0.1
+        # Standard linearised propagation: P' = J P J^T + small additive noise
+        out = J @ P @ J.T + np.eye(3) * 1e-4
+        return out
+
     @staticmethod
     def _icp(source: np.ndarray, target: np.ndarray,
              max_iter: int = 20) -> Tuple[np.ndarray, np.ndarray]:
