@@ -1,10 +1,6 @@
-"""Bridges — external service adapters with stdlib-only HTTP."""
-from bridges.gitnexus import GitNexusBridge, GitNexusError
-from bridges.instagram import InstagramBridge, InstagramError
+"""Bridges package — visualization, avatar, physics integrations."""
+from bridges.neural_avatar import NeuralAvatar
+from bridges.jarvs import JarVSBridge
+from bridges.cubesandbox import CubeSandbox
 
-__all__ = [
-    "GitNexusBridge",
-    "GitNexusError",
-    "InstagramBridge",
-    "InstagramError",
-]
+__all__ = ["NeuralAvatar", "JarVSBridge", "CubeSandbox"]
