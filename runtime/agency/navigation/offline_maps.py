@@ -1319,9 +1319,58 @@ class WMMModel:
         return decl, incl, F
 
     def declination(self, lat: float, lon: float,
-                    year: float) -> float:
-        d, _, _ = self.compute(lat, lon, 0.0, year)
+                    alt_km: float = 0.0, year: float = 2025.0) -> float:
+        """Magnetic declination (deg).  Backward-compat: accepts the 3-arg
+        legacy form ``declination(lat, lon, year)`` by detecting a year-like
+        third positional value.
+        """
+        if alt_km > 100.0:  # legacy 3-arg path: third arg is year
+            year = alt_km
+            alt_km = 0.0
+        d, _, _ = self.compute(lat, lon, alt_km * 1000.0, year)
         return d
+
+    def inclination(self, lat: float, lon: float,
+                    alt_km: float = 0.0, year: float = 2025.0) -> float:
+        """Magnetic inclination / dip angle (deg)."""
+        _, i, _ = self.compute(lat, lon, alt_km * 1000.0, year)
+        return i
+
+    def total_intensity(self, lat: float, lon: float,
+                        alt_km: float = 0.0, year: float = 2025.0) -> float:
+        """Total field magnitude |B| (nT)."""
+        _, _, f = self.compute(lat, lon, alt_km * 1000.0, year)
+        return f
+
+    def grid_survey(
+        self,
+        lat_range: tuple,
+        lon_range: tuple,
+        step_deg: float = 1.0,
+        year: float = 2025.0,
+        alt_km: float = 0.0,
+    ):
+        """Return a numpy array of shape (Nlat, Nlon, 3) holding (D, I, F).
+        ``lat_range`` / ``lon_range`` are inclusive (lo, hi) tuples.
+        """
+        try:
+            import numpy as _np_local
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError("grid_survey requires numpy") from exc
+        lat_lo, lat_hi = float(lat_range[0]), float(lat_range[1])
+        lon_lo, lon_hi = float(lon_range[0]), float(lon_range[1])
+        step = max(float(step_deg), 1e-6)
+        lats = _np_local.arange(lat_lo, lat_hi + step / 2, step)
+        lons = _np_local.arange(lon_lo, lon_hi + step / 2, step)
+        out = _np_local.zeros((len(lats), len(lons), 3), dtype=float)
+        for i, la in enumerate(lats):
+            for j, lo in enumerate(lons):
+                d, inc, f = self.compute(float(la), float(lo),
+                                         alt_km * 1000.0, year)
+                out[i, j, 0] = d
+                out[i, j, 1] = inc
+                out[i, j, 2] = f
+        return out
 
 
 # ===========================================================================

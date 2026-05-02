@@ -385,6 +385,163 @@ class BarometricAltimeter:
         return int(rel // float(floor_height_m))
 
 
+# ---------------------------------------------------------------------------
+# IMU Preintegration (Round 4)
+# ---------------------------------------------------------------------------
+
+
+def _skew(v: np.ndarray) -> np.ndarray:
+    """Skew-symmetric matrix of a 3-vector."""
+    return np.array([
+        [0.0, -v[2], v[1]],
+        [v[2], 0.0, -v[0]],
+        [-v[1], v[0], 0.0],
+    ], dtype=float)
+
+
+def _exp_so3(omega: np.ndarray) -> np.ndarray:
+    """Rodriguez formula: exp of skew(omega) → 3x3 rotation."""
+    theta = float(np.linalg.norm(omega))
+    if theta < 1e-10:
+        return np.eye(3) + _skew(omega)
+    K = _skew(omega / theta)
+    return (np.eye(3)
+            + math.sin(theta) * K
+            + (1 - math.cos(theta)) * (K @ K))
+
+
+class IMUPreintegration:
+    """Preintegration of IMU between keyframes (Forster et al. style).
+
+    Accumulates body-frame ΔR (SO(3) via Rodriguez), Δv, Δp under a
+    constant-bias assumption.  Stores first-order Jacobians for online
+    bias correction and propagates a 9x9 covariance for fusion factors.
+    """
+
+    def __init__(
+        self,
+        gyro_bias: Optional[np.ndarray] = None,
+        accel_bias: Optional[np.ndarray] = None,
+        sigma_a: float = 0.1,
+        sigma_g: float = 0.01,
+        gravity: float = 9.80665,
+    ) -> None:
+        self.gyro_bias = (np.zeros(3, dtype=float) if gyro_bias is None
+                          else np.asarray(gyro_bias, dtype=float).copy())
+        self.accel_bias = (np.zeros(3, dtype=float) if accel_bias is None
+                           else np.asarray(accel_bias, dtype=float).copy())
+        self.sigma_a = float(sigma_a)
+        self.sigma_g = float(sigma_g)
+        self.g = float(gravity)
+        self.reset()
+
+    def reset(self) -> None:
+        """Clear accumulated state — starts a new preintegration window."""
+        self.dR = np.eye(3, dtype=float)
+        self.dv = np.zeros(3, dtype=float)
+        self.dp = np.zeros(3, dtype=float)
+        self.dt_total = 0.0
+        # Bias-correction Jacobians.
+        self.J_R_bg = np.zeros((3, 3), dtype=float)
+        self.J_v_ba = np.zeros((3, 3), dtype=float)
+        self.J_v_bg = np.zeros((3, 3), dtype=float)
+        self.J_p_ba = np.zeros((3, 3), dtype=float)
+        self.J_p_bg = np.zeros((3, 3), dtype=float)
+        # 9x9 covariance ordered [δθ, δv, δp].
+        self.P = np.zeros((9, 9), dtype=float)
+
+    def integrate(
+        self,
+        accel: np.ndarray,
+        gyro: np.ndarray,
+        dt: float,
+    ) -> None:
+        """Integrate one IMU sample (accel, gyro in body frame, dt in s)."""
+        if dt <= 0.0:
+            return
+        a = np.asarray(accel, dtype=float).reshape(3) - self.accel_bias
+        w = np.asarray(gyro, dtype=float).reshape(3) - self.gyro_bias
+
+        dR_step = _exp_so3(w * dt)
+        a_world = self.dR @ a
+        self.dp = self.dp + self.dv * dt + 0.5 * a_world * dt * dt
+        self.dv = self.dv + a_world * dt
+        self.dR = self.dR @ dR_step
+
+        # Bias-correction Jacobians (small-angle approximations).
+        skew_a = _skew(a)
+        self.J_v_ba = self.J_v_ba - self.dR * dt
+        self.J_p_ba = self.J_p_ba + self.J_v_ba * dt - 0.5 * self.dR * dt * dt
+        self.J_R_bg = self.J_R_bg - self.dR * dt
+        self.J_v_bg = self.J_v_bg - self.dR @ skew_a * dt
+        self.J_p_bg = self.J_p_bg + self.J_v_bg * dt
+
+        # Covariance propagation.
+        F = np.eye(9, dtype=float)
+        F[3:6, 0:3] = -self.dR @ skew_a * dt
+        F[6:9, 0:3] = -0.5 * self.dR @ skew_a * dt * dt
+        F[6:9, 3:6] = np.eye(3) * dt
+        Qc = np.zeros((9, 9), dtype=float)
+        Qc[0:3, 0:3] = np.eye(3) * (self.sigma_g ** 2) * dt
+        Qc[3:6, 3:6] = np.eye(3) * (self.sigma_a ** 2) * dt
+        Qc[6:9, 6:9] = np.eye(3) * (self.sigma_a ** 2) * dt * dt * 0.25
+        self.P = F @ self.P @ F.T + Qc
+
+        self.dt_total += dt
+
+    def bias_corrected_delta(
+        self,
+        bg_correction: np.ndarray,
+        ba_correction: np.ndarray,
+    ) -> dict:
+        """Return ΔR, Δv, Δp first-order corrected for small bias deltas."""
+        bg = np.asarray(bg_correction, dtype=float).reshape(3)
+        ba = np.asarray(ba_correction, dtype=float).reshape(3)
+        dR_corr = self.dR @ _exp_so3(self.J_R_bg @ bg)
+        dv_corr = self.dv + self.J_v_ba @ ba + self.J_v_bg @ bg
+        dp_corr = self.dp + self.J_p_ba @ ba + self.J_p_bg @ bg
+        return {"dR": dR_corr, "dv": dv_corr, "dp": dp_corr}
+
+    def covariance(self) -> np.ndarray:
+        """Return the 9x9 covariance matrix [δθ, δv, δp]."""
+        return self.P.copy()
+
+    def create_factor(self, pose_i: dict, pose_j: dict) -> dict:
+        """Build a preintegration factor between keyframes i and j.
+
+        ``pose_i``/``pose_j`` dicts must provide ``R`` (3x3), ``v`` (3,),
+        ``p`` (3,).  Returns a residual (9,) plus simple Jacobians wrt the
+        j-frame state — enough for downstream factor-graph wiring.
+        """
+        Ri = np.asarray(pose_i["R"], dtype=float)
+        Rj = np.asarray(pose_j["R"], dtype=float)
+        vi = np.asarray(pose_i["v"], dtype=float).reshape(3)
+        vj = np.asarray(pose_j["v"], dtype=float).reshape(3)
+        pi = np.asarray(pose_i["p"], dtype=float).reshape(3)
+        pj = np.asarray(pose_j["p"], dtype=float).reshape(3)
+        dt = max(self.dt_total, 1e-9)
+        g = np.array([0.0, 0.0, -self.g], dtype=float)
+        dR_pred = Ri.T @ Rj
+        dv_pred = Ri.T @ (vj - vi - g * dt)
+        dp_pred = Ri.T @ (pj - pi - vi * dt - 0.5 * g * dt * dt)
+        dR_err = self.dR.T @ dR_pred
+        r_rot = 0.5 * np.array([
+            dR_err[2, 1] - dR_err[1, 2],
+            dR_err[0, 2] - dR_err[2, 0],
+            dR_err[1, 0] - dR_err[0, 1],
+        ], dtype=float)
+        r_vel = dv_pred - self.dv
+        r_pos = dp_pred - self.dp
+        residual = np.concatenate([r_rot, r_vel, r_pos])
+        return {
+            "residual": residual,
+            "J_j_R": np.eye(3),
+            "J_j_v": Ri.T,
+            "J_j_p": Ri.T,
+            "dt": dt,
+        }
+
+
 __all__ = [
     "MagneticMapper",
     "PDREstimator",
@@ -392,4 +549,5 @@ __all__ = [
     "SHOEstimator",
     "HeadingCorrector",
     "BarometricAltimeter",
+    "IMUPreintegration",
 ]
