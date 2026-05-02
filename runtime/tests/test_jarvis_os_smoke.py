@@ -32,12 +32,12 @@ def test_jarvis_os_module_parses(name: str) -> None:
     ast.parse(src, filename=str(path))
 
 
-def test_jarvis_os_package_importable() -> None:
-    """The package itself must import without optional GUI/system deps."""
-    sys.path.insert(0, str(REPO_ROOT))
-    try:
-        if "jarvis_os" in sys.modules:
-            del sys.modules["jarvis_os"]
-        import jarvis_os  # noqa: F401
-    finally:
-        sys.path.remove(str(REPO_ROOT))
+def test_jarvis_os_package_importable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The package itself must import without optional GUI/system deps.
+
+    Uses ``monkeypatch.syspath_prepend`` so sys.path is restored even if the
+    import raises, and clears any stale cached module first.
+    """
+    monkeypatch.syspath_prepend(str(REPO_ROOT))
+    monkeypatch.delitem(sys.modules, "jarvis_os", raising=False)
+    import jarvis_os  # noqa: F401

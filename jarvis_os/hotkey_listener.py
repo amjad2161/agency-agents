@@ -16,6 +16,9 @@ LOG_DIR = AGENCY_ROOT / "logs"
 HOTKEY_LOG = LOG_DIR / "jarvis_hotkey.log"
 
 # Debounce window so mashing Win+J doesn't spawn N chat windows.
+# 0.7s is comfortably above a typical fast double-press (~250ms) yet still
+# below a deliberate "open another window" gap, so accidental key repeats
+# collapse into a single launch without feeling laggy.
 _DEBOUNCE_S = 0.7
 _last_fire = 0.0
 

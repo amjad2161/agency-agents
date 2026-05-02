@@ -14,6 +14,9 @@ from tkinter import scrolledtext, messagebox
 from datetime import datetime
 
 AGENCY_URL = os.environ.get("JARVIS_URL", "http://127.0.0.1:8765")
+# Timeout (seconds) for /api/run requests. Used both for the urlopen call and
+# the user-facing timeout message so they stay in sync.
+RUN_TIMEOUT_S = 120
 
 
 class JarvisChat(tk.Tk):
@@ -165,7 +168,7 @@ class JarvisChat(tk.Tk):
                 data=payload,
                 headers={"Content-Type": "application/json"},
             )
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=RUN_TIMEOUT_S) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             answer = (
                 data.get("text")
@@ -184,8 +187,8 @@ class JarvisChat(tk.Tk):
         except TimeoutError:
             self._append_async(
                 "error",
-                "\n[TIMEOUT] Request took longer than 120s. The server may be busy "
-                "or stuck — try again, or check `agency serve` logs.\n\n",
+                f"\n[TIMEOUT] Request took longer than {RUN_TIMEOUT_S}s. The server "
+                "may be busy or stuck — try again, or check `agency serve` logs.\n\n",
             )
             return
         except Exception as e:

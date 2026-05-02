@@ -103,6 +103,14 @@ def start_server(notify=None):
                 except Exception:
                     pass
             return False
+        finally:
+            # Once Popen has duplicated the descriptor into the child, the
+            # parent's copy can be closed; the child keeps writing to the log.
+            if log_fp:
+                try:
+                    log_fp.close()
+                except Exception:
+                    pass
         # Wait up to 15s for server to come up
         for _ in range(30):
             if is_server_alive():
