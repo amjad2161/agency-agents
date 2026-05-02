@@ -747,6 +747,255 @@ class PoseGraphOptimizer:
         return len(self._edges)
 
 
+# ---------------------------------------------------------------------------
+# Generic factor graph (Round 4)
+# ---------------------------------------------------------------------------
+
+
+class FactorGraph:
+    """Generic nonlinear least-squares factor graph.
+
+    Supports unary (prior) and binary factors with user-supplied measurement
+    functions ``h_func`` and information matrices.  Each factor's Jacobian
+    is computed numerically by finite differences — keeps the harness
+    dependency-free and works for any user-defined ``h_func``.
+
+    Variables are flat numpy state vectors with declared dimensions.  The
+    optimiser stacks all variables into a single state vector and runs
+    Gauss-Newton with ``numpy.linalg.solve``.
+    """
+
+    def __init__(self) -> None:
+        if _np is None:  # pragma: no cover
+            raise RuntimeError("FactorGraph requires numpy")
+        self._vars: dict = {}        # var_id -> dim
+        self._values: dict = {}      # var_id -> ndarray
+        self._order: list = []
+        self._unary: list = []
+        self._binary: list = []
+
+    # -- variables ----------------------------------------------------------
+    def add_variable(
+        self,
+        var_id,
+        state_dim: int,
+        initial: Optional["_np.ndarray"] = None,
+    ) -> None:
+        if var_id in self._vars:
+            raise ValueError(f"variable {var_id} already exists")
+        self._vars[var_id] = int(state_dim)
+        self._values[var_id] = (
+            _np.zeros(int(state_dim), dtype=float) if initial is None
+            else _np.asarray(initial, dtype=float).reshape(int(state_dim)).copy()
+        )
+        self._order.append(var_id)
+
+    def set_value(self, var_id, value) -> None:
+        self._values[var_id] = _np.asarray(value, dtype=float).reshape(
+            self._vars[var_id]
+        ).copy()
+
+    def get_value(self, var_id):
+        return self._values[var_id].copy()
+
+    # -- factors ------------------------------------------------------------
+    def add_unary_factor(self, var_id, measurement, info_matrix, h_func) -> None:
+        if var_id not in self._vars:
+            raise ValueError(f"unknown var {var_id}")
+        self._unary.append({
+            "var": var_id,
+            "z": _np.asarray(measurement, dtype=float),
+            "info": _np.asarray(info_matrix, dtype=float),
+            "h": h_func,
+        })
+
+    def add_binary_factor(
+        self, var_id_1, var_id_2, measurement, info_matrix, h_func,
+    ) -> None:
+        if var_id_1 not in self._vars or var_id_2 not in self._vars:
+            raise ValueError("unknown variables in binary factor")
+        self._binary.append({
+            "v1": var_id_1,
+            "v2": var_id_2,
+            "z": _np.asarray(measurement, dtype=float),
+            "info": _np.asarray(info_matrix, dtype=float),
+            "h": h_func,
+        })
+
+    # -- numerical Jacobian -------------------------------------------------
+    @staticmethod
+    def _num_jacobian(h, x, eps: float = 1e-5):
+        h0 = _np.asarray(h(x), dtype=float)
+        n = x.size
+        m = h0.size
+        J = _np.zeros((m, n), dtype=float)
+        for i in range(n):
+            xp = x.copy()
+            xp[i] += eps
+            J[:, i] = (_np.asarray(h(xp), dtype=float) - h0) / eps
+        return h0, J
+
+    @staticmethod
+    def _num_jacobian2(h, x1, x2, eps: float = 1e-5):
+        h0 = _np.asarray(h(x1, x2), dtype=float)
+        m = h0.size
+        J1 = _np.zeros((m, x1.size), dtype=float)
+        J2 = _np.zeros((m, x2.size), dtype=float)
+        for i in range(x1.size):
+            xp = x1.copy(); xp[i] += eps
+            J1[:, i] = (_np.asarray(h(xp, x2), dtype=float) - h0) / eps
+        for i in range(x2.size):
+            xp = x2.copy(); xp[i] += eps
+            J2[:, i] = (_np.asarray(h(x1, xp), dtype=float) - h0) / eps
+        return h0, J1, J2
+
+    # -- optimization -------------------------------------------------------
+    def _index_map(self):
+        idx = {}
+        offset = 0
+        for vid in self._order:
+            d = self._vars[vid]
+            idx[vid] = (offset, offset + d)
+            offset += d
+        return idx, offset
+
+    def optimize(self, max_iter: int = 50, tol: float = 1e-6) -> dict:
+        idx, n = self._index_map()
+        prev_cost = float("inf")
+        iters = 0
+        converged = False
+        last_cost = 0.0
+        for iters in range(1, max_iter + 1):
+            H = _np.zeros((n, n), dtype=float)
+            b = _np.zeros(n, dtype=float)
+            cost = 0.0
+            for f in self._unary:
+                x = self._values[f["var"]]
+                h0, J = self._num_jacobian(f["h"], x)
+                r = h0 - f["z"]
+                Omega = f["info"]
+                cost += float(r @ Omega @ r)
+                a, c = idx[f["var"]]
+                H[a:c, a:c] += J.T @ Omega @ J
+                b[a:c] += J.T @ Omega @ r
+            for f in self._binary:
+                x1 = self._values[f["v1"]]
+                x2 = self._values[f["v2"]]
+                h0, J1, J2 = self._num_jacobian2(f["h"], x1, x2)
+                r = h0 - f["z"]
+                Omega = f["info"]
+                cost += float(r @ Omega @ r)
+                a1, c1 = idx[f["v1"]]
+                a2, c2 = idx[f["v2"]]
+                H[a1:c1, a1:c1] += J1.T @ Omega @ J1
+                H[a2:c2, a2:c2] += J2.T @ Omega @ J2
+                H12 = J1.T @ Omega @ J2
+                H[a1:c1, a2:c2] += H12
+                H[a2:c2, a1:c1] += H12.T
+                b[a1:c1] += J1.T @ Omega @ r
+                b[a2:c2] += J2.T @ Omega @ r
+            H = H + _np.eye(n) * 1e-6
+            try:
+                dx = _np.linalg.solve(H, -b)
+            except _np.linalg.LinAlgError:
+                break
+            for vid in self._order:
+                a, c = idx[vid]
+                self._values[vid] = self._values[vid] + dx[a:c]
+            last_cost = cost
+            if abs(prev_cost - cost) < tol:
+                converged = True
+                break
+            prev_cost = cost
+        return {
+            "iterations": iters,
+            "final_cost": last_cost,
+            "converged": converged,
+        }
+
+    def marginal(self, var_id) -> dict:
+        idx, n = self._index_map()
+        if var_id not in idx:
+            raise ValueError(f"unknown var {var_id}")
+        H = _np.zeros((n, n), dtype=float)
+        for f in self._unary:
+            x = self._values[f["var"]]
+            _, J = self._num_jacobian(f["h"], x)
+            a, c = idx[f["var"]]
+            H[a:c, a:c] += J.T @ f["info"] @ J
+        for f in self._binary:
+            x1 = self._values[f["v1"]]
+            x2 = self._values[f["v2"]]
+            _, J1, J2 = self._num_jacobian2(f["h"], x1, x2)
+            a1, c1 = idx[f["v1"]]; a2, c2 = idx[f["v2"]]
+            H[a1:c1, a1:c1] += J1.T @ f["info"] @ J1
+            H[a2:c2, a2:c2] += J2.T @ f["info"] @ J2
+            H12 = J1.T @ f["info"] @ J2
+            H[a1:c1, a2:c2] += H12
+            H[a2:c2, a1:c1] += H12.T
+        H = H + _np.eye(n) * 1e-6
+        try:
+            cov = _np.linalg.inv(H)
+        except _np.linalg.LinAlgError:
+            return {"mean": self._values[var_id].copy(),
+                    "cov": _np.eye(self._vars[var_id])}
+        a, c = idx[var_id]
+        return {
+            "mean": self._values[var_id].copy(),
+            "cov": cov[a:c, a:c],
+        }
+
+    @staticmethod
+    def build_nav_graph(
+        gps_obs: list,
+        imu_preint: list,
+        baro_obs: list,
+    ) -> "FactorGraph":
+        """Build a small navigation graph: variables are 3-D positions per
+        keyframe; GPS provides unary priors, baro provides z-only unary
+        priors, IMU provides binary position-difference priors.
+        """
+        n_keyframes = max(len(gps_obs), len(imu_preint) + 1, len(baro_obs))
+        g = FactorGraph()
+        for k in range(n_keyframes):
+            g.add_variable(("p", k), 3,
+                           initial=_np.zeros(3, dtype=float))
+        info3 = _np.eye(3) * 100.0
+        info1 = _np.array([[100.0]])
+        # Unary GPS priors.
+        for k, z in enumerate(gps_obs):
+            if z is None:
+                continue
+            g.add_unary_factor(
+                ("p", k),
+                _np.asarray(z, dtype=float),
+                info3,
+                lambda x: x,
+            )
+        # Unary baro priors (z component).
+        for k, z in enumerate(baro_obs):
+            if z is None:
+                continue
+            g.add_unary_factor(
+                ("p", k),
+                _np.array([float(z)]),
+                info1,
+                lambda x: x[2:3],
+            )
+        # Binary IMU priors on Δp.
+        for k, dp in enumerate(imu_preint):
+            if dp is None:
+                continue
+            g.add_binary_factor(
+                ("p", k),
+                ("p", k + 1),
+                _np.asarray(dp, dtype=float),
+                info3,
+                lambda x1, x2: x2 - x1,
+            )
+        return g
+
+
 __all__ = ["EKF","UKF","ParticleFilter","SensorFusion",
            "AdaptiveEKF","RAIMResult","CHI2_3_95",
-           "PoseGraphOptimizer"]
+           "PoseGraphOptimizer","FactorGraph"]

@@ -1316,3 +1316,100 @@ class TransformerPredictor:
 __all_r3 = [
     "TransformerPredictor",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Neural Radiance Map for radio RSS (Round 4)
+# ---------------------------------------------------------------------------
+
+
+class NeuralRadianceMap:
+    """NeRF-style MLP for radio-RSS field reconstruction.
+
+    Input:  3-D position → Fourier-feature encoding (36-D)
+    Hidden: one ReLU layer (default 32 units)
+    Output: scalar predicted RSS (dBm)
+
+    Trained via SGD on (position, rss) pairs.  ``query_map`` evaluates a
+    batch of positions for coverage visualisation.  Pure numpy.
+    """
+
+    K_FREQS = 6  # 6 frequency bands → 36-D encoding
+
+    def __init__(
+        self,
+        hidden: int = 32,
+        seed: int = 0,
+        weight_scale: float = 0.1,
+    ) -> None:
+        self.hidden = int(hidden)
+        rng = np.random.default_rng(seed)
+        d_in = self.K_FREQS * 2 * 3
+        self.W1 = rng.standard_normal((d_in, self.hidden)) * weight_scale
+        self.b1 = np.zeros(self.hidden, dtype=float)
+        self.W2 = rng.standard_normal((self.hidden, 1)) * weight_scale
+        self.b2 = np.zeros(1, dtype=float)
+
+    @classmethod
+    def encode_position(cls, pos_3d: np.ndarray) -> np.ndarray:
+        """Fourier-feature encoding: [sin(2^k π x), cos(2^k π x)] for each
+        coord, k=0..K-1, concatenated → (K*2*3,) vector.
+        """
+        p = np.asarray(pos_3d, dtype=float).reshape(3)
+        feats = []
+        for k in range(cls.K_FREQS):
+            scale = (2.0 ** k) * math.pi
+            feats.append(np.sin(scale * p))
+            feats.append(np.cos(scale * p))
+        return np.concatenate(feats)
+
+    def _encode_batch(self, positions: np.ndarray) -> np.ndarray:
+        positions = np.asarray(positions, dtype=float).reshape(-1, 3)
+        return np.stack([self.encode_position(p) for p in positions])
+
+    def forward(self, pos_3d: np.ndarray) -> float:
+        """Predict RSS at one position."""
+        x = self.encode_position(pos_3d)
+        h = np.maximum(0.0, x @ self.W1 + self.b1)
+        y = h @ self.W2 + self.b2
+        return float(y[0])
+
+    def train_step(
+        self,
+        positions: np.ndarray,
+        rss_values: np.ndarray,
+        lr: float = 0.01,
+    ) -> float:
+        """One SGD mini-batch update.  Returns mean squared error."""
+        pos = np.asarray(positions, dtype=float).reshape(-1, 3)
+        y_true = np.asarray(rss_values, dtype=float).reshape(-1)
+        if pos.shape[0] != y_true.shape[0]:
+            raise ValueError("positions and rss_values must have same length")
+        X = self._encode_batch(pos)            # (N, d_in)
+        Z = X @ self.W1 + self.b1              # (N, hidden)
+        H = np.maximum(0.0, Z)
+        Y = H @ self.W2 + self.b2              # (N, 1)
+        err = (Y[:, 0] - y_true)               # (N,)
+        mse = float((err ** 2).mean())
+        # Backprop (MSE/N).
+        N = pos.shape[0]
+        dY = (2.0 / N) * err.reshape(-1, 1)    # (N, 1)
+        dW2 = H.T @ dY                         # (hidden, 1)
+        db2 = dY.sum(axis=0)                   # (1,)
+        dH = dY @ self.W2.T                    # (N, hidden)
+        dZ = dH * (Z > 0).astype(float)        # ReLU grad
+        dW1 = X.T @ dZ                         # (d_in, hidden)
+        db1 = dZ.sum(axis=0)                   # (hidden,)
+        self.W1 -= lr * dW1
+        self.b1 -= lr * db1
+        self.W2 -= lr * dW2
+        self.b2 -= lr * db2
+        return mse
+
+    def query_map(self, grid_positions: np.ndarray) -> np.ndarray:
+        """Vectorised batch query — returns (N,) predicted RSS."""
+        pos = np.asarray(grid_positions, dtype=float).reshape(-1, 3)
+        X = self._encode_batch(pos)
+        H = np.maximum(0.0, X @ self.W1 + self.b1)
+        Y = H @ self.W2 + self.b2
+        return Y[:, 0]
