@@ -747,6 +747,254 @@ class PoseGraphOptimizer:
         return len(self._edges)
 
 
+try:
+    import numpy as _np_fg
+except ImportError:  # pragma: no cover
+    _np_fg = None  # type: ignore
+
+
+class FactorGraph:
+    """iSAM2-style incremental Gauss-Newton factor graph optimizer.
+
+    Variables are addressed by string id and have a configurable state
+    dimension. Factors carry a measurement, an information matrix, and a
+    measurement function ``h_func`` whose residual is built as
+    ``measurement - h_func(*states)``.  The optimizer linearizes via finite
+    differences and solves the normal equations with numpy on every iteration.
+    """
+
+    def __init__(self) -> None:
+        if _np_fg is None:
+            raise ImportError("FactorGraph requires numpy")
+        self._var_dims: dict = {}
+        self._var_index: dict = {}
+        self._values: dict = {}
+        self._unary_factors: list = []
+        self._binary_factors: list = []
+        self._chi2_history: list = []
+
+    def add_variable(self, var_id: str, state_dim: int, initial=None) -> None:
+        """Register a variable node with given state dimension."""
+        if var_id in self._var_dims:
+            raise ValueError(f"variable {var_id} already exists")
+        self._var_dims[var_id] = int(state_dim)
+        self._var_index[var_id] = sum(self._var_dims[v] for v in list(self._var_dims)[:-1])
+        if initial is None:
+            self._values[var_id] = _np_fg.zeros(int(state_dim))
+        else:
+            arr = _np_fg.asarray(initial, dtype=float).reshape(int(state_dim))
+            self._values[var_id] = arr
+
+    def add_unary_factor(
+        self,
+        var_id: str,
+        measurement,
+        info_matrix,
+        h_func=None,
+    ) -> None:
+        """Add a single-variable factor (prior, GPS, barometer, …)."""
+        if var_id not in self._var_dims:
+            raise KeyError(f"unknown variable {var_id}")
+        z = _np_fg.asarray(measurement, dtype=float).ravel()
+        info = _np_fg.asarray(info_matrix, dtype=float)
+        if h_func is None:
+            h_func = lambda x: x
+        self._unary_factors.append(
+            {"var": var_id, "z": z, "info": info, "h": h_func}
+        )
+
+    def add_binary_factor(
+        self,
+        var_id_1: str,
+        var_id_2: str,
+        measurement,
+        info_matrix,
+        h_func=None,
+    ) -> None:
+        """Add a two-variable factor (odometry, IMU preintegration, …)."""
+        if var_id_1 not in self._var_dims or var_id_2 not in self._var_dims:
+            raise KeyError("unknown variable id in binary factor")
+        z = _np_fg.asarray(measurement, dtype=float).ravel()
+        info = _np_fg.asarray(info_matrix, dtype=float)
+        if h_func is None:
+            h_func = lambda x_i, x_j: x_j - x_i
+        self._binary_factors.append(
+            {"vi": var_id_1, "vj": var_id_2, "z": z, "info": info, "h": h_func}
+        )
+
+    def _rebuild_index(self) -> int:
+        offset = 0
+        for vid in self._var_dims:
+            self._var_index[vid] = offset
+            offset += self._var_dims[vid]
+        return offset
+
+    @staticmethod
+    def _numerical_jacobian(h_func, args, idx, out_dim, eps=1e-6):
+        x = args[idx].copy()
+        n = x.size
+        J = _np_fg.zeros((out_dim, n))
+        f0 = _np_fg.asarray(h_func(*args)).ravel()
+        for k in range(n):
+            x_p = x.copy()
+            x_p[k] += eps
+            new_args = list(args)
+            new_args[idx] = x_p
+            f1 = _np_fg.asarray(h_func(*new_args)).ravel()
+            J[:, k] = (f1 - f0) / eps
+        return J
+
+    def optimize(self, max_iter: int = 50, tol: float = 1e-6) -> dict:
+        """Run iSAM2-style Gauss-Newton until convergence."""
+        n_total = self._rebuild_index()
+        self._chi2_history = []
+
+        for iteration in range(int(max_iter)):
+            H = _np_fg.zeros((n_total, n_total))
+            b = _np_fg.zeros(n_total)
+            chi2 = 0.0
+
+            for fac in self._unary_factors:
+                vid = fac["var"]
+                xi = self._values[vid]
+                pred = _np_fg.asarray(fac["h"](xi)).ravel()
+                r = fac["z"] - pred
+                J = self._numerical_jacobian(fac["h"], [xi], 0, r.size)
+                idx = self._var_index[vid]
+                d = self._var_dims[vid]
+                info = fac["info"]
+                H[idx:idx + d, idx:idx + d] += J.T @ info @ J
+                b[idx:idx + d] += J.T @ info @ r
+                chi2 += float(r.T @ info @ r)
+
+            for fac in self._binary_factors:
+                vi, vj = fac["vi"], fac["vj"]
+                xi, xj = self._values[vi], self._values[vj]
+                pred = _np_fg.asarray(fac["h"](xi, xj)).ravel()
+                r = fac["z"] - pred
+                Ji = self._numerical_jacobian(fac["h"], [xi, xj], 0, r.size)
+                Jj = self._numerical_jacobian(fac["h"], [xi, xj], 1, r.size)
+                idx_i = self._var_index[vi]
+                idx_j = self._var_index[vj]
+                di = self._var_dims[vi]
+                dj = self._var_dims[vj]
+                info = fac["info"]
+                H[idx_i:idx_i + di, idx_i:idx_i + di] += Ji.T @ info @ Ji
+                H[idx_j:idx_j + dj, idx_j:idx_j + dj] += Jj.T @ info @ Jj
+                H[idx_i:idx_i + di, idx_j:idx_j + dj] += Ji.T @ info @ Jj
+                H[idx_j:idx_j + dj, idx_i:idx_i + di] += Jj.T @ info @ Ji
+                b[idx_i:idx_i + di] += Ji.T @ info @ r
+                b[idx_j:idx_j + dj] += Jj.T @ info @ r
+                chi2 += float(r.T @ info @ r)
+
+            self._chi2_history.append(chi2)
+            # Levenberg-style damping for stability.
+            H += _np_fg.eye(n_total) * 1e-6
+            try:
+                dx = _np_fg.linalg.solve(H, b)
+            except _np_fg.linalg.LinAlgError:
+                break
+
+            for vid in self._var_dims:
+                idx = self._var_index[vid]
+                d = self._var_dims[vid]
+                self._values[vid] = self._values[vid] + dx[idx:idx + d]
+
+            if float(_np_fg.linalg.norm(dx)) < tol:
+                break
+
+        return {
+            "iterations": len(self._chi2_history),
+            "chi2_final": self._chi2_history[-1] if self._chi2_history else 0.0,
+            "chi2_history": list(self._chi2_history),
+            "values": {k: v.copy() for k, v in self._values.items()},
+        }
+
+    def marginal(self, var_id: str) -> dict:
+        """Return mean + covariance block for one variable."""
+        if var_id not in self._var_dims:
+            raise KeyError(f"unknown variable {var_id}")
+        n_total = self._rebuild_index()
+        H = _np_fg.zeros((n_total, n_total))
+        for fac in self._unary_factors:
+            vid = fac["var"]
+            xi = self._values[vid]
+            J = self._numerical_jacobian(fac["h"], [xi], 0, fac["z"].size)
+            idx = self._var_index[vid]
+            d = self._var_dims[vid]
+            H[idx:idx + d, idx:idx + d] += J.T @ fac["info"] @ J
+        for fac in self._binary_factors:
+            vi, vj = fac["vi"], fac["vj"]
+            xi, xj = self._values[vi], self._values[vj]
+            Ji = self._numerical_jacobian(fac["h"], [xi, xj], 0, fac["z"].size)
+            Jj = self._numerical_jacobian(fac["h"], [xi, xj], 1, fac["z"].size)
+            idx_i = self._var_index[vi]
+            idx_j = self._var_index[vj]
+            di = self._var_dims[vi]
+            dj = self._var_dims[vj]
+            info = fac["info"]
+            H[idx_i:idx_i + di, idx_i:idx_i + di] += Ji.T @ info @ Ji
+            H[idx_j:idx_j + dj, idx_j:idx_j + dj] += Jj.T @ info @ Jj
+            H[idx_i:idx_i + di, idx_j:idx_j + dj] += Ji.T @ info @ Jj
+            H[idx_j:idx_j + dj, idx_i:idx_i + di] += Jj.T @ info @ Ji
+        H += _np_fg.eye(n_total) * 1e-6
+        try:
+            cov_full = _np_fg.linalg.inv(H)
+        except _np_fg.linalg.LinAlgError:
+            cov_full = _np_fg.eye(n_total)
+        idx = self._var_index[var_id]
+        d = self._var_dims[var_id]
+        return {
+            "mean": self._values[var_id].copy(),
+            "covariance": cov_full[idx:idx + d, idx:idx + d],
+        }
+
+    @property
+    def n_variables(self) -> int:
+        return len(self._var_dims)
+
+    @property
+    def n_factors(self) -> int:
+        return len(self._unary_factors) + len(self._binary_factors)
+
+
+def build_nav_graph(gps_obs: list, imu_preint: list, baro_obs: list) -> dict:
+    """Build and optimize a small navigation factor graph.
+
+    gps_obs:    list of (var_id, position_3d, info_matrix_3x3)
+    imu_preint: list of (var_i, var_j, delta_p_3d, info_matrix_3x3)
+    baro_obs:   list of (var_id, altitude, info_scalar)
+
+    Each variable is a 3-D position. Returns the optimization summary.
+    """
+    if _np_fg is None:
+        raise ImportError("build_nav_graph requires numpy")
+    fg = FactorGraph()
+    var_set: set = set()
+    for vid, _, _ in gps_obs:
+        var_set.add(vid)
+    for vi, vj, _, _ in imu_preint:
+        var_set.add(vi)
+        var_set.add(vj)
+    for vid, _, _ in baro_obs:
+        var_set.add(vid)
+    for vid in sorted(var_set):
+        fg.add_variable(vid, 3)
+    for vid, pos, info in gps_obs:
+        fg.add_unary_factor(vid, pos, info)
+    for vi, vj, dp, info in imu_preint:
+        fg.add_binary_factor(vi, vj, dp, info)
+    for vid, alt, info_scalar in baro_obs:
+        info_mat = _np_fg.array([[float(info_scalar)]])
+        fg.add_unary_factor(
+            vid,
+            _np_fg.array([float(alt)]),
+            info_mat,
+            h_func=lambda x: _np_fg.array([x[2]]),
+        )
+    return fg.optimize(max_iter=50)
+
+
 __all__ = ["EKF","UKF","ParticleFilter","SensorFusion",
            "AdaptiveEKF","RAIMResult","CHI2_3_95",
-           "PoseGraphOptimizer"]
+           "PoseGraphOptimizer", "FactorGraph", "build_nav_graph"]

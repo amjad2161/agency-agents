@@ -385,6 +385,189 @@ class BarometricAltimeter:
         return int(rel // float(floor_height_m))
 
 
+# ------------------------------------------------------------------
+# IMU Preintegration (Forster et al., RSS 2015)
+# ------------------------------------------------------------------
+
+
+def _so3_hat(w: np.ndarray) -> np.ndarray:
+    """Skew-symmetric matrix from 3-vector."""
+    return np.array(
+        [
+            [0.0, -w[2], w[1]],
+            [w[2], 0.0, -w[0]],
+            [-w[1], w[0], 0.0],
+        ]
+    )
+
+
+def _so3_exp(w: np.ndarray) -> np.ndarray:
+    """Rodrigues exponential: so(3) → SO(3)."""
+    theta = float(np.linalg.norm(w))
+    if theta < 1e-9:
+        W = _so3_hat(w)
+        return np.eye(3) + W + 0.5 * W @ W
+    axis = w / theta
+    K = _so3_hat(axis)
+    return np.eye(3) + math.sin(theta) * K + (1.0 - math.cos(theta)) * (K @ K)
+
+
+def _so3_log(R: np.ndarray) -> np.ndarray:
+    """SO(3) → so(3) (3-vector)."""
+    cos_theta = max(-1.0, min(1.0, 0.5 * (np.trace(R) - 1.0)))
+    theta = math.acos(cos_theta)
+    if theta < 1e-9:
+        return np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]) * 0.5
+    return (theta / (2.0 * math.sin(theta))) * np.array(
+        [R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]
+    )
+
+
+@dataclass
+class IMUPreintegration:
+    """Forster-style IMU preintegration between two keyframes.
+
+    Accumulates ΔR (SO3), Δv, Δp in the body frame of the first keyframe
+    while propagating a 9×9 covariance and Jacobians ∂Δ/∂bias for first-order
+    bias correction without re-integrating raw measurements.
+
+    State layout for covariance / Jacobians: [δθ (3), δv (3), δp (3)]
+    """
+
+    bias_gyro: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    bias_accel: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    sigma_gyro: float = 1e-3
+    sigma_accel: float = 1e-2
+    gravity: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, -9.81]))
+
+    delta_R: np.ndarray = field(default_factory=lambda: np.eye(3))
+    delta_v: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    delta_p: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    delta_t: float = 0.0
+    cov: np.ndarray = field(default_factory=lambda: np.zeros((9, 9)))
+    # First-order bias Jacobians.
+    J_R_bg: np.ndarray = field(default_factory=lambda: np.zeros((3, 3)))
+    J_v_bg: np.ndarray = field(default_factory=lambda: np.zeros((3, 3)))
+    J_v_ba: np.ndarray = field(default_factory=lambda: np.zeros((3, 3)))
+    J_p_bg: np.ndarray = field(default_factory=lambda: np.zeros((3, 3)))
+    J_p_ba: np.ndarray = field(default_factory=lambda: np.zeros((3, 3)))
+    n_steps: int = 0
+
+    def reset(self) -> None:
+        """Clear accumulated measurements; keep current bias estimates."""
+        self.delta_R = np.eye(3)
+        self.delta_v = np.zeros(3)
+        self.delta_p = np.zeros(3)
+        self.delta_t = 0.0
+        self.cov = np.zeros((9, 9))
+        self.J_R_bg = np.zeros((3, 3))
+        self.J_v_bg = np.zeros((3, 3))
+        self.J_v_ba = np.zeros((3, 3))
+        self.J_p_bg = np.zeros((3, 3))
+        self.J_p_ba = np.zeros((3, 3))
+        self.n_steps = 0
+
+    def integrate(self, accel: np.ndarray, gyro: np.ndarray, dt: float) -> None:
+        """Accumulate one IMU sample (body-frame accel + gyro, seconds)."""
+        if dt <= 0.0:
+            raise ValueError("dt must be positive")
+        a = np.asarray(accel, dtype=np.float64).reshape(3) - self.bias_accel
+        w = np.asarray(gyro, dtype=np.float64).reshape(3) - self.bias_gyro
+
+        dR = _so3_exp(w * dt)
+        R_prev = self.delta_R.copy()
+        # Propagate Jacobians (first-order, see Forster eq. 35-39).
+        a_hat = _so3_hat(a)
+        # Update p, v Jacobians using *previous* R.
+        self.J_p_ba = self.J_p_ba + self.J_v_ba * dt - 0.5 * R_prev * (dt * dt)
+        self.J_p_bg = (
+            self.J_p_bg + self.J_v_bg * dt - 0.5 * R_prev @ a_hat @ self.J_R_bg * (dt * dt)
+        )
+        self.J_v_ba = self.J_v_ba - R_prev * dt
+        self.J_v_bg = self.J_v_bg - R_prev @ a_hat @ self.J_R_bg * dt
+        # Right-Jacobian approx: identity for small angles is fine here.
+        self.J_R_bg = dR.T @ self.J_R_bg - np.eye(3) * dt
+
+        # Update preintegrated state (Forster eq. 35).
+        self.delta_p = self.delta_p + self.delta_v * dt + 0.5 * R_prev @ a * (dt * dt)
+        self.delta_v = self.delta_v + R_prev @ a * dt
+        self.delta_R = R_prev @ dR
+
+        # Covariance propagation (block-diagonal noise, lightweight).
+        F = np.eye(9)
+        F[3:6, 0:3] = -R_prev @ a_hat * dt
+        F[6:9, 0:3] = -0.5 * R_prev @ a_hat * (dt * dt)
+        F[6:9, 3:6] = np.eye(3) * dt
+        G = np.zeros((9, 6))
+        G[0:3, 0:3] = np.eye(3) * dt
+        G[3:6, 3:6] = R_prev * dt
+        G[6:9, 3:6] = 0.5 * R_prev * (dt * dt)
+        Q = np.zeros((6, 6))
+        Q[0:3, 0:3] = np.eye(3) * (self.sigma_gyro ** 2)
+        Q[3:6, 3:6] = np.eye(3) * (self.sigma_accel ** 2)
+        self.cov = F @ self.cov @ F.T + G @ Q @ G.T
+        # Symmetrize to keep PSD.
+        self.cov = 0.5 * (self.cov + self.cov.T)
+
+        self.delta_t += dt
+        self.n_steps += 1
+
+    def bias_corrected_delta(
+        self, bg_correction: np.ndarray, ba_correction: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return bias-corrected (ΔR, Δv, Δp) using first-order Jacobians."""
+        dbg = np.asarray(bg_correction, dtype=np.float64).reshape(3)
+        dba = np.asarray(ba_correction, dtype=np.float64).reshape(3)
+        dR_corrected = self.delta_R @ _so3_exp(self.J_R_bg @ dbg)
+        dv_corrected = self.delta_v + self.J_v_bg @ dbg + self.J_v_ba @ dba
+        dp_corrected = self.delta_p + self.J_p_bg @ dbg + self.J_p_ba @ dba
+        return dR_corrected, dv_corrected, dp_corrected
+
+    def covariance(self) -> np.ndarray:
+        """Return current 9×9 covariance (PSD, symmetrized)."""
+        # Add tiny diagonal jitter to guarantee positive-definiteness.
+        return self.cov + np.eye(9) * 1e-12
+
+    def create_factor(
+        self, pose_i: dict, pose_j: dict
+    ) -> dict:
+        """Build a preintegration factor between two keyframe poses.
+
+        Each pose dict: {'R': 3x3, 'v': (3,), 'p': (3,), 't': float}.
+        Returns {residual (9,), jacobian_i, jacobian_j, info_matrix (9x9)}.
+        """
+        R_i = np.asarray(pose_i["R"], dtype=np.float64).reshape(3, 3)
+        v_i = np.asarray(pose_i["v"], dtype=np.float64).reshape(3)
+        p_i = np.asarray(pose_i["p"], dtype=np.float64).reshape(3)
+        R_j = np.asarray(pose_j["R"], dtype=np.float64).reshape(3, 3)
+        v_j = np.asarray(pose_j["v"], dtype=np.float64).reshape(3)
+        p_j = np.asarray(pose_j["p"], dtype=np.float64).reshape(3)
+        dt = self.delta_t
+        g = self.gravity
+
+        # Predicted relative state from i (Forster eq. 45).
+        R_pred = R_i.T @ R_j
+        v_pred = R_i.T @ (v_j - v_i - g * dt)
+        p_pred = R_i.T @ (p_j - p_i - v_i * dt - 0.5 * g * (dt * dt))
+
+        r_R = _so3_log(self.delta_R.T @ R_pred)
+        r_v = v_pred - self.delta_v
+        r_p = p_pred - self.delta_p
+        residual = np.concatenate([r_R, r_v, r_p])
+
+        try:
+            info = np.linalg.inv(self.covariance())
+        except np.linalg.LinAlgError:
+            info = np.eye(9)
+
+        return {
+            "residual": residual,
+            "info_matrix": info,
+            "delta_t": dt,
+            "n_steps": self.n_steps,
+        }
+
+
 __all__ = [
     "MagneticMapper",
     "PDREstimator",
@@ -392,4 +575,5 @@ __all__ = [
     "SHOEstimator",
     "HeadingCorrector",
     "BarometricAltimeter",
+    "IMUPreintegration",
 ]

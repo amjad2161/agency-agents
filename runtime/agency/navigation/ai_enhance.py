@@ -1316,3 +1316,126 @@ class TransformerPredictor:
 __all_r3 = [
     "TransformerPredictor",
 ]
+
+
+# ===========================================================================
+# Round 4 — Implicit Neural Map (NeRF-inspired RSS field, pure numpy)
+# ===========================================================================
+
+
+class NeuralRadianceMap:
+    """NeRF-inspired implicit map for 3-D radio signal strength fields.
+
+    A small MLP with positional encoding (Fourier features) maps a 3-D query
+    position to a scalar RSS value (dBm).  Trained from sparse (position,
+    measurement) pairs, it interpolates a continuous coverage map suitable
+    for radio-aided navigation.
+
+    Pure numpy: forward, backward, and SGD update implemented by hand.
+    """
+
+    def __init__(
+        self,
+        hidden_dim: int = 64,
+        n_layers: int = 3,
+        L: int = 6,
+        seed: int = 42,
+    ) -> None:
+        if hidden_dim <= 0 or n_layers < 2:
+            raise ValueError("hidden_dim>0 and n_layers>=2 required")
+        self.hidden_dim = int(hidden_dim)
+        self.n_layers = int(n_layers)
+        self.L = int(L)
+        self.input_dim = 3 + 3 * 2 * self.L  # raw xyz + sin/cos for L freqs
+        rng = np.random.default_rng(seed)
+        self.weights: List[np.ndarray] = []
+        self.biases: List[np.ndarray] = []
+        prev = self.input_dim
+        for i in range(self.n_layers - 1):
+            scale = math.sqrt(2.0 / prev)
+            self.weights.append(rng.standard_normal((prev, hidden_dim)) * scale)
+            self.biases.append(np.zeros(hidden_dim))
+            prev = hidden_dim
+        # Output head (scalar RSS).
+        self.weights.append(rng.standard_normal((prev, 1)) * math.sqrt(2.0 / prev))
+        self.biases.append(np.zeros(1))
+
+    def encode_position(self, pos_3d: np.ndarray) -> np.ndarray:
+        """Fourier feature positional encoding (sin/cos for L frequencies)."""
+        p = np.asarray(pos_3d, dtype=np.float64).reshape(-1, 3)
+        feats = [p]
+        for k in range(self.L):
+            freq = (2.0 ** k) * math.pi
+            feats.append(np.sin(freq * p))
+            feats.append(np.cos(freq * p))
+        out = np.concatenate(feats, axis=-1)
+        if pos_3d.ndim == 1 if hasattr(pos_3d, "ndim") else False:
+            return out[0]
+        return out
+
+    def _forward_cache(self, x_enc: np.ndarray) -> tuple:
+        """Forward pass; returns (output, list of pre-activations and activations)."""
+        activations = [x_enc]
+        pre_activations = []
+        h = x_enc
+        for i in range(self.n_layers - 1):
+            z = h @ self.weights[i] + self.biases[i]
+            pre_activations.append(z)
+            h = np.maximum(z, 0.0)  # ReLU
+            activations.append(h)
+        # Linear output head.
+        out = h @ self.weights[-1] + self.biases[-1]
+        pre_activations.append(out)
+        activations.append(out)
+        return out, activations, pre_activations
+
+    def forward(self, pos_3d) -> float:
+        """Predict scalar RSS at a 3-D position."""
+        p = np.asarray(pos_3d, dtype=np.float64).reshape(3)
+        x_enc = self.encode_position(p.reshape(1, 3))
+        out, _, _ = self._forward_cache(x_enc)
+        return float(out[0, 0])
+
+    def train_step(
+        self,
+        positions: np.ndarray,
+        rss_values: np.ndarray,
+        lr: float = 0.01,
+    ) -> float:
+        """One mini-batch SGD step on MSE; returns the loss before the step."""
+        P = np.asarray(positions, dtype=np.float64).reshape(-1, 3)
+        Y = np.asarray(rss_values, dtype=np.float64).reshape(-1, 1)
+        x_enc = self.encode_position(P)
+        out, activations, pre_acts = self._forward_cache(x_enc)
+        diff = out - Y
+        loss = float(np.mean(diff ** 2))
+        n = P.shape[0]
+        # Backprop through linear output head.
+        grad = (2.0 / n) * diff
+        grads_w: List[np.ndarray] = [None] * len(self.weights)
+        grads_b: List[np.ndarray] = [None] * len(self.biases)
+        h_prev = activations[-2]
+        grads_w[-1] = h_prev.T @ grad
+        grads_b[-1] = grad.sum(axis=0)
+        delta = grad @ self.weights[-1].T
+        # Backprop through ReLU layers.
+        for i in range(self.n_layers - 2, -1, -1):
+            z = pre_acts[i]
+            relu_grad = (z > 0.0).astype(np.float64)
+            delta = delta * relu_grad
+            h_prev = activations[i]
+            grads_w[i] = h_prev.T @ delta
+            grads_b[i] = delta.sum(axis=0)
+            delta = delta @ self.weights[i].T
+        # Apply SGD.
+        for i in range(len(self.weights)):
+            self.weights[i] -= lr * grads_w[i]
+            self.biases[i] -= lr * grads_b[i]
+        return loss
+
+    def query_map(self, grid_positions: np.ndarray) -> np.ndarray:
+        """Batch query for radio coverage maps. Returns (N,) RSS values."""
+        P = np.asarray(grid_positions, dtype=np.float64).reshape(-1, 3)
+        x_enc = self.encode_position(P)
+        out, _, _ = self._forward_cache(x_enc)
+        return out.ravel()

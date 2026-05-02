@@ -1319,9 +1319,95 @@ class WMMModel:
         return decl, incl, F
 
     def declination(self, lat: float, lon: float,
-                    year: float) -> float:
-        d, _, _ = self.compute(lat, lon, 0.0, year)
+                    year: float, alt_km: float = 0.0) -> float:
+        d, _, _ = self.compute(lat, lon, alt_km * 1000.0, year)
         return d
+
+    # -------------------------------------------------------------
+    # Round 4: full-field, secular variation, grid survey
+    # -------------------------------------------------------------
+
+    def compute_full_field(
+        self, lat: float, lon: float, alt_km: float, year: float
+    ) -> dict:
+        """Full geomagnetic field with secular variation applied.
+
+        Returns a dict with X (north), Y (east), Z (down), H (horizontal), F
+        (total intensity) in nT, plus declination/inclination in degrees.
+        """
+        X, Y, Z = self._field_components_nT(lat, lon, alt_km * 1000.0, year)
+        H = math.sqrt(X * X + Y * Y)
+        F = math.sqrt(H * H + Z * Z)
+        decl = math.degrees(math.atan2(Y, X))
+        incl = math.degrees(math.atan2(Z, H))
+        return {
+            "X_nT": X,
+            "Y_nT": Y,
+            "Z_nT": Z,
+            "H_nT": H,
+            "F_nT": F,
+            "declination_deg": decl,
+            "inclination_deg": incl,
+            "year": year,
+            "alt_km": alt_km,
+        }
+
+    def inclination(
+        self, lat: float, lon: float, alt_km: float, year: float
+    ) -> float:
+        """Magnetic dip (inclination) angle in degrees."""
+        X, Y, Z = self._field_components_nT(lat, lon, alt_km * 1000.0, year)
+        H = math.sqrt(X * X + Y * Y)
+        return math.degrees(math.atan2(Z, H))
+
+    def total_intensity(
+        self, lat: float, lon: float, alt_km: float, year: float
+    ) -> float:
+        """Total field magnitude |B| in nT."""
+        X, Y, Z = self._field_components_nT(lat, lon, alt_km * 1000.0, year)
+        return math.sqrt(X * X + Y * Y + Z * Z)
+
+    def grid_survey(
+        self,
+        lat_range: tuple[float, float],
+        lon_range: tuple[float, float],
+        step_deg: float = 1.0,
+        year: float = 2025.0,
+        alt_km: float = 0.0,
+    ) -> dict:
+        """Compute full grid of declination/inclination/intensity (D, I, F).
+
+        Returns a dict with numpy arrays:
+            'lats', 'lons'              — 1-D coordinate vectors
+            'declination', 'inclination', 'intensity' — 2-D grids (rows=lats)
+        """
+        lat0, lat1 = float(lat_range[0]), float(lat_range[1])
+        lon0, lon1 = float(lon_range[0]), float(lon_range[1])
+        step = float(step_deg)
+        if step <= 0.0:
+            raise ValueError("step_deg must be positive")
+        n_lat = int(math.floor((lat1 - lat0) / step)) + 1
+        n_lon = int(math.floor((lon1 - lon0) / step)) + 1
+        lats = np.array([lat0 + i * step for i in range(n_lat)])
+        lons = np.array([lon0 + j * step for j in range(n_lon)])
+        D = np.zeros((n_lat, n_lon))
+        I = np.zeros((n_lat, n_lon))
+        F = np.zeros((n_lat, n_lon))
+        for i, la in enumerate(lats):
+            for j, lo in enumerate(lons):
+                full = self.compute_full_field(float(la), float(lo), alt_km, year)
+                D[i, j] = full["declination_deg"]
+                I[i, j] = full["inclination_deg"]
+                F[i, j] = full["F_nT"]
+        return {
+            "lats": lats,
+            "lons": lons,
+            "declination": D,
+            "inclination": I,
+            "intensity": F,
+            "year": year,
+            "alt_km": alt_km,
+        }
 
 
 # ===========================================================================
