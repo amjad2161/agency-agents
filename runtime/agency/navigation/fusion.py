@@ -272,4 +272,130 @@ class SensorFusion:
         self._history.clear()
         if self._ekf: self._ekf = EKF()
 
-__all__ = ["EKF","UKF","ParticleFilter","SensorFusion"]
+# ── AdaptiveEKF: Sage-Husa Q/R adaptation, χ² outlier reject, RAIM ──────────
+
+# χ²(3, 0.95) — gate threshold for a 3-D measurement innovation.
+CHI2_3_95 = 7.815
+
+
+@dataclass
+class RAIMResult:
+    """Receiver Autonomous Integrity Monitoring result."""
+    integrity_ok: bool
+    horizontal_protection_level_m: float
+    test_statistic: float
+    threshold: float
+
+
+class AdaptiveEKF(EKF):
+    """EKF with innovation-based Q/R adaptation, χ² outlier rejection, and RAIM.
+
+    Extends :class:`EKF` with three additions:
+
+    * **Sage-Husa adaptation** updates ``_q`` and the diagonal of ``R`` using
+      a forgetting-factor average of recent innovations.  This lets the
+      filter respond when the underlying process or measurement noise
+      changes mid-flight.
+    * **χ² gating** rejects updates whose Mahalanobis-squared innovation
+      exceeds ``CHI2_3_95``.  Rejected updates do not change the state.
+    * **RAIM** turns the post-fit innovation magnitude into an HPL
+      (horizontal protection level) and reports an integrity flag.
+
+    The implementation only uses the per-measurement diagonal of S to keep
+    behaviour deterministic and dependency-free.
+    """
+
+    def __init__(
+        self,
+        q: float = 1.0,
+        r: float = 5.0,
+        forgetting: float = 0.95,
+        chi2_threshold: float = CHI2_3_95,
+    ) -> None:
+        super().__init__(q=q, r=r)
+        self._forgetting = forgetting
+        self._chi2 = chi2_threshold
+        self._R_diag: list[float] = [r, r, r]
+        self.last_innovation: Optional[Vec] = None
+        self.last_test_statistic: float = 0.0
+        self.outliers_rejected: int = 0
+        self.updates_accepted: int = 0
+
+    # -- helpers ------------------------------------------------------------
+    def _mahalanobis_sq(self, innov: Vec, S_diag: list[float]) -> float:
+        return sum(
+            (innov[i] * innov[i]) / max(S_diag[i], 1e-9)
+            for i in range(len(innov))
+        )
+
+    def _adapt_noise(self, innov: Vec) -> None:
+        """Sage-Husa exponential-forgetting update of Q and R diagonals."""
+        a = self._forgetting
+        # R adaptation: track squared innovation per axis.
+        for i in range(min(len(innov), len(self._R_diag))):
+            self._R_diag[i] = a * self._R_diag[i] + (1 - a) * (innov[i] ** 2)
+        # Q adaptation: scale process-noise scalar by mean squared innovation.
+        mean_sq = sum(v * v for v in innov) / max(len(innov), 1)
+        self._q = a * self._q + (1 - a) * mean_sq
+
+    # -- override -----------------------------------------------------------
+    def update(self, z: Vec, R: Optional[Mat] = None) -> bool:
+        """χ²-gated EKF update with adaptive R.
+
+        ``R`` may be passed explicitly (overrides the adaptive estimate for
+        this step) or omitted to use the Sage-Husa estimate.
+        """
+        nz = len(z)
+        if R is None:
+            R = _zeros(nz, nz)
+            for i in range(nz):
+                R[i][i] = self._R_diag[i] if i < len(self._R_diag) else self._r
+
+        # Pre-fit innovation
+        H = _zeros(nz, 6)
+        for i in range(nz):
+            H[i][i] = 1.0
+        Hx = _mat_vec(H, self.x)
+        innov = _vec_sub(z, Hx)
+
+        # Innovation covariance diagonal
+        S_diag = [
+            self.P[i][i] + (R[i][i] if i < len(R) else 0.0)
+            for i in range(nz)
+        ]
+        ts = self._mahalanobis_sq(innov, S_diag)
+        self.last_innovation = list(innov)
+        self.last_test_statistic = ts
+
+        if ts > self._chi2:
+            self.outliers_rejected += 1
+            return False
+
+        ok = super().update(z, R)
+        if ok:
+            self.updates_accepted += 1
+            self._adapt_noise(innov)
+        return ok
+
+    # -- RAIM ---------------------------------------------------------------
+    def raim(self, hal_m: float = 50.0) -> RAIMResult:
+        """Compute a horizontal protection level from current state covariance.
+
+        ``hal_m`` is the Horizontal Alarm Limit; integrity passes when the
+        HPL is below the alarm limit.
+        """
+        # 2-D position variance trace.
+        var_xy = self.P[0][0] + self.P[1][1]
+        # K factor for 1e-7 false-alarm in 2-D ≈ 5.33 (RTCA DO-229).
+        k = 5.33
+        hpl = k * math.sqrt(max(var_xy, 0.0))
+        return RAIMResult(
+            integrity_ok=hpl < hal_m,
+            horizontal_protection_level_m=hpl,
+            test_statistic=self.last_test_statistic,
+            threshold=self._chi2,
+        )
+
+
+__all__ = ["EKF","UKF","ParticleFilter","SensorFusion",
+           "AdaptiveEKF","RAIMResult","CHI2_3_95"]
