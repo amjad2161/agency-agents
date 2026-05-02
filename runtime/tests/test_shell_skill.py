@@ -1,4 +1,4 @@
-"""Tests for runtime/agency/shell_skill.py.
+﻿"""Tests for runtime/agency/shell_skill.py.
 
 Covers trust-mode gating, allowlist, extra denylist, timeout, and output
 capture.  Every test manipulates AGENCY_TRUST_MODE via monkeypatch so the
@@ -249,6 +249,10 @@ class TestShellResultProperties:
         assert "err" in r.output
 
     def test_output_includes_exit_code_on_failure(self) -> None:
+        r = ShellResult(command="cmd", returncode=2,
+                        trust_mode=TrustMode.ON_MY_MACHINE)
+        assert "exit: 2" in r.output
+def test_failure(self) -> None:
         r = ShellResult(command="cmd", returncode=2,
                         trust_mode=TrustMode.ON_MY_MACHINE)
         assert "exit: 2" in r.output

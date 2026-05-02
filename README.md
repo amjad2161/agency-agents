@@ -90,6 +90,69 @@ agency serve                    # chat UI on http://127.0.0.1:8765
 See [`runtime/README.md`](runtime/README.md) for the full surface (CLI,
 streaming SSE API, delegation, persistent plans, task budgets, MCP).
 
+---
+
+## 🤖 JARVIS — Humanoid Robot Brain (20 Passes)
+
+JARVIS is a fully autonomous AI brain built incrementally across 20 development passes.
+~1,600 tests. All dependencies optional. Runs on mock backends with no hardware required.
+
+```bash
+# One-click launcher (Windows)
+.\JARVIS_LAUNCH.ps1
+
+# CLI
+agency chat                           # interactive Hebrew-first assistant
+agency multi-agent run "research X"   # multi-agent pipeline
+agency dashboard                      # web GUI on http://localhost:8081
+agency capabilities                   # show installed/missing deps
+agency robot start                    # humanoid simulation
+```
+
+### Feature Matrix — All 20 Passes
+
+| Pass | Module | Feature |
+|------|--------|---------|
+| 1 | `skills.py` | Skill registry — discover & load 340+ persona files |
+| 2 | `planner.py` / `executor.py` | Planner + tool-use executor loop |
+| 3 | `memory.py` / `history.py` | Session persistence, history replay |
+| 4 | `llm.py` | AnthropicLLM wrapper with retry/backoff |
+| 5 | `config.py` | TOML config (`~/.agency/config.toml`) |
+| 6 | `stats.py` / `audit.py` | Token tracking, audit log |
+| 7 | `tracing.py` | Request tracing, daily JSONL spans |
+| 8 | `scheduler.py` | Cron scheduler with DLQ |
+| 9 | `server.py` | FastAPI server + streaming SSE chat UI |
+| 10 | `plugins.py` / `tools.py` | Plugin system, shell/web/doc tools |
+| 11 | `long_term_memory.py` / `vector_memory.py` | Long-term & vector memory |
+| 12 | `learner.py` / `lessons.py` | Self-learning, lesson injection |
+| 13 | `email_client.py` / `browser.py` | Email + browser automation |
+| 14 | `simple_server.py` / `webhooks.py` | REST API + webhooks |
+| 15 | `voice.py` (Whisper STT + TTS) | Voice pipeline |
+| 16 | `vision.py` (YOLO) | Camera perception |
+| 17 | `robotics/simulation.py` | PyBullet/MuJoCo physics simulation |
+| 18 | `robotics/rl_trainer.py` | PPO reinforcement learning |
+| 19 | `robotics/robot_brain.py` | Master robot brain coordinator |
+| **20** | **`multi_agent.py`** | **Multi-agent orchestration (PLANNER→EXECUTOR→CRITIC→MEMORY)** |
+| **20** | **`dashboard.py`** | **Flask web GUI dashboard (dark theme, live stats)** |
+| **20** | **`installer.py`** | **One-click capability installer + detector** |
+| **20** | **`personality.py`** | **JARVIS personality engine (Hebrew, configurable traits)** |
+| **20** | **`JARVIS_LAUNCH.ps1`** | **Master Windows launcher — starts all services** |
+
+### Quick Launch (Pass 20)
+
+```powershell
+# Start everything and open the dashboard
+.\JARVIS_LAUNCH.ps1
+
+# Or individually:
+agency dashboard --port 8081
+agency multi-agent run "plan and execute: research quantum computing"
+agency capabilities
+agency personality set name "JARVIS" language he formality formal
+```
+
+---
+
 ## 🧭 See Also
 
 If you're assembling a stack, complementary community lists:

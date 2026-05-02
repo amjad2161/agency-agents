@@ -284,4 +284,4 @@ def evolve_all(*, llm: Any | None = None,
         report = bench_tool(path)
         if llm is not None and report.is_slow and not report.skipped_reason:
             evolve_tool(path, report, llm=llm, dry_run=dry_run)
-        yield
+        yield report

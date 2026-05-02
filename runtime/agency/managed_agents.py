@@ -295,4 +295,4 @@ def default_backend(name: str = "agency-runtime",
         _default_backend = ManagedAgentBackend(
             name=name, model=model, system=system or "You are a helpful assistant.",
         )
-    return _d
+    return _default_backend

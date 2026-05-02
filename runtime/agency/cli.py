@@ -1591,3 +1591,575 @@ def doctor2_cmd(ctx: click.Context) -> None:
     for check, status, detail in rows:
         click.echo(f"  {check:<{col_w}}  {status}  {detail}")
     click.echo()
+
+
+# ===========================================================================
+# Pass 16 — structured logging, tracing, profiling, audit log
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# agency traces
+# ---------------------------------------------------------------------------
+
+@main.group("traces")
+@click.pass_context
+def traces_cmd(ctx: click.Context) -> None:
+    """View request traces."""
+
+
+@traces_cmd.command("list")
+@click.option("--date", default=None, help="Date YYYY-MM-DD (default: today).")
+@click.option("--limit", "-n", default=20, show_default=True, help="Max spans to show.")
+def traces_list_cmd(date: str | None, limit: int) -> None:
+    """List recent spans from the trace log."""
+    from .tracing import load_spans, list_trace_dates
+
+    if date is None:
+        dates = list_trace_dates()
+        if not dates:
+            click.echo("No trace files found in ~/.agency/traces/")
+            return
+        date = dates[0]
+
+    spans = load_spans(date=date, limit=limit)
+    if not spans:
+        click.echo(f"No spans found for {date}.")
+        return
+
+    click.echo(f"\n=== Traces — {date} (last {len(spans)}) ===\n")
+    for sp in spans:
+        dur = f"{sp.duration_ms:.1f}ms" if sp.duration_ms is not None else "open"
+        err = f" ❌ {sp.error}" if sp.error else ""
+        tags = " ".join(f"{k}={v}" for k, v in sp.tags.items())
+        tag_part = f"  {tags}" if tags else ""
+        click.echo(f"  {sp.name:<30}  {dur:>10}{tag_part}{err}")
+    click.echo()
+
+
+@traces_cmd.command("show")
+@click.option("--date", default=None, help="Date YYYY-MM-DD (default: today).")
+@click.option("--limit", "-n", default=50, show_default=True)
+@click.option("--as-json", is_flag=True)
+def traces_show_cmd(date: str | None, limit: int, as_json: bool) -> None:
+    """Show span detail (optionally as JSON)."""
+    from .tracing import load_spans, list_trace_dates
+    import json as _json
+
+    if date is None:
+        dates = list_trace_dates()
+        date = dates[0] if dates else None
+
+    spans = load_spans(date=date, limit=limit)
+    if as_json:
+        click.echo(_json.dumps([s.to_dict() for s in spans], indent=2))
+    else:
+        for sp in spans:
+            click.echo(_json.dumps(sp.to_dict(), indent=2))
+
+
+# ---------------------------------------------------------------------------
+# agency profile
+# ---------------------------------------------------------------------------
+
+@main.group("profile-perf")
+@click.pass_context
+def profile_perf_cmd(ctx: click.Context) -> None:
+    """Performance profiling commands."""
+
+
+@profile_perf_cmd.command("show")
+@click.option("--top", "-n", default=10, show_default=True, help="Show N slowest ops.")
+def profile_show_perf_cmd(top: int) -> None:
+    """Show the slowest operations from this session."""
+    from .profiler import top_slowest
+
+    ops = top_slowest(top)
+    if not ops:
+        click.echo("No profiling data collected yet (run some commands first).")
+        return
+    click.echo(f"\n=== Slowest operations (top {top}) ===\n")
+    click.echo(f"  {'Operation':<45}  {'Avg ms':>8}  {'Max ms':>8}  {'Count':>6}")
+    click.echo("  " + "-" * 75)
+    for s in ops:
+        cnt = s.tags.get("count", 1)
+        mx  = s.tags.get("max_ms", s.duration_ms)
+        click.echo(f"  {s.operation:<45}  {s.duration_ms:>8.1f}  {mx:>8.1f}  {cnt:>6}")
+    click.echo()
+
+
+@profile_perf_cmd.command("flamegraph")
+@click.option("--output", "-o", default=None, help="Output path (default: ~/.agency/profile.json).")
+def profile_flamegraph_cmd(output: str | None) -> None:
+    """Export a Speedscope-compatible flamegraph JSON."""
+    from pathlib import Path as _P
+    from .profiler import export_speedscope
+
+    out = _P(output) if output else None
+    path = export_speedscope(path=out)
+    click.echo(f"Flamegraph written to: {path}")
+    click.echo("Open at: https://speedscope.app  (drag & drop the file)")
+
+
+# ---------------------------------------------------------------------------
+# agency audit
+# ---------------------------------------------------------------------------
+
+@main.group("audit")
+@click.pass_context
+def audit_cmd(ctx: click.Context) -> None:
+    """Audit log commands."""
+
+
+@audit_cmd.command("show")
+@click.option("--tail", "-n", default=20, show_default=True, help="Show last N entries.")
+@click.option("--as-json", is_flag=True)
+def audit_show_cmd(tail: int, as_json: bool) -> None:
+    """Show recent audit log entries."""
+    import json as _json
+    from .audit import load_entries
+
+    entries = load_entries(tail=tail)
+    if not entries:
+        click.echo("No audit log entries found (~/.agency/audit.jsonl).")
+        return
+
+    if as_json:
+        click.echo(_json.dumps(entries, indent=2))
+        return
+
+    click.echo(f"\n=== Audit log (last {len(entries)}) ===\n")
+    for e in entries:
+        ts = e.get("timestamp", "?")[:19]
+        ev = e.get("event", "?")
+        pl = e.get("payload", {})
+        summary = " ".join(f"{k}={v}" for k, v in pl.items())
+        click.echo(f"  {ts}  {ev:<22}  {summary}")
+    click.echo()
+
+
+@audit_cmd.command("verify")
+def audit_verify_cmd() -> None:
+    """Verify chain integrity of the audit log."""
+    from .audit import verify_integrity
+
+    ok, errors = verify_integrity()
+    if ok:
+        click.echo("✅ Audit log integrity verified — chain hashes are consistent.")
+    else:
+        click.echo(f"❌ Audit log integrity check FAILED ({len(errors)} error(s)):")
+        for err in errors:
+            click.echo(f"   {err}")
+        raise SystemExit(1)
+
+
+@audit_cmd.command("path")
+def audit_path_cmd() -> None:
+    """Print path to the audit log file."""
+    from .audit import audit_path
+    click.echo(audit_path())
+
+
+# ===========================================================================
+# Pass 19 — Humanoid Robot Brain CLI
+# ===========================================================================
+
+@main.group("robotics")
+def robotics_cmd() -> None:
+    """JARVIS humanoid robot brain commands (Pass 19)."""
+
+
+@robotics_cmd.command("start")
+@click.option(
+    "--sim",
+    "sim_backend",
+    default="mock",
+    type=click.Choice(["mock", "pybullet", "mujoco"], case_sensitive=False),
+    show_default=True,
+    help="Simulation backend.",
+)
+@click.option(
+    "--stt",
+    "stt_backend",
+    default="mock",
+    type=click.Choice(["mock", "whisper", "google"], case_sensitive=False),
+    show_default=True,
+    help="Speech-to-text backend.",
+)
+@click.option("--vision/--no-vision", default=False, show_default=True,
+              help="Enable camera-based object detection.")
+def robotics_start_cmd(sim_backend: str, stt_backend: str, vision: bool) -> None:
+    """Start the robot brain (initialise sim + vision)."""
+    from .robotics.simulation import SimulationBackend
+    from .robotics.stt import STTBackend
+    from .robotics.robot_brain import RobotBrain
+
+    sim = SimulationBackend(sim_backend)
+    stt = STTBackend(stt_backend)
+    brain = RobotBrain(sim_backend=sim, stt_backend=stt, use_vision=vision)
+    brain.start()
+    click.echo(f"✅ RobotBrain started — sim={sim_backend} stt={stt_backend} vision={vision}")
+    st = brain.status()
+    click.echo(f"   uptime={st['uptime_s']}s  joints={len(st['joint_states'])}")
+    brain.stop()
+
+
+@robotics_cmd.command("stop")
+def robotics_stop_cmd() -> None:
+    """Stop the robot brain (cleanup / disconnect simulation)."""
+    click.echo("RobotBrain: sending stop signal (use Ctrl-C in listen mode).")
+
+
+@robotics_cmd.command("status")
+@click.option("--sim", "sim_backend", default="mock",
+              type=click.Choice(["mock", "pybullet", "mujoco"], case_sensitive=False))
+def robotics_status_cmd(sim_backend: str) -> None:
+    """Print robot status (joint states, uptime, mode)."""
+    from .robotics.simulation import SimulationBackend
+    from .robotics.stt import STTBackend
+    from .robotics.robot_brain import RobotBrain
+
+    brain = RobotBrain(
+        sim_backend=SimulationBackend(sim_backend),
+        stt_backend=STTBackend.MOCK,
+    )
+    brain.start()
+    st = brain.status()
+    brain.stop()
+
+    click.echo("=== RobotBrain Status ===")
+    for k, v in st.items():
+        if k != "joint_states":
+            click.echo(f"  {k:20s}: {v}")
+    click.echo(f"  {'joint_count':20s}: {len(st.get('joint_states', {}))}")
+
+
+@robotics_cmd.command("exec")
+@click.argument("command_text")
+@click.option("--sim", "sim_backend", default="mock",
+              type=click.Choice(["mock", "pybullet", "mujoco"], case_sensitive=False))
+def robotics_exec_cmd(command_text: str, sim_backend: str) -> None:
+    """Execute a natural-language motion command.
+
+    Examples:\n
+      agency robotics exec "walk forward 2 meters"\n
+      agency robotics exec "turn left 45 degrees"\n
+      agency robotics exec "wave right hand"
+    """
+    from .robotics.simulation import SimulationBackend
+    from .robotics.stt import STTBackend
+    from .robotics.robot_brain import RobotBrain
+
+    brain = RobotBrain(
+        sim_backend=SimulationBackend(sim_backend),
+        stt_backend=STTBackend.MOCK,
+    )
+    brain.start()
+    ok = brain.execute_text_command(command_text)
+    brain.stop()
+    if ok:
+        click.echo(f"✅ Executed: {command_text!r}")
+    else:
+        click.echo(f"❌ Unrecognised or failed: {command_text!r}")
+        raise SystemExit(1)
+
+
+@robotics_cmd.command("listen")
+@click.option("--sim", "sim_backend", default="mock",
+              type=click.Choice(["mock", "pybullet", "mujoco"], case_sensitive=False))
+@click.option("--stt", "stt_backend", default="mock",
+              type=click.Choice(["mock", "whisper", "google"], case_sensitive=False))
+@click.option("--steps", default=5, show_default=True,
+              help="Number of listen cycles (mock) or run indefinitely (real STT).")
+def robotics_listen_cmd(sim_backend: str, stt_backend: str, steps: int) -> None:
+    """Enter voice-control mode (STT → parse → execute loop)."""
+    from .robotics.simulation import SimulationBackend
+    from .robotics.stt import STTBackend
+    from .robotics.robot_brain import RobotBrain
+
+    brain = RobotBrain(
+        sim_backend=SimulationBackend(sim_backend),
+        stt_backend=STTBackend(stt_backend),
+    )
+    brain.start()
+    click.echo(f"🎙  Voice control mode — stt={stt_backend}  (Ctrl-C to stop)")
+    try:
+        count = 0
+        while brain.running:
+            text = brain.stt.listen(timeout=5.0)
+            if text:
+                click.echo(f"  Heard: {text!r}")
+                brain.execute_text_command(text)
+            count += 1
+            if stt_backend == "mock" and count >= steps:
+                break
+    except KeyboardInterrupt:
+        pass
+    finally:
+        brain.stop()
+    click.echo("Voice control stopped.")
+
+
+@robotics_cmd.command("train")
+@click.option("--episodes", default=10, show_default=True, help="RL training episodes.")
+@click.option("--sim", "sim_backend", default="mock",
+              type=click.Choice(["mock", "pybullet", "mujoco"], case_sensitive=False))
+@click.option("--save", "save_path", default=None, help="Path to save trained policy.")
+def robotics_train_cmd(episodes: int, sim_backend: str, save_path: str | None) -> None:
+    """Train a walking policy via Reinforcement Learning (requires torch)."""
+    from .robotics.simulation import SimulationBridge, SimulationBackend
+    from .robotics.rl_trainer import RLTrainer
+
+    sim     = SimulationBridge(SimulationBackend(sim_backend))
+    trainer = RLTrainer(sim=sim)
+    click.echo(f"🏋  RL training: episodes={episodes} sim={sim_backend}")
+    rewards = trainer.train_walking_policy(episodes=episodes, save_path=save_path)
+    if rewards:
+        click.echo(f"✅ Training complete. Mean reward (last 10): "
+                   f"{sum(rewards[-10:]) / len(rewards[-10:]):.2f}")
+    else:
+        click.echo("⚠️  Training returned no rewards (torch may not be installed).")
+
+
+# ===========================================================================
+# Pass 22 — Face Recognition / Gesture / Telegram / TTS CLI commands
+# ===========================================================================
+
+@main.command("face")
+@click.argument("image_path")
+def face_cmd(image_path: str) -> None:
+    """Identify a person in IMAGE_PATH using FaceRecognizer."""
+    from .face_recognition import FaceRecognizer
+    rec = FaceRecognizer()
+    result = rec.identify_person(image_path)
+    click.echo(f"זוהה: {result}")
+
+
+@main.group("gesture")
+def gesture_cmd() -> None:
+    """Gesture recognition commands."""
+
+
+@gesture_cmd.command("camera")
+@click.option("--duration", "-d", default=0, help="Run for N seconds (0 = indefinite).")
+def gesture_camera_cmd(duration: int) -> None:
+    """Start live camera gesture recognition loop."""
+    import time as _time
+    from .robotics.gesture import GestureRecognizer
+
+    rec = GestureRecognizer()
+    click.echo(f"[Pass 22] מזהה מחוות (backend={rec.backend_name}) — Ctrl+C לעצירה")
+
+    results = []
+
+    def _cb(res):
+        click.echo(f"  {res.gesture_name} ({res.confidence:.2f}) → skill: {res.skill_slug}")
+        results.append(res)
+
+    rec.start_camera_loop(_cb)
+    try:
+        if duration > 0:
+            _time.sleep(duration)
+        else:
+            while True:
+                _time.sleep(0.1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        rec.stop()
+    click.echo("עצור.")
+
+
+@main.group("telegram")
+def telegram_cmd() -> None:
+    """Telegram bot commands."""
+
+
+@telegram_cmd.command("start")
+@click.option("--token", envvar="TELEGRAM_BOT_TOKEN", default="", help="Bot token.")
+def telegram_start_cmd(token: str) -> None:
+    """Start the JARVIS Telegram bot."""
+    from .telegram_bot import JarvisTelegramBot
+    bot = JarvisTelegramBot(token=token or None)
+    click.echo(f"[Pass 22] מפעיל Telegram bot (backend={bot.backend_name})…")
+    try:
+        bot.start()
+    except KeyboardInterrupt:
+        bot.stop()
+    click.echo("Bot עצר.")
+
+
+@main.command("tts")
+@click.argument("text")
+@click.option("--lang", "-l", default="he", show_default=True, help="Language code.")
+def tts_cmd(text: str, lang: str) -> None:
+    """Speak TEXT using the TTS engine."""
+    from .tts_engine import TTSEngine
+    engine = TTSEngine()
+    click.echo(f"[Pass 22] מדבר (backend={engine.backend_name}): {text}")
+    engine.speak(text, lang=lang)
+
+
+# ===========================================================================
+# Pass 23 — NLU, SecureConfig, NetworkMonitor CLI commands
+# ===========================================================================
+
+@main.command("nlu")
+@click.argument("text")
+def nlu_cmd(text: str) -> None:
+    """Parse TEXT with NLUEngine and print JSON result."""
+    import json
+    from .nlu_engine import NLUEngine
+
+    engine = NLUEngine()
+    result = engine.parse(text)
+    click.echo(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+
+
+@main.group("secret")
+def secret_cmd() -> None:
+    """Manage JARVIS encrypted secrets (AES-256 via machine-ID key)."""
+
+
+@secret_cmd.command("set")
+@click.argument("key")
+@click.argument("value")
+def secret_set_cmd(key: str, value: str) -> None:
+    """Store KEY=VALUE in the encrypted secrets store."""
+    from .secure_config import SecureConfig
+    cfg = SecureConfig()
+    cfg.set_secret(key, value)
+    click.echo(f"✓ מפתח '{key}' נשמר בהצלחה")
+
+
+@secret_cmd.command("get")
+@click.argument("key")
+def secret_get_cmd(key: str) -> None:
+    """Retrieve KEY from the encrypted secrets store."""
+    from .secure_config import SecureConfig
+    cfg = SecureConfig()
+    val = cfg.get_secret(key)
+    if val is None:
+        click.echo(f"✗ מפתח '{key}' לא נמצא", err=True)
+        raise SystemExit(1)
+    click.echo(val)
+
+
+@secret_cmd.command("list")
+def secret_list_cmd() -> None:
+    """List all stored secret keys (not values)."""
+    from .secure_config import SecureConfig
+    cfg = SecureConfig()
+    keys = cfg.list_keys()
+    if not keys:
+        click.echo("אין מפתחות שמורים")
+    else:
+        for k in keys:
+            click.echo(f"  • {k}")
+
+
+@secret_cmd.command("delete")
+@click.argument("key")
+def secret_delete_cmd(key: str) -> None:
+    """Delete KEY from the secrets store."""
+    from .secure_config import SecureConfig
+    cfg = SecureConfig()
+    ok = cfg.delete_key(key)
+    if ok:
+        click.echo(f"✓ מפתח '{key}' נמחק")
+    else:
+        click.echo(f"✗ מפתח '{key}' לא נמצא", err=True)
+        raise SystemExit(1)
+
+
+@main.command("netcheck")
+@click.option("--anthropic/--no-anthropic", "check_anthropic", default=True,
+              help="Also measure latency to api.anthropic.com.")
+def netcheck_cmd(check_anthropic: bool) -> None:
+    """Check network connectivity and DNS status."""
+    from .network_monitor import NetworkMonitor
+
+    click.echo("בודק קישוריות...")
+    mon = NetworkMonitor()
+    result = mon.check_connectivity()
+
+    status = "✓ מחובר" if result.online else "✗ לא מחובר"
+    click.echo(f"  {status}")
+    click.echo(f"  DNS:     {'✓' if result.dns_ok else '✗'}")
+    click.echo(f"  השהייה:  {result.latency_ms:.1f} ms")
+    click.echo(f"  ספק:     {result.isp}")
+
+    if check_anthropic and result.online:
+        lat = mon.get_latency_to_anthropic()
+        label = f"{lat:.1f} ms" if lat > 0 else "לא נגיש"
+        click.echo(f"  Anthropic API: {label}")
+
+
+# ---------------------------------------------------------------------------
+# Pass 24: gateway, task, hotreload commands
+# ---------------------------------------------------------------------------
+
+@main.command("gateway")
+@click.argument("text")
+def gateway_cmd(text: str) -> None:
+    """Process TEXT through the APIGateway and print GatewayResponse as JSON."""
+    import json
+    from .api_gateway import APIGateway
+    gw = APIGateway()
+    resp = gw.process(text)
+    click.echo(json.dumps(resp.to_dict(), ensure_ascii=False, indent=2))
+
+
+@main.group("task")
+def task_group() -> None:
+    """Robot task management commands."""
+    pass
+
+
+@task_group.command("queue")
+@click.argument("description")
+@click.option("--priority", default=3, show_default=True, type=click.IntRange(1, 5))
+def task_queue_cmd(description: str, priority: int) -> None:
+    """Queue a robot task for execution."""
+    from .robotics.task_executor import TaskExecutor, make_task
+    executor = TaskExecutor()
+    task = make_task(description, priority=priority)
+    task_id = executor.queue_task(task)
+    click.echo(f"✓ משימה בתור: {task_id}  (עדיפות {priority})")
+
+
+@task_group.command("status")
+def task_status_cmd() -> None:
+    """Show current TaskExecutor status."""
+    from .robotics.task_executor import TaskExecutor
+    executor = TaskExecutor()
+    status = executor.get_status()
+    click.echo(f"סטטוס: {status.value}")
+
+
+@main.group("hotreload")
+def hotreload_group() -> None:
+    """Hot-reload file watcher commands."""
+    pass
+
+
+@hotreload_group.command("start")
+@click.option("--path", "paths", multiple=True, default=["runtime/agency"],
+              show_default=True, help="Paths to watch (can repeat).")
+def hotreload_start_cmd(paths: tuple) -> None:
+    """Start watching paths for changes and reload modules automatically."""
+    import time
+    from .hot_reload import HotReloader
+
+    def on_change(changed_path: str) -> None:
+        click.echo(f"Reloaded: {changed_path}")
+
+    reloader = HotReloader()
+    reloader.watch(list(paths), on_change)
+    click.echo(f"מאזין לשינויים ב: {', '.join(paths)}")
+    click.echo("לחץ Ctrl+C לעצירה.")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        reloader.stop()
+        click.echo("\nHot-reload עצר.")

@@ -246,4 +246,97 @@ class AnthropicLLM:
         Use as: `with llm.messages_stream(...) as stream: ...`
         Stream exposes `.text_stream`, iterable events, and `.get_final_message()`.
         """
-    
+        client = self._ensure_client()
+        kwargs, use_beta = self._build_kwargs(
+            system=system, messages=messages, tools=tools,
+            model=model, max_tokens=max_tokens, thinking=thinking,
+        )
+        target = client.beta.messages if use_beta else client.messages
+        return target.stream(**kwargs)
+
+    def _build_kwargs(self, **opts: Any) -> tuple[dict[str, Any], bool]:
+        """Assemble the create/stream kwargs. Returns (kwargs, use_beta)."""
+        kwargs: dict[str, Any] = {
+            "model": opts["model"] or self.config.model,
+            "max_tokens": opts["max_tokens"] or self.config.max_tokens,
+            "system": opts["system"],
+            "messages": opts["messages"],
+        }
+        tools = list(opts["tools"] or [])
+        if self.config.enable_web_search:
+            tools.append({"type": "web_search_20260209", "name": "web_search"})
+        if self.config.enable_code_execution:
+            tools.append({"type": "code_execution_20260120", "name": "code_execution"})
+        if tools:
+            kwargs["tools"] = tools
+        if opts["thinking"]:
+            kwargs["thinking"] = opts["thinking"]
+        if self.config.extra_headers:
+            kwargs["extra_headers"] = self.config.extra_headers
+
+        use_beta = False
+        betas = list(self.config.betas)
+
+        if self.config.task_budget_tokens and self.config.task_budget_tokens >= 20_000:
+            kwargs.setdefault("output_config", {})
+            kwargs["output_config"]["task_budget"] = {
+                "type": "tokens", "total": self.config.task_budget_tokens,
+            }
+            use_beta = True
+            if "task-budgets-2026-03-13" not in betas:
+                betas.append("task-budgets-2026-03-13")
+
+        if self.config.mcp_servers:
+            kwargs["mcp_servers"] = self.config.mcp_servers
+            use_beta = True
+            if "mcp-client-2025-11-20" not in betas:
+                betas.append("mcp-client-2025-11-20")
+
+        if betas:
+            kwargs["betas"] = betas
+
+        return kwargs, use_beta
+
+    @staticmethod
+    def cached_system(
+        text: str,
+        profile: str | None = None,
+        lessons: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Build a system prompt list with a cache_control breakpoint at the end.
+
+        Optional `profile` and `lessons` are prepended as separate text
+        blocks before the persona body. Neither carries its own
+        breakpoint — the breakpoint stays on the persona block, so
+        Anthropic caches the whole prelude (profile + lessons + persona)
+        as one prefix. Order matters: profile first (who the user is),
+        then lessons (what we've learned working together), then the
+        persona (how to behave for this specific skill).
+
+        Skipping both produces the original single-block shape.
+        """
+        blocks: list[dict[str, Any]] = []
+        if profile:
+            blocks.append({
+                "type": "text",
+                "text": (
+                    "Always-on user profile (background context, not a request):\n\n"
+                    + profile
+                ),
+            })
+        if lessons:
+            blocks.append({
+                "type": "text",
+                "text": (
+                    "Cross-session lessons journal — read this before "
+                    "deciding anything; older entries may have been "
+                    "trimmed for size:\n\n"
+                    + lessons
+                ),
+            })
+        blocks.append({
+            "type": "text",
+            "text": text,
+            "cache_control": {"type": "ephemeral"},
+        })
+        return blocks
