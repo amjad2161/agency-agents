@@ -22,3 +22,22 @@ After install:
 - Server auto-starts in background
 - Win+J opens the native chat from anywhere
 - Right-click tray → Open Chat / Status / Restart server / Quit
+
+## Notes & caveats
+
+- **Platform.** The tray + hotkey + autostart pieces are Windows-only. On
+  non-Windows platforms `hotkey_listener.py` exits cleanly and the `.bat`
+  launchers are not used.
+- **`keyboard` package.** Provides the global Win+J hotkey via a low-level
+  keyboard hook. Some antivirus/EDR products flag this. On Linux the same
+  package requires root (it taps `/dev/input/*`); the listener won't be
+  started there.
+- **Server logs.** When the tray spawns `agency serve`, stdout/stderr are
+  written to `%AGENCY_ROOT%\logs\jarvis_tray_server.log`. Hotkey errors go to
+  `jarvis_hotkey.log` in the same folder.
+- **`AGENCY_ROOT` override.** Set `AGENCY_ROOT` in your environment before
+  running `INSTALL_AUTOSTART.cmd` or the launcher `.bat` files to pick a
+  non-default install location (default: `%USERPROFILE%\agency`).
+- **Reinstall safety.** Re-running the installer renames any existing
+  `jarvis_os/` directory to `jarvis_os.bak.<timestamp>` rather than deleting
+  it, so local edits aren't lost.

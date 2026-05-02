@@ -6,12 +6,11 @@ Built-in to Python 3.x — zero pip deps for the UI itself.
 from __future__ import annotations
 import json
 import os
-import sys
 import threading
 import urllib.request
 import urllib.error
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
+from tkinter import scrolledtext, messagebox
 from datetime import datetime
 
 AGENCY_URL = os.environ.get("JARVIS_URL", "http://127.0.0.1:8765")
@@ -35,6 +34,10 @@ class JarvisChat(tk.Tk):
         self.error_c = "#f85149"
 
         self.configure(bg=self.bg_dark)
+        # Track scheduled `after` callbacks so we can cancel them on exit and
+        # avoid "invalid command name" errors firing after the root is destroyed.
+        self._closing = False
+        self._health_after_id: str | None = None
         self._setup_ui()
         self._check_health()
 
@@ -94,6 +97,8 @@ class JarvisChat(tk.Tk):
         # Single binding handles both plain Return (newline) and Ctrl+Return (send).
         # Binding <Control-Return> separately would cause _send to fire twice.
         self.input.bind("<Return>", self._on_enter)
+        # Numpad Enter mirrors the main Return key.
+        self.input.bind("<KP_Enter>", self._on_enter)
         self.input.focus_set()
 
         send_btn = tk.Button(input_frame, text="Send\n(Ctrl+Enter)",
@@ -124,7 +129,22 @@ class JarvisChat(tk.Tk):
 
     def _append_async(self, tag, text):
         """Thread-safe append: marshal back to the Tk main loop."""
-        self.after(0, self._append, tag, text)
+        if self._closing:
+            return
+        try:
+            self.after(0, self._append, tag, text)
+        except tk.TclError:
+            # Root was destroyed between the check and the schedule.
+            pass
+
+    def _set_status_async(self, text: str) -> None:
+        """Thread-safe status update; no-op once the window is closing."""
+        if self._closing:
+            return
+        try:
+            self.after(0, self.status_var.set, text)
+        except tk.TclError:
+            pass
 
     def _send(self):
         text = self.input.get("1.0", tk.END).strip()
@@ -161,6 +181,13 @@ class JarvisChat(tk.Tk):
                 body = ""
             self._append_async("error", f"\n[HTTP {e.code}] {e.reason}\n{body}\n\n")
             return
+        except TimeoutError:
+            self._append_async(
+                "error",
+                "\n[TIMEOUT] Request took longer than 120s. The server may be busy "
+                "or stuck — try again, or check `agency serve` logs.\n\n",
+            )
+            return
         except Exception as e:
             self._append_async("error", f"\n[ERROR] {type(e).__name__}: {e}\n\n")
             return
@@ -170,45 +197,75 @@ class JarvisChat(tk.Tk):
         self._append_async("", f"{answer}\n\n")
 
     def _check_health(self):
+        if self._closing:
+            return
+
         def check():
             try:
                 with urllib.request.urlopen(f"{AGENCY_URL}/api/health", timeout=3) as r:
                     if r.status == 200:
-                        self.after(0, self.status_var.set,
-                                   f"● Connected — {AGENCY_URL}")
+                        self._set_status_async(f"● Connected — {AGENCY_URL}")
                         return
             except Exception:
                 pass
-            self.after(0, self.status_var.set,
-                       f"● Disconnected — {AGENCY_URL} (start agency serve)")
+            self._set_status_async(
+                f"● Disconnected — {AGENCY_URL} (start agency serve)"
+            )
+
         threading.Thread(target=check, daemon=True).start()
-        self.after(5000, self._check_health)  # poll every 5s
+        try:
+            self._health_after_id = self.after(5000, self._check_health)  # poll every 5s
+        except tk.TclError:
+            self._health_after_id = None
 
     def _list_agents(self):
         def fetch():
             try:
                 with urllib.request.urlopen(f"{AGENCY_URL}/api/skills", timeout=5) as r:
-                    skills = json.loads(r.read())
-                text = f"\n=== {len(skills)} agents available ===\n"
+                    raw = json.loads(r.read())
+                # Endpoint returns {"count": N, "skills": [...]} but tolerate a
+                # raw list for forward/backward compatibility.
+                if isinstance(raw, dict):
+                    skills = raw.get("skills", [])
+                    count = raw.get("count", len(skills))
+                else:
+                    skills = raw
+                    count = len(skills)
+                text = f"\n=== {count} agents available ===\n"
                 for s in skills[:50]:
                     name = s.get("name", "?") if isinstance(s, dict) else str(s)
                     text += f"  • {name}\n"
-                if len(skills) > 50:
-                    text += f"\n(showing first 50 of {len(skills)})\n\n"
+                if count > 50:
+                    text += f"\n(showing first 50 of {count})\n\n"
                 else:
                     text += "\n"
                 self._append_async("info", text)
             except Exception as e:
                 self._append_async("error", f"\n[list_agents] {e}\n\n")
+
         threading.Thread(target=fetch, daemon=True).start()
 
     def _health_popup(self):
+        # Run the network call off the Tk main thread so a slow/hung server
+        # doesn't freeze the UI for the duration of the timeout.
+        def fetch():
+            try:
+                with urllib.request.urlopen(f"{AGENCY_URL}/api/health", timeout=3) as r:
+                    body = r.read().decode()
+                self._show_dialog_async("info", "Health", body)
+            except Exception as e:
+                self._show_dialog_async("error", "Health", f"{e}")
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _show_dialog_async(self, kind: str, title: str, message: str) -> None:
+        if self._closing:
+            return
+        show = messagebox.showinfo if kind == "info" else messagebox.showerror
         try:
-            with urllib.request.urlopen(f"{AGENCY_URL}/api/health", timeout=3) as r:
-                d = r.read().decode()
-            messagebox.showinfo("Health", d)
-        except Exception as e:
-            messagebox.showerror("Health", f"{e}")
+            self.after(0, show, title, message)
+        except tk.TclError:
+            pass
 
     def _clear_chat(self):
         self.chat.config(state=tk.NORMAL)
@@ -233,6 +290,13 @@ class JarvisChat(tk.Tk):
         self.withdraw()  # tray.py will re-show on click
 
     def _real_exit(self):
+        self._closing = True
+        if self._health_after_id is not None:
+            try:
+                self.after_cancel(self._health_after_id)
+            except tk.TclError:
+                pass
+            self._health_after_id = None
         self.destroy()
 
 
