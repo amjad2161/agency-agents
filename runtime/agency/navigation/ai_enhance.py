@@ -1130,3 +1130,189 @@ class AIEnhancement:
             },
             "reliability": reliability,
         }
+
+
+# ---------------------------------------------------------------------------
+# Transformer-based trajectory predictor (Round 3)
+# ---------------------------------------------------------------------------
+
+
+class TransformerPredictor:
+    """Pure-numpy transformer for autoregressive trajectory prediction.
+
+    Implements:
+      * scaled dot-product multi-head self-attention
+      * sinusoidal positional encoding
+      * 2-layer attention stack (encoder-only)
+      * autoregressive decode for ``predict(steps_ahead)``
+      * online weight update via gradient descent on prediction error
+
+    State dimension is 2 (x, y).  Model dimension defaults to 16 with 4
+    heads — small enough to keep tests fast yet large enough for
+    self-attention to be meaningful.
+    """
+
+    def __init__(
+        self,
+        d_model: int = 16,
+        n_heads: int = 4,
+        n_layers: int = 2,
+        max_len: int = 64,
+        lr: float = 1e-3,
+        seed: int = 0,
+    ) -> None:
+        if d_model % n_heads != 0:
+            raise ValueError("d_model must be divisible by n_heads")
+        self.d_model = int(d_model)
+        self.n_heads = int(n_heads)
+        self.d_head = self.d_model // self.n_heads
+        self.n_layers = int(n_layers)
+        self.max_len = int(max_len)
+        self.lr = float(lr)
+
+        rng = np.random.default_rng(seed)
+        scale = 1.0 / math.sqrt(self.d_model)
+        # Input embedding: 2 → d_model
+        self.W_in = rng.standard_normal((2, self.d_model)) * scale
+        # Per-layer projection matrices (Wq, Wk, Wv, Wo).
+        self.layers = []
+        for _ in range(self.n_layers):
+            self.layers.append({
+                "Wq": rng.standard_normal((self.d_model, self.d_model)) * scale,
+                "Wk": rng.standard_normal((self.d_model, self.d_model)) * scale,
+                "Wv": rng.standard_normal((self.d_model, self.d_model)) * scale,
+                "Wo": rng.standard_normal((self.d_model, self.d_model)) * scale,
+            })
+        # Output head: d_model → 2
+        self.W_out = rng.standard_normal((self.d_model, 2)) * scale
+        self._cached_history: Optional[np.ndarray] = None
+
+    # -- positional encoding ------------------------------------------------
+    def _positional_encoding(self, length: int) -> np.ndarray:
+        pos = np.arange(length)[:, None].astype(float)
+        i = np.arange(self.d_model)[None, :].astype(float)
+        denom = np.power(10000.0, (2 * (i // 2)) / self.d_model)
+        pe = np.zeros((length, self.d_model), dtype=float)
+        pe[:, 0::2] = np.sin(pos / denom[:, 0::2])
+        pe[:, 1::2] = np.cos(pos / denom[:, 1::2])
+        return pe
+
+    # -- attention ----------------------------------------------------------
+    def _attention(
+        self,
+        Q: np.ndarray,
+        K: np.ndarray,
+        V: np.ndarray,
+        mask: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        """Scaled dot-product attention.  Q, K, V shape: (T, d_head) per head.
+
+        For unbatched multi-head we accept (n_heads, T, d_head) shaped inputs.
+        """
+        scale = 1.0 / math.sqrt(self.d_head)
+        scores = np.einsum("htd,hsd->hts", Q, K) * scale
+        if mask is not None:
+            scores = np.where(mask, scores, -1e9)
+        # Stable softmax along last axis.
+        scores = scores - scores.max(axis=-1, keepdims=True)
+        weights = np.exp(scores)
+        weights = weights / (weights.sum(axis=-1, keepdims=True) + 1e-12)
+        out = np.einsum("hts,hsd->htd", weights, V)
+        return out
+
+    def _layer_forward(
+        self,
+        X: np.ndarray,
+        layer: dict,
+        causal: bool = False,
+    ) -> np.ndarray:
+        """One transformer-style attention layer with residual connection."""
+        T = X.shape[0]
+        Q = X @ layer["Wq"]
+        K = X @ layer["Wk"]
+        V = X @ layer["Wv"]
+        Qh = Q.reshape(T, self.n_heads, self.d_head).transpose(1, 0, 2)
+        Kh = K.reshape(T, self.n_heads, self.d_head).transpose(1, 0, 2)
+        Vh = V.reshape(T, self.n_heads, self.d_head).transpose(1, 0, 2)
+        mask = None
+        if causal:
+            mask = np.tril(np.ones((T, T), dtype=bool))[None, :, :]
+        attn = self._attention(Qh, Kh, Vh, mask=mask)
+        attn = attn.transpose(1, 0, 2).reshape(T, self.d_model)
+        attn = attn @ layer["Wo"]
+        return X + attn  # residual
+
+    # -- public API ---------------------------------------------------------
+    def encode(self, trajectory_history: np.ndarray) -> np.ndarray:
+        """Encode a (T, 2) trajectory into a (T, d_model) representation."""
+        traj = np.asarray(trajectory_history, dtype=float)
+        if traj.ndim != 2 or traj.shape[1] != 2:
+            raise ValueError("trajectory_history must be shape (T, 2)")
+        T = min(traj.shape[0], self.max_len)
+        traj = traj[-T:]
+        X = traj @ self.W_in
+        X = X + self._positional_encoding(T)
+        for layer in self.layers:
+            X = self._layer_forward(X, layer, causal=True)
+        self._cached_history = traj.copy()
+        return X
+
+    def predict(self, steps_ahead: int = 10) -> dict:
+        """Autoregressive decode.  Returns predicted positions and per-step
+        uncertainty ellipses (semi-major, semi-minor, angle) growing with
+        the prediction horizon (a simple ``sigma * sqrt(t)`` model).
+        """
+        if self._cached_history is None:
+            raise RuntimeError("call encode(...) before predict(...)")
+        traj = self._cached_history.copy()
+        positions = []
+        ellipses = []
+        # Velocity inference from last two history samples.
+        if traj.shape[0] >= 2:
+            base_vel = traj[-1] - traj[-2]
+        else:
+            base_vel = np.zeros(2)
+        for t in range(1, int(steps_ahead) + 1):
+            X = self.encode(traj)
+            last_h = X[-1]
+            delta = last_h @ self.W_out
+            # Combine learned delta (small) with velocity prior (dominant).
+            next_pos = traj[-1] + base_vel + 0.01 * delta
+            positions.append(next_pos.tolist())
+            traj = np.vstack([traj, next_pos[None, :]])
+            sigma_t = 0.5 * math.sqrt(t)
+            ellipses.append({
+                "semi_major_m": sigma_t * 1.5,
+                "semi_minor_m": sigma_t,
+                "angle_rad": 0.0,
+            })
+        return {
+            "positions": positions,
+            "uncertainty_ellipses": ellipses,
+            "horizon": int(steps_ahead),
+        }
+
+    def update(self, actual_pos) -> float:
+        """Online update: simple gradient step on MSE between predicted next
+        position and observed ``actual_pos``.  Returns the MSE.
+        """
+        if self._cached_history is None:
+            raise RuntimeError("call encode(...) before update(...)")
+        actual = np.asarray(actual_pos, dtype=float).reshape(2)
+        # One-step prediction (no autoregression to keep gradient simple).
+        X = self.encode(self._cached_history)
+        last_h = X[-1]
+        delta = last_h @ self.W_out
+        pred_pos = self._cached_history[-1] + delta
+        error = pred_pos - actual
+        mse = float((error ** 2).mean())
+        # Gradient w.r.t. W_out only — last-layer update is enough to
+        # demonstrate online learning without full backprop.
+        grad_W_out = np.outer(last_h, error) * 2.0 / 2.0
+        self.W_out -= self.lr * grad_W_out
+        return mse
+
+
+__all_r3 = [
+    "TransformerPredictor",
+]
