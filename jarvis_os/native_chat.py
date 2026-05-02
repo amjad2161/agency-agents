@@ -51,7 +51,7 @@ class JarvisChat(tk.Tk):
         menubar.add_cascade(label="File", menu=filemenu)
 
         agentmenu = tk.Menu(menubar, tearoff=0, bg=self.bg_med, fg=self.fg)
-        agentmenu.add_command(label="List all 341 agents", command=self._list_agents)
+        agentmenu.add_command(label="List agents", command=self._list_agents)
         agentmenu.add_command(label="Health check", command=self._health_popup)
         menubar.add_cascade(label="Agents", menu=agentmenu)
 
@@ -91,7 +91,8 @@ class JarvisChat(tk.Tk):
                              font=("Consolas", 10), height=3, wrap=tk.WORD,
                              insertbackground=self.fg, relief=tk.FLAT, padx=10, pady=8)
         self.input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4,4))
-        self.input.bind("<Control-Return>", lambda e: self._send())
+        # Single binding handles both plain Return (newline) and Ctrl+Return (send).
+        # Binding <Control-Return> separately would cause _send to fire twice.
         self.input.bind("<Return>", self._on_enter)
         self.input.focus_set()
 
@@ -113,9 +114,17 @@ class JarvisChat(tk.Tk):
 
     def _append(self, tag, text):
         self.chat.config(state=tk.NORMAL)
-        self.chat.insert(tk.END, text, tag)
+        # Tk treats "" as the absence of a tag, so callers can pass "" for plain text.
+        if tag:
+            self.chat.insert(tk.END, text, tag)
+        else:
+            self.chat.insert(tk.END, text)
         self.chat.see(tk.END)
         self.chat.config(state=tk.DISABLED)
+
+    def _append_async(self, tag, text):
+        """Thread-safe append: marshal back to the Tk main loop."""
+        self.after(0, self._append, tag, text)
 
     def _send(self):
         text = self.input.get("1.0", tk.END).strip()
@@ -124,58 +133,74 @@ class JarvisChat(tk.Tk):
         self.input.delete("1.0", tk.END)
         ts = datetime.now().strftime("%H:%M:%S")
         self._append("user", f"[{ts}] You:  ")
-        self._append(None, f"{text}\n")
+        self._append("", f"{text}\n")
 
         threading.Thread(target=self._ask, args=(text,), daemon=True).start()
 
     def _ask(self, text):
         try:
-            payload = json.dumps({"prompt": text, "stream": False}).encode("utf-8")
+            payload = json.dumps({"message": text}).encode("utf-8")
             req = urllib.request.Request(
-                f"{AGENCY_URL}/api/chat",
+                f"{AGENCY_URL}/api/run",
                 data=payload,
                 headers={"Content-Type": "application/json"},
             )
             with urllib.request.urlopen(req, timeout=120) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-            answer = data.get("response") or data.get("output") or data.get("message") or json.dumps(data)
+            answer = (
+                data.get("text")
+                or data.get("response")
+                or data.get("output")
+                or data.get("message")
+                or json.dumps(data)
+            )
         except urllib.error.HTTPError as e:
-            answer = f"[HTTP {e.code}] {e.reason}\n{e.read().decode('utf-8', 'replace')}"
-            self._append("error", f"\n{answer}\n\n")
+            try:
+                body = e.read().decode("utf-8", "replace")
+            except Exception:
+                body = ""
+            self._append_async("error", f"\n[HTTP {e.code}] {e.reason}\n{body}\n\n")
             return
         except Exception as e:
-            self._append("error", f"\n[ERROR] {type(e).__name__}: {e}\n\n")
+            self._append_async("error", f"\n[ERROR] {type(e).__name__}: {e}\n\n")
             return
 
         ts = datetime.now().strftime("%H:%M:%S")
-        self._append("jarvis", f"[{ts}] JARVIS: ")
-        self._append(None, f"{answer}\n\n")
+        self._append_async("jarvis", f"[{ts}] JARVIS: ")
+        self._append_async("", f"{answer}\n\n")
 
     def _check_health(self):
         def check():
             try:
                 with urllib.request.urlopen(f"{AGENCY_URL}/api/health", timeout=3) as r:
                     if r.status == 200:
-                        self.status_var.set(f"● Connected — {AGENCY_URL}")
+                        self.after(0, self.status_var.set,
+                                   f"● Connected — {AGENCY_URL}")
                         return
             except Exception:
                 pass
-            self.status_var.set(f"● Disconnected — {AGENCY_URL} (start agency serve)")
+            self.after(0, self.status_var.set,
+                       f"● Disconnected — {AGENCY_URL} (start agency serve)")
         threading.Thread(target=check, daemon=True).start()
         self.after(5000, self._check_health)  # poll every 5s
 
     def _list_agents(self):
-        try:
-            with urllib.request.urlopen(f"{AGENCY_URL}/api/skills", timeout=5) as r:
-                skills = json.loads(r.read())
-            text = f"\n=== {len(skills)} agents available ===\n"
-            for s in skills[:50]:
-                name = s.get("name", "?") if isinstance(s, dict) else str(s)
-                text += f"  • {name}\n"
-            text += f"\n(showing first 50 of {len(skills)})\n\n"
-            self._append("info", text)
-        except Exception as e:
-            self._append("error", f"\n[list_agents] {e}\n\n")
+        def fetch():
+            try:
+                with urllib.request.urlopen(f"{AGENCY_URL}/api/skills", timeout=5) as r:
+                    skills = json.loads(r.read())
+                text = f"\n=== {len(skills)} agents available ===\n"
+                for s in skills[:50]:
+                    name = s.get("name", "?") if isinstance(s, dict) else str(s)
+                    text += f"  • {name}\n"
+                if len(skills) > 50:
+                    text += f"\n(showing first 50 of {len(skills)})\n\n"
+                else:
+                    text += "\n"
+                self._append_async("info", text)
+            except Exception as e:
+                self._append_async("error", f"\n[list_agents] {e}\n\n")
+        threading.Thread(target=fetch, daemon=True).start()
 
     def _health_popup(self):
         try:
