@@ -28,16 +28,31 @@ from .underground import UndergroundEstimator
 from .ai_enhance import AIEnhancer
 from .offline_maps import OfflineMaps
 
+# Canonical public-API aliases (preferred names going forward).
+NavigationFusion = SensorFusion
+SatellitePositioner = SatelliteEstimator
+IndoorPositioner = IndoorEstimator
+UnderwaterPositioner = UnderwaterEstimator
+UndergroundPositioner = UndergroundEstimator
+AIEnhancement = AIEnhancer
+
 __all__ = [
     # Shared types
     "Position", "Velocity", "Pose", "Estimate", "Confidence",
-    # Tier estimators
+    # Tier estimators (legacy names)
     "SatelliteEstimator",
     "IndoorEstimator",
     "UnderwaterEstimator",
     "UndergroundEstimator",
-    # Core engines
+    # Core engines (legacy names)
     "SensorFusion",
     "AIEnhancer",
     "OfflineMaps",
+    # Canonical public-API names
+    "NavigationFusion",
+    "SatellitePositioner",
+    "IndoorPositioner",
+    "UnderwaterPositioner",
+    "UndergroundPositioner",
+    "AIEnhancement",
 ]

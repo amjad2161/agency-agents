@@ -17,7 +17,7 @@ Per user OMEGA_NEXUS Tier-4 spec. Multi-tier sensor fusion targeting ±0.5–3m 
 ## Usage (when implemented)
 
 ```python
-from godskill_nav_v11 import (
+from runtime.agency.navigation import (
     SatelliteEstimator, IndoorEstimator, SensorFusion, AIEnhancer
 )
 

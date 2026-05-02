@@ -9,35 +9,32 @@ import math
 import time
 import pytest
 
-import sys
-sys.path.insert(0, "/tmp")
-
-from godskill_nav_v11 import (
+from runtime.agency.navigation import (
     Position, Velocity, Pose, Estimate, Confidence,
     SatelliteEstimator, IndoorEstimator, UnderwaterEstimator,
     UndergroundEstimator, SensorFusion, AIEnhancer, OfflineMaps,
 )
-from godskill_nav_v11.satellite import GnssFix
-from godskill_nav_v11.indoor import (
+from runtime.agency.navigation.satellite import GnssFix
+from runtime.agency.navigation.indoor import (
     IndoorEngine, UWBAnchor, UWBMeasurement,
     WiFiAP, WiFiScan, BLEBeacon, IMUSample, MagSample,
 )
-from godskill_nav_v11.underwater import (
+from runtime.agency.navigation.underwater import (
     UnderwaterEngine, INSSample, DVLSample, LBLFix, USBLFix,
 )
-from godskill_nav_v11.underground import (
+from runtime.agency.navigation.underground import (
     UndergroundEngine, OdometrySample, LiDARScan,
     RadioBeacon, MagAnomalySample,
 )
-from godskill_nav_v11.fusion import EKF, UKF, ParticleFilter
-from godskill_nav_v11.ai_enhance import (
+from runtime.agency.navigation.fusion import EKF, UKF, ParticleFilter
+from runtime.agency.navigation.ai_enhance import (
     AIEnhancer, RadioSample, DeepRadioMap,
     SceneFeatures, SceneRecognizer,
     TrajectoryPredictor, EnvironmentAdapter,
     BayesianUncertaintyEstimator,
     PoseGraphSLAM, PoseEdge,
 )
-from godskill_nav_v11.offline_maps import (
+from runtime.agency.navigation.offline_maps import (
     OfflineMaps, VectorMapDB, MapNode, MapEdge,
     ElevationDB, DEMTile, BathymetricDB,
     RadioFingerprintDB, FingerprintRecord,
