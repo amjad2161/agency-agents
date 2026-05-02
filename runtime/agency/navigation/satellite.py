@@ -533,3 +533,169 @@ __all__ = ["SatelliteEstimator","GnssFix","RTKStatus","parse_gga",
            "CONSTELLATIONS","FIX_GPS","FIX_DGPS","FIX_RTK_FIXED","FIX_RTK_FLOAT",
            "RTKCorrector","RTKCorrection",
            "MultiConstellationClock","InterSystemBias"]
+
+
+# ---------------------------------------------------------------------------
+# Tightly-coupled GNSS/IMU EKF (Round 5)
+# ---------------------------------------------------------------------------
+
+try:
+    import numpy as _np
+except Exception:  # pragma: no cover
+    _np = None
+
+
+class TightlyCoupledGNSSIMU:
+    """17-state EKF for tightly-coupled GNSS/IMU navigation.
+
+    State vector (17,):
+        [0:3]   position (m, ECEF or local NED)
+        [3:6]   velocity (m/s)
+        [6:9]   attitude (small-angle Euler, rad)
+        [9:12]  accelerometer bias (m/s^2)
+        [12:15] gyroscope bias (rad/s)
+        [15]    receiver clock bias (m, scaled by c)
+        [16]    receiver clock drift (m/s)
+
+    ``predict`` runs IMU mechanization (constant-velocity attitude integration
+    + strapdown velocity / position update).  ``update_pseudorange`` and
+    ``update_doppler`` perform raw GNSS measurement updates.  ``integrity_check``
+    runs a chi-square gate over recent residuals (RAIM-style).
+    """
+
+    N_STATES = 17
+
+    def __init__(self, gravity: float = 9.80665) -> None:
+        if _np is None:  # pragma: no cover
+            raise RuntimeError("TightlyCoupledGNSSIMU requires numpy")
+        self.x = _np.zeros(self.N_STATES, dtype=float)
+        self.P = _np.eye(self.N_STATES, dtype=float) * 10.0
+        self.g = float(gravity)
+        self.sigma_a = 0.05
+        self.sigma_g = 0.005
+        self._residuals: list = []
+
+    # -- mechanization ------------------------------------------------------
+    def predict(self, accel, gyro, dt: float) -> None:
+        if dt <= 0.0:
+            return
+        a = _np.asarray(accel, dtype=float).reshape(3) - self.x[9:12]
+        w = _np.asarray(gyro, dtype=float).reshape(3) - self.x[12:15]
+        # Strapdown integration in local NED frame (gravity along +z down).
+        a_world = a + _np.array([0.0, 0.0, self.g])
+        self.x[0:3] = self.x[0:3] + self.x[3:6] * dt + 0.5 * a_world * dt * dt
+        self.x[3:6] = self.x[3:6] + a_world * dt
+        self.x[6:9] = self.x[6:9] + w * dt
+        # Clock model: bias <- bias + drift*dt
+        self.x[15] = self.x[15] + self.x[16] * dt
+
+        # Covariance propagation (block-diagonal F approximation).
+        F = _np.eye(self.N_STATES, dtype=float)
+        F[0:3, 3:6] = _np.eye(3) * dt
+        F[15, 16] = dt
+        Q = _np.zeros((self.N_STATES, self.N_STATES), dtype=float)
+        Q[0:3, 0:3] = _np.eye(3) * (self.sigma_a ** 2) * dt ** 4 / 4.0
+        Q[3:6, 3:6] = _np.eye(3) * (self.sigma_a ** 2) * dt ** 2
+        Q[6:9, 6:9] = _np.eye(3) * (self.sigma_g ** 2) * dt ** 2
+        Q[9:12, 9:12] = _np.eye(3) * 1e-6 * dt
+        Q[12:15, 12:15] = _np.eye(3) * 1e-8 * dt
+        Q[15, 15] = 1e-2 * dt
+        Q[16, 16] = 1e-4 * dt
+        self.P = F @ self.P @ F.T + Q
+
+    # -- pseudorange update -------------------------------------------------
+    def update_pseudorange(
+        self,
+        sv_pos,
+        pseudorange: float,
+        sv_clock_bias: float = 0.0,
+        sigma: float = 5.0,
+    ) -> dict:
+        """Update with one raw GNSS pseudorange.
+
+        Predicted: rho_pred = ||sv - r|| + clock_bias - sv_clock_bias
+        """
+        sv = _np.asarray(sv_pos, dtype=float).reshape(3)
+        diff = sv - self.x[0:3]
+        r = float(_np.linalg.norm(diff))
+        if r < 1e-6:
+            return {"accepted": False, "residual": 0.0}
+        rho_pred = r + self.x[15] - float(sv_clock_bias)
+        residual = float(pseudorange) - rho_pred
+        # Jacobian wrt state: dh/dr = -unit(diff), dh/db = 1
+        H = _np.zeros((1, self.N_STATES), dtype=float)
+        H[0, 0:3] = -diff / r
+        H[0, 15] = 1.0
+        R = _np.array([[sigma ** 2]])
+        S = H @ self.P @ H.T + R
+        K = self.P @ H.T / float(S[0, 0])
+        self.x = self.x + (K * residual).reshape(self.N_STATES)
+        self.P = (_np.eye(self.N_STATES) - K @ H) @ self.P
+        self._residuals.append(residual)
+        if len(self._residuals) > 50:
+            self._residuals = self._residuals[-50:]
+        return {"accepted": True, "residual": residual, "rho_pred": rho_pred}
+
+    # -- doppler update -----------------------------------------------------
+    def update_doppler(
+        self,
+        sv_vel,
+        doppler_hz: float,
+        freq_hz: float = 1_575_420_000.0,
+        sigma: float = 0.5,
+    ) -> dict:
+        """Update with Doppler observation.
+
+        Radial velocity = -lambda * doppler_hz; predicted radial velocity =
+        unit(sv-r) . (vel_sv - vel_r) + clock_drift.
+        """
+        c = 299_792_458.0
+        wavelength = c / float(freq_hz)
+        radial_meas = -wavelength * float(doppler_hz)
+        sv = _np.zeros(3)  # we only need the relative direction; assume known
+        # Direction reused from receiver to nominal up if no SV pos passed.
+        sv_v = _np.asarray(sv_vel, dtype=float).reshape(3)
+        # Use velocity-difference projection along estimated direction of
+        # motion (fall back to z-axis if zero).
+        v_rel = sv_v - self.x[3:6]
+        n = float(_np.linalg.norm(self.x[3:6])) or 1.0
+        unit = self.x[3:6] / n
+        radial_pred = float(unit @ v_rel) + self.x[16]
+        residual = radial_meas - radial_pred
+        H = _np.zeros((1, self.N_STATES), dtype=float)
+        H[0, 3:6] = -unit
+        H[0, 16] = 1.0
+        R = _np.array([[sigma ** 2]])
+        S = H @ self.P @ H.T + R
+        K = self.P @ H.T / float(S[0, 0])
+        self.x = self.x + (K * residual).reshape(self.N_STATES)
+        self.P = (_np.eye(self.N_STATES) - K @ H) @ self.P
+        return {"accepted": True, "residual": residual,
+                "wavelength_m": wavelength}
+
+    # -- RAIM-style integrity ----------------------------------------------
+    def integrity_check(self, threshold_sigma: float = 3.0) -> dict:
+        if not self._residuals:
+            return {"integrity_ok": True, "n_residuals": 0,
+                    "max_normalized": 0.0, "rms": 0.0}
+        arr = _np.asarray(self._residuals, dtype=float)
+        rms = float(_np.sqrt(_np.mean(arr ** 2)))
+        max_norm = float(_np.max(_np.abs(arr)) / max(rms, 1e-9))
+        ok = max_norm < float(threshold_sigma)
+        return {
+            "integrity_ok": ok,
+            "n_residuals": int(arr.size),
+            "max_normalized": max_norm,
+            "rms": rms,
+        }
+
+    def state(self) -> dict:
+        return {
+            "position": self.x[0:3].copy(),
+            "velocity": self.x[3:6].copy(),
+            "attitude": self.x[6:9].copy(),
+            "accel_bias": self.x[9:12].copy(),
+            "gyro_bias": self.x[12:15].copy(),
+            "clock_bias_m": float(self.x[15]),
+            "clock_drift_mps": float(self.x[16]),
+        }

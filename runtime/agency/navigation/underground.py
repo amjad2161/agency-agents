@@ -1042,3 +1042,142 @@ __all__ = [
     "AnomalyNavigator",
     "RadioTriangulator",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Magnetometer SLAM (Round 5)
+# ---------------------------------------------------------------------------
+
+import numpy as _np_mag
+
+
+class MagnetometerSLAM:
+    """Magnetic-anomaly fingerprint SLAM.
+
+    Records (pos_2d, mag_vector) samples, builds a 2-D anomaly map by
+    inverse-distance weighting (IDW) interpolation, and localises new
+    readings via nearest-neighbour + small gradient-descent refinement.
+    """
+
+    def __init__(self) -> None:
+        self._samples: list = []
+        self._grid = None
+        self._grid_origin = None
+        self._grid_res = 1.0
+
+    # -- recording ----------------------------------------------------------
+    def record_measurement(self, pos_2d, mag_vector) -> None:
+        p = _np_mag.asarray(pos_2d, dtype=float).reshape(2)
+        m = _np_mag.asarray(mag_vector, dtype=float).reshape(-1)
+        self._samples.append({"pos": p, "mag": m, "magnitude": float(_np_mag.linalg.norm(m))})
+
+    # -- IDW interpolation --------------------------------------------------
+    def build_anomaly_map(
+        self,
+        grid_resolution: float = 1.0,
+        power: float = 2.0,
+    ) -> _np_mag.ndarray:
+        """Interpolate scalar magnitude onto a uniform grid via IDW."""
+        if not self._samples:
+            return _np_mag.zeros((0, 0))
+        positions = _np_mag.array([s["pos"] for s in self._samples])
+        values = _np_mag.array([s["magnitude"] for s in self._samples])
+        x_min, y_min = positions.min(axis=0)
+        x_max, y_max = positions.max(axis=0)
+        # Pad to avoid degenerate single-cell grids.
+        x_min -= grid_resolution; y_min -= grid_resolution
+        x_max += grid_resolution; y_max += grid_resolution
+        nx = max(2, int((x_max - x_min) / grid_resolution) + 1)
+        ny = max(2, int((y_max - y_min) / grid_resolution) + 1)
+        grid = _np_mag.zeros((ny, nx), dtype=float)
+        for j in range(ny):
+            for i in range(nx):
+                x = x_min + i * grid_resolution
+                y = y_min + j * grid_resolution
+                d2 = (positions[:, 0] - x) ** 2 + (positions[:, 1] - y) ** 2
+                if _np_mag.any(d2 < 1e-12):
+                    grid[j, i] = float(values[_np_mag.argmin(d2)])
+                    continue
+                w = 1.0 / (_np_mag.sqrt(d2) ** power)
+                grid[j, i] = float(_np_mag.sum(w * values) / _np_mag.sum(w))
+        self._grid = grid
+        self._grid_origin = _np_mag.array([x_min, y_min])
+        self._grid_res = float(grid_resolution)
+        return grid
+
+    # -- localisation -------------------------------------------------------
+    def localize(
+        self,
+        mag_vector,
+        search_radius: float = 20.0,
+    ) -> dict:
+        """Find sample with closest magnitude within ``search_radius`` of the
+        previous best, then refine via 4-neighbour gradient descent on the
+        gridded map.
+        """
+        if not self._samples:
+            return {"position": _np_mag.zeros(2), "score": 0.0,
+                    "matched": False}
+        target = float(_np_mag.linalg.norm(_np_mag.asarray(mag_vector,
+                                                            dtype=float)))
+        diffs = _np_mag.array([abs(s["magnitude"] - target)
+                               for s in self._samples])
+        best = int(_np_mag.argmin(diffs))
+        pos = self._samples[best]["pos"].copy()
+        # Optional gradient-descent refinement on the IDW grid.
+        if self._grid is not None:
+            for _ in range(20):
+                ix = int((pos[0] - self._grid_origin[0]) / self._grid_res)
+                iy = int((pos[1] - self._grid_origin[1]) / self._grid_res)
+                if (ix < 1 or iy < 1
+                        or ix >= self._grid.shape[1] - 1
+                        or iy >= self._grid.shape[0] - 1):
+                    break
+                cur = self._grid[iy, ix]
+                gx = (self._grid[iy, ix + 1] - self._grid[iy, ix - 1]) / (
+                    2 * self._grid_res
+                )
+                gy = (self._grid[iy + 1, ix] - self._grid[iy - 1, ix]) / (
+                    2 * self._grid_res
+                )
+                err = cur - target
+                step = 0.1 * err * _np_mag.array([gx, gy])
+                if float(_np_mag.linalg.norm(step)) < 1e-6:
+                    break
+                if float(_np_mag.linalg.norm(pos - self._samples[best]["pos"])) > search_radius:
+                    break
+                pos = pos - step
+        score = 1.0 / (1.0 + float(diffs[best]))
+        return {"position": pos, "score": score, "matched": True,
+                "matched_sample": best}
+
+    # -- online update ------------------------------------------------------
+    def update_map(
+        self,
+        pos_2d,
+        mag_vector,
+        learning_rate: float = 0.1,
+    ) -> None:
+        """Add a new sample with running-mean blending if very close to an
+        existing sample (within 1 m); otherwise just append.
+        """
+        p = _np_mag.asarray(pos_2d, dtype=float).reshape(2)
+        m = _np_mag.asarray(mag_vector, dtype=float).reshape(-1)
+        magnitude = float(_np_mag.linalg.norm(m))
+        for s in self._samples:
+            if float(_np_mag.linalg.norm(s["pos"] - p)) < 1.0:
+                s["magnitude"] = (1 - learning_rate) * s["magnitude"] + learning_rate * magnitude
+                s["mag"] = (1 - learning_rate) * s["mag"] + learning_rate * m
+                return
+        self.record_measurement(pos_2d, mag_vector)
+
+    @property
+    def n_samples(self) -> int:
+        return len(self._samples)
+
+
+# Add MagnetometerSLAM to __all__ if present.
+try:
+    __all__.append("MagnetometerSLAM")  # type: ignore[name-defined]
+except Exception:
+    pass

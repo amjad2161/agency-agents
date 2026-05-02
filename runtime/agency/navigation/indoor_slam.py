@@ -422,5 +422,106 @@ class VIOEstimator:
 
 __all__ = [
     "KeyPoint", "DMatch", "Pose2D", "Pose3D",
-    "VisualSLAM", "VIOEstimator",
+    "VisualSLAM", "VIOEstimator", "VisualPlaceRecognition",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Visual Place Recognition (Round 5)
+# ---------------------------------------------------------------------------
+
+
+class VisualPlaceRecognition:
+    """Bag-of-words place recognition over BRIEF descriptors.
+
+    Builds a BoW vocabulary (random-init word centroids in 64-byte BRIEF
+    descriptor space; k-means refinement is left as a stub).  Each image
+    is encoded into an L1-normalised histogram over word IDs and matched
+    against a database via cosine similarity.
+    """
+
+    def __init__(self, vocab_size: int = 256, descriptor_dim: int = 128,
+                 seed: int = 0) -> None:
+        self.vocab_size = int(vocab_size)
+        self.descriptor_dim = int(descriptor_dim)
+        rng = np.random.default_rng(seed)
+        # Vocabulary: vocab_size BRIEF-style binary words (64 bytes = 512 bits).
+        # We treat each row as a 64-byte uint8 word for Hamming comparison.
+        self._vocab = rng.integers(0, 256, size=(self.vocab_size, 64),
+                                   dtype=np.uint8)
+        self._db: dict[object, np.ndarray] = {}
+        self._slam = VisualSLAM()
+
+    # -- vocabulary refinement (stub) ---------------------------------------
+    def refine_vocabulary(self, descriptors_pool: np.ndarray,
+                          n_iter: int = 1) -> None:
+        """k-means refinement stub: assigns words to nearest centroids and
+        updates centroids by majority bit per byte across cluster members.
+        """
+        if descriptors_pool.size == 0:
+            return
+        for _ in range(int(n_iter)):
+            up_pool = np.unpackbits(descriptors_pool, axis=1).astype(np.int32)
+            up_voc = np.unpackbits(self._vocab, axis=1).astype(np.int32)
+            # Hamming distance pool x vocab.
+            d = np.array([
+                np.sum(np.abs(up_voc - row), axis=1) for row in up_pool
+            ])
+            assign = np.argmin(d, axis=1)
+            for k in range(self.vocab_size):
+                members = up_pool[assign == k]
+                if members.shape[0] > 0:
+                    new_bits = (members.mean(axis=0) > 0.5).astype(np.uint8)
+                    self._vocab[k] = np.packbits(new_bits)
+
+    # -- descriptor extraction ---------------------------------------------
+    def _bow_from_descriptors(self, desc: np.ndarray) -> np.ndarray:
+        if desc.size == 0:
+            return np.zeros(self.vocab_size, dtype=float)
+        up_desc = np.unpackbits(desc, axis=1).astype(np.int32)
+        up_voc = np.unpackbits(self._vocab, axis=1).astype(np.int32)
+        hist = np.zeros(self.vocab_size, dtype=float)
+        for row in up_desc:
+            d = np.sum(np.abs(up_voc - row), axis=1)
+            hist[int(np.argmin(d))] += 1.0
+        s = hist.sum()
+        if s > 0:
+            hist = hist / s
+        return hist
+
+    def extract_descriptor(self, image_gray: np.ndarray) -> np.ndarray:
+        """Detect FAST + BRIEF then return BoW histogram (L1-norm)."""
+        _, desc = self._slam.extract_orb_features(image_gray)
+        return self._bow_from_descriptors(desc)
+
+    # -- database -----------------------------------------------------------
+    def add_to_database(self, place_id, image_gray: np.ndarray) -> None:
+        bow = self.extract_descriptor(image_gray)
+        self._db[place_id] = bow
+
+    @staticmethod
+    def _cosine(a: np.ndarray, b: np.ndarray) -> float:
+        na = float(np.linalg.norm(a))
+        nb = float(np.linalg.norm(b))
+        if na < 1e-12 or nb < 1e-12:
+            return 0.0
+        return float(np.dot(a, b) / (na * nb))
+
+    def query(self, image_gray: np.ndarray, top_k: int = 5) -> list:
+        """Return top-k matches as [(place_id, score)] sorted by score."""
+        if not self._db:
+            return []
+        q = self.extract_descriptor(image_gray)
+        scored = [(pid, self._cosine(q, bow)) for pid, bow in self._db.items()]
+        scored.sort(key=lambda kv: kv[1], reverse=True)
+        return scored[:int(top_k)]
+
+    def loop_closure_candidates(self, current_image: np.ndarray,
+                                threshold: float = 0.7) -> list:
+        """Return [(place_id, score)] above ``threshold``."""
+        return [(pid, s) for pid, s in self.query(current_image, top_k=len(self._db))
+                if s >= float(threshold)]
+
+    @property
+    def db_size(self) -> int:
+        return len(self._db)
