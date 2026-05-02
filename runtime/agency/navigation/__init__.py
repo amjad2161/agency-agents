@@ -13,10 +13,11 @@ Tiers (each = independent estimator, fused by EKF/UKF/PF):
     6. AI/ML          (deep radio maps, scene recognition, neural SLAM, LSTM trajectory)
     7. Offline data   (vector maps, satellite imagery, DEM, bathymetric, fingerprints)
 
-Status: SCAFFOLD — interfaces + stub estimators. Production fusion = future pass.
+Status: PRODUCTION — all 7 tiers fully implemented. Pure Python, zero external deps.
+        Optional PyTorch / ONNX backends activate automatically when available.
 """
 
-__version__ = "11.0.0-scaffold"
+__version__ = "11.0.0"
 
 from .types import Position, Velocity, Pose, Estimate, Confidence
 from .fusion import SensorFusion
@@ -25,11 +26,18 @@ from .indoor import IndoorEstimator
 from .underwater import UnderwaterEstimator
 from .underground import UndergroundEstimator
 from .ai_enhance import AIEnhancer
+from .offline_maps import OfflineMaps
 
 __all__ = [
+    # Shared types
     "Position", "Velocity", "Pose", "Estimate", "Confidence",
+    # Tier estimators
+    "SatelliteEstimator",
+    "IndoorEstimator",
+    "UnderwaterEstimator",
+    "UndergroundEstimator",
+    # Core engines
     "SensorFusion",
-    "SatelliteEstimator", "IndoorEstimator",
-    "UnderwaterEstimator", "UndergroundEstimator",
     "AIEnhancer",
+    "OfflineMaps",
 ]
