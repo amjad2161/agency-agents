@@ -947,3 +947,139 @@ __all__ = [
     "UnderwaterPositioner",
     "UnderwaterEngine", "UnderwaterEstimator",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Acoustic modem navigation (Round 5)
+# ---------------------------------------------------------------------------
+
+
+class AcousticModemNav:
+    """Acoustic modem-based navigation: TWTT ranging + TDOA fix + Doppler.
+
+    All times in seconds, positions in metres (any consistent frame).  The
+    speed of sound default is 1500 m/s — typical seawater value at 4°C and
+    35 PSU; pass a measured speed for higher accuracy.
+    """
+
+    def __init__(self, sound_speed: float = 1500.0) -> None:
+        self.sound_speed = float(sound_speed)
+        self._range_history: List[float] = []
+
+    # -- two-way ranging ----------------------------------------------------
+    @staticmethod
+    def two_way_ranging(
+        tx_time: float,
+        rx_time: float,
+        sound_speed: float = 1500.0,
+    ) -> float:
+        """Return slant range = ((rx - tx) / 2) * c."""
+        dt = float(rx_time) - float(tx_time)
+        if dt < 0.0:
+            return 0.0
+        return 0.5 * dt * float(sound_speed)
+
+    # -- TDOA fix -----------------------------------------------------------
+    @staticmethod
+    def tdoa_fix(
+        hydrophone_positions: np.ndarray,
+        arrival_times: np.ndarray,
+        sound_speed: float = 1500.0,
+        max_iter: int = 50,
+    ) -> dict:
+        """Hyperbolic TDOA fix using Newton-Raphson over (x, y, z, t0).
+
+        Requires at least 3 hydrophones (4 unknowns may need 4+ for unique
+        fix; we expose the 3-hydrophone underdetermined case anyway and
+        damp the solver).  Returns dict with ``position`` and ``iterations``.
+        """
+        H = np.asarray(hydrophone_positions, dtype=float)
+        T = np.asarray(arrival_times, dtype=float).reshape(-1)
+        if H.ndim != 2 or H.shape[1] != 3 or H.shape[0] < 3:
+            return {"position": np.zeros(3), "iterations": 0,
+                    "converged": False}
+        if H.shape[0] != T.size:
+            return {"position": np.zeros(3), "iterations": 0,
+                    "converged": False}
+        c = float(sound_speed)
+        # Initial guess: centroid of hydrophones.
+        x = H.mean(axis=0).astype(float)
+        t0 = float(T.min()) - float(np.linalg.norm(H[0] - x)) / c
+        params = np.array([x[0], x[1], x[2], t0], dtype=float)
+        n = H.shape[0]
+        converged = False
+        for itr in range(1, max_iter + 1):
+            # Residual: c*(T_i - t0) - ||H_i - p||
+            p = params[:3]
+            t0_cur = params[3]
+            r = np.zeros(n, dtype=float)
+            J = np.zeros((n, 4), dtype=float)
+            for i in range(n):
+                diff = H[i] - p
+                d = float(np.linalg.norm(diff))
+                if d < 1e-9:
+                    d = 1e-9
+                r[i] = c * (T[i] - t0_cur) - d
+                J[i, 0:3] = diff / d
+                J[i, 3] = -c
+            JtJ = J.T @ J + np.eye(4) * 1e-6
+            try:
+                dp = np.linalg.solve(JtJ, -J.T @ r)
+            except np.linalg.LinAlgError:
+                break
+            params = params + dp
+            if float(np.linalg.norm(dp)) < 1e-6:
+                converged = True
+                return {
+                    "position": params[:3].copy(),
+                    "t0": float(params[3]),
+                    "iterations": itr,
+                    "converged": True,
+                }
+        return {
+            "position": params[:3].copy(),
+            "t0": float(params[3]),
+            "iterations": max_iter,
+            "converged": converged,
+        }
+
+    # -- Doppler ------------------------------------------------------------
+    @staticmethod
+    def doppler_velocity(
+        carrier_freq_hz: float,
+        observed_freq_hz: float,
+        sound_speed: float = 1500.0,
+    ) -> float:
+        """Radial velocity (m/s) from observed Doppler shift.
+
+        f_obs = f_carrier * (c - v_radial) / c
+        => v_radial = c * (1 - f_obs / f_carrier)
+        Positive = receiver moving away (frequency drops).
+        """
+        if carrier_freq_hz <= 0.0:
+            return 0.0
+        return float(sound_speed) * (1.0 - float(observed_freq_hz)
+                                     / float(carrier_freq_hz))
+
+    # -- multipath rejection -----------------------------------------------
+    @staticmethod
+    def multipath_filter(
+        ranges: np.ndarray,
+        window: int = 5,
+        sigma_threshold: float = 2.0,
+    ) -> np.ndarray:
+        """Median filter + outlier rejection (>sigma_threshold * std)."""
+        arr = np.asarray(ranges, dtype=float).reshape(-1)
+        if arr.size == 0:
+            return arr
+        w = max(int(window), 1)
+        out = arr.copy()
+        for i in range(arr.size):
+            lo = max(0, i - w // 2)
+            hi = min(arr.size, i + w // 2 + 1)
+            window_vals = arr[lo:hi]
+            med = float(np.median(window_vals))
+            std = float(np.std(window_vals)) + 1e-9
+            if abs(arr[i] - med) > sigma_threshold * std:
+                out[i] = med
+        return out
