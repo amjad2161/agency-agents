@@ -996,6 +996,178 @@ class FactorGraph:
         return g
 
 
+# =====================================================================
+# GODSKILL Nav R6 — Interacting Multiple Model (IMM) Filter
+# =====================================================================
+
+class IMMFilter:
+    """Interacting Multiple Model filter (CV + CT).
+
+    Two motion models — constant velocity and constant turn-rate —
+    blended via Markov-chain model probabilities updated by the
+    measurement likelihood.
+
+    State per model: [x, y, vx, vy] (CV) and [x, y, vx, vy, omega] (CT
+    with omega projected back to a 4-state for the merged output).
+    """
+
+    def __init__(self, dt: float = 1.0,
+                 q_cv: float = 0.1,
+                 q_ct: float = 0.5,
+                 r_pos: float = 1.0,
+                 turn_rate_rad_s: float = 0.1,
+                 trans_matrix=None,
+                 init_probs=None) -> None:
+        import numpy as _np
+        self.dt = float(dt)
+        self.q_cv = float(q_cv)
+        self.q_ct = float(q_ct)
+        self.r_pos = float(r_pos)
+        self.omega = float(turn_rate_rad_s)
+        # Per-model 4-D state and 4x4 covariance
+        self.x_cv = _np.zeros(4)
+        self.x_ct = _np.zeros(4)
+        self.P_cv = _np.eye(4) * 10.0
+        self.P_ct = _np.eye(4) * 10.0
+        if trans_matrix is None:
+            # Sticky models (95% stay, 5% switch)
+            self.trans = _np.array([[0.95, 0.05], [0.05, 0.95]])
+        else:
+            self.trans = _np.asarray(trans_matrix, dtype=float)
+        if init_probs is None:
+            self.mu = _np.array([0.5, 0.5])
+        else:
+            self.mu = _np.asarray(init_probs, dtype=float)
+            self.mu /= self.mu.sum()
+        self._merged_state = _np.zeros(4)
+        self._merged_P = _np.eye(4) * 10.0
+
+    @property
+    def model_probabilities(self):
+        import numpy as _np
+        return _np.asarray(self.mu, dtype=float).copy()
+
+    def _F_cv(self):
+        import numpy as _np
+        dt = self.dt
+        return _np.array([
+            [1, 0, dt, 0],
+            [0, 1, 0, dt],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ], dtype=float)
+
+    def _F_ct(self, omega: float):
+        import numpy as _np
+        dt = self.dt
+        if abs(omega) < 1e-6:
+            return self._F_cv()
+        s = math.sin(omega * dt)
+        c = math.cos(omega * dt)
+        return _np.array([
+            [1, 0, s / omega, -(1 - c) / omega],
+            [0, 1, (1 - c) / omega, s / omega],
+            [0, 0, c, -s],
+            [0, 0, s, c],
+        ], dtype=float)
+
+    def _Q(self, q: float):
+        import numpy as _np
+        dt = self.dt
+        q4 = _np.array([
+            [dt ** 4 / 4, 0, dt ** 3 / 2, 0],
+            [0, dt ** 4 / 4, 0, dt ** 3 / 2],
+            [dt ** 3 / 2, 0, dt ** 2, 0],
+            [0, dt ** 3 / 2, 0, dt ** 2],
+        ], dtype=float)
+        return q4 * q
+
+    def predict(self, dt: Optional[float] = None):
+        import numpy as _np
+        if dt is not None:
+            self.dt = float(dt)
+        # 1. Mixing probabilities
+        cbar = self.trans.T @ self.mu  # normalising
+        cbar = _np.maximum(cbar, 1e-12)
+        mix = (self.trans * self.mu[:, None]) / cbar[None, :]
+        # 2. Mixed initial conditions per model
+        states = [self.x_cv, self.x_ct]
+        Ps = [self.P_cv, self.P_ct]
+        x0 = [_np.zeros(4), _np.zeros(4)]
+        P0 = [_np.zeros((4, 4)), _np.zeros((4, 4))]
+        for j in range(2):
+            for i in range(2):
+                x0[j] = x0[j] + mix[i, j] * states[i]
+            for i in range(2):
+                d = states[i] - x0[j]
+                P0[j] = P0[j] + mix[i, j] * (Ps[i] + _np.outer(d, d))
+        # 3. Per-model prediction
+        F0 = self._F_cv()
+        F1 = self._F_ct(self.omega)
+        self.x_cv = F0 @ x0[0]
+        self.P_cv = F0 @ P0[0] @ F0.T + self._Q(self.q_cv)
+        self.x_ct = F1 @ x0[1]
+        self.P_ct = F1 @ P0[1] @ F1.T + self._Q(self.q_ct)
+        # 4. Merge for output
+        self._merged_state = self.mu[0] * self.x_cv + self.mu[1] * self.x_ct
+        self._merged_P = _np.zeros((4, 4))
+        for i, (xi, Pi) in enumerate([(self.x_cv, self.P_cv),
+                                      (self.x_ct, self.P_ct)]):
+            d = xi - self._merged_state
+            self._merged_P = self._merged_P + self.mu[i] * (Pi + _np.outer(d, d))
+        return self._merged_state.copy()
+
+    def update(self, measurement):
+        import numpy as _np
+        z = _np.asarray(measurement, dtype=float).reshape(-1)
+        if z.size != 2:
+            raise ValueError("measurement must be (x, y) position")
+        H = _np.array([[1, 0, 0, 0], [0, 1, 0, 0]], dtype=float)
+        R = _np.eye(2) * self.r_pos
+        likelihoods = _np.zeros(2)
+        for j, (x, P) in enumerate([(self.x_cv, self.P_cv),
+                                    (self.x_ct, self.P_ct)]):
+            S = H @ P @ H.T + R
+            S = (S + S.T) * 0.5
+            try:
+                S_inv = _np.linalg.inv(S)
+            except _np.linalg.LinAlgError:
+                S_inv = _np.linalg.pinv(S)
+            innov = z - H @ x
+            K = P @ H.T @ S_inv
+            x_new = x + K @ innov
+            P_new = (_np.eye(4) - K @ H) @ P
+            det = max(float(_np.linalg.det(2 * math.pi * S)), 1e-30)
+            mahal = float(innov @ S_inv @ innov)
+            likelihoods[j] = math.exp(-0.5 * mahal) / math.sqrt(det)
+            if j == 0:
+                self.x_cv, self.P_cv = x_new, P_new
+            else:
+                self.x_ct, self.P_ct = x_new, P_new
+        # Update model probabilities
+        cbar = self.trans.T @ self.mu
+        new_mu = likelihoods * cbar
+        s = float(new_mu.sum())
+        if s < 1e-30:
+            new_mu = _np.array([0.5, 0.5])
+        else:
+            new_mu = new_mu / s
+        self.mu = new_mu
+        # Merge
+        self._merged_state = self.mu[0] * self.x_cv + self.mu[1] * self.x_ct
+        self._merged_P = _np.zeros((4, 4))
+        for i, (xi, Pi) in enumerate([(self.x_cv, self.P_cv),
+                                      (self.x_ct, self.P_ct)]):
+            d = xi - self._merged_state
+            self._merged_P = self._merged_P + self.mu[i] * (Pi + _np.outer(d, d))
+        return {
+            "state": self._merged_state.copy(),
+            "covariance": self._merged_P.copy(),
+            "model_probabilities": self.mu.copy(),
+            "likelihoods": likelihoods.copy(),
+        }
+
+
 __all__ = ["EKF","UKF","ParticleFilter","SensorFusion",
            "AdaptiveEKF","RAIMResult","CHI2_3_95",
-           "PoseGraphOptimizer","FactorGraph"]
+           "PoseGraphOptimizer","FactorGraph","IMMFilter"]

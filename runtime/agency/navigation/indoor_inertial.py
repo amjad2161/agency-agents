@@ -542,6 +542,84 @@ class IMUPreintegration:
         }
 
 
+# =====================================================================
+# GODSKILL Nav R6 — Wheel Odometry Integrator (differential drive)
+# =====================================================================
+
+class WheelOdometryIntegrator:
+    """Differential-drive wheel odometry with slip detection.
+
+    Inputs are left/right wheel linear speeds (m/s) and elapsed time.
+    Returns incremental pose (dx, dy, dtheta) in the robot body frame.
+    Slip ratio (max/min wheel speed) above threshold (default 1.5)
+    flags a slipping wheel.
+    """
+
+    def __init__(self, slip_threshold: float = 1.5,
+                 default_wheelbase_m: float = 0.5) -> None:
+        self.slip_threshold = float(slip_threshold)
+        self.default_wheelbase = float(default_wheelbase_m)
+        self.last_slip_ratio: float = 1.0
+        self.last_slip_detected: bool = False
+        # Cumulative pose for convenience
+        self.x_total: float = 0.0
+        self.y_total: float = 0.0
+        self.theta_total: float = 0.0
+
+    def estimate_slip(self, v_left: float, v_right: float) -> float:
+        """Slip ratio = max(|v|) / max(min(|v|), eps).
+
+        Symmetrical motion (|v_l|≈|v_r|) → ratio≈1.0.
+        Slipping wheel → ratio >> 1.
+        """
+        a = abs(float(v_left))
+        b = abs(float(v_right))
+        lo = min(a, b)
+        hi = max(a, b)
+        if lo < 1e-6:
+            ratio = float("inf") if hi > 1e-6 else 1.0
+        else:
+            ratio = hi / lo
+        self.last_slip_ratio = ratio
+        self.last_slip_detected = ratio > self.slip_threshold
+        return ratio
+
+    def integrate(self, v_left: float, v_right: float, dt: float,
+                  wheelbase: Optional[float] = None) -> tuple:
+        """Integrate one step.
+
+        Returns (dx, dy, dtheta) in body frame.
+        """
+        vL = float(v_left)
+        vR = float(v_right)
+        dt = float(dt)
+        if dt <= 0.0:
+            return (0.0, 0.0, 0.0)
+        b = float(wheelbase) if wheelbase is not None else self.default_wheelbase
+        if b <= 0.0:
+            raise ValueError("wheelbase must be positive")
+        v = 0.5 * (vR + vL)
+        omega = (vR - vL) / b
+        # Slip update
+        self.estimate_slip(vL, vR)
+        if abs(omega) < 1e-9:
+            dx = v * dt
+            dy = 0.0
+            dtheta = 0.0
+        else:
+            dtheta = omega * dt
+            R_curve = v / omega
+            dx = R_curve * math.sin(dtheta)
+            dy = R_curve * (1.0 - math.cos(dtheta))
+        # Update cumulative pose in world frame
+        c = math.cos(self.theta_total)
+        s = math.sin(self.theta_total)
+        self.x_total += c * dx - s * dy
+        self.y_total += s * dx + c * dy
+        self.theta_total += dtheta
+        return (float(dx), float(dy), float(dtheta))
+
+
 __all__ = [
     "MagneticMapper",
     "PDREstimator",
@@ -550,4 +628,5 @@ __all__ = [
     "HeadingCorrector",
     "BarometricAltimeter",
     "IMUPreintegration",
+    "WheelOdometryIntegrator",
 ]

@@ -1413,3 +1413,115 @@ class NeuralRadianceMap:
         H = np.maximum(0.0, X @ self.W1 + self.b1)
         Y = H @ self.W2 + self.b2
         return Y[:, 0]
+
+
+# =====================================================================
+# GODSKILL Nav R6 — Bayesian Neural Odometry (MC-Dropout)
+# =====================================================================
+
+class BayesianNeuralOdometry:
+    """Neural inertial odometry with MC-Dropout uncertainty.
+
+    Maps a sequence of 6-DOF IMU samples (accel + gyro, 6 channels)
+    to a 3-D position delta. MC-Dropout sampling at inference yields
+    epistemic uncertainty (mean + std-dev per axis).
+    """
+
+    def __init__(self, seq_len: int = 50, hidden: int = 32,
+                 dropout: float = 0.2, seed: int = 7) -> None:
+        if seq_len < 1:
+            raise ValueError("seq_len must be >= 1")
+        if not 0.0 <= dropout < 1.0:
+            raise ValueError("dropout must be in [0, 1)")
+        self.seq_len = int(seq_len)
+        self.hidden = int(hidden)
+        self.dropout = float(dropout)
+        rng = np.random.default_rng(int(seed))
+        d_in = 6 * self.seq_len
+        scale1 = math.sqrt(2.0 / d_in)
+        scale2 = math.sqrt(2.0 / self.hidden)
+        self.W1 = rng.normal(0.0, scale1, size=(d_in, hidden))
+        self.b1 = np.zeros(hidden)
+        self.W2 = rng.normal(0.0, scale2, size=(hidden, 3))
+        self.b2 = np.zeros(3)
+        self._rng = rng
+
+    def _flatten(self, imu_seq: np.ndarray) -> np.ndarray:
+        seq = np.asarray(imu_seq, dtype=float)
+        if seq.ndim != 2 or seq.shape[1] != 6:
+            raise ValueError("imu_sequence must be (T, 6)")
+        T = seq.shape[0]
+        if T < self.seq_len:
+            pad = np.zeros((self.seq_len - T, 6))
+            seq = np.vstack([pad, seq])
+        elif T > self.seq_len:
+            seq = seq[-self.seq_len:, :]
+        return seq.reshape(-1)
+
+    def _forward(self, x_flat: np.ndarray, training: bool) -> np.ndarray:
+        h = np.maximum(0.0, x_flat @ self.W1 + self.b1)
+        if training and self.dropout > 0.0:
+            keep = 1.0 - self.dropout
+            mask = (self._rng.random(self.hidden) < keep).astype(float) / keep
+            h = h * mask
+        elif (not training) and self.dropout > 0.0:
+            # MC-Dropout — keep dropout active during inference for uncertainty
+            keep = 1.0 - self.dropout
+            mask = (self._rng.random(self.hidden) < keep).astype(float) / keep
+            h = h * mask
+        return h @ self.W2 + self.b2
+
+    def predict_with_uncertainty(self, imu_sequence: np.ndarray,
+                                 n_samples: int = 20) -> tuple:
+        """Run n_samples stochastic forward passes.
+
+        Returns (mean_delta (3,), std_delta (3,)).
+        """
+        n = max(2, int(n_samples))
+        x = self._flatten(imu_sequence)
+        outs = np.zeros((n, 3))
+        for i in range(n):
+            outs[i] = self._forward(x, training=False)
+        mean = outs.mean(axis=0)
+        # ddof=1 unbiased — guarantees >0 with non-zero dropout for any non-trivial input
+        std = outs.std(axis=0, ddof=1) if n > 1 else np.zeros(3)
+        return mean, std
+
+    def predict(self, imu_sequence: np.ndarray) -> np.ndarray:
+        """Single deterministic pass (dropout disabled — eval mode)."""
+        x = self._flatten(imu_sequence)
+        h = np.maximum(0.0, x @ self.W1 + self.b1)
+        return h @ self.W2 + self.b2
+
+    def train_step(self, imu_seq: np.ndarray, true_delta: np.ndarray,
+                   lr: float = 1e-3) -> float:
+        """One SGD step (MSE loss) with dropout active. Returns scalar loss."""
+        x = self._flatten(imu_seq)
+        y = np.asarray(true_delta, dtype=float).reshape(3)
+        # Forward (training)
+        z1 = x @ self.W1 + self.b1
+        h = np.maximum(0.0, z1)
+        keep = 1.0 - self.dropout
+        if self.dropout > 0.0:
+            mask = (self._rng.random(self.hidden) < keep).astype(float) / keep
+        else:
+            mask = np.ones(self.hidden)
+        h_drop = h * mask
+        y_pred = h_drop @ self.W2 + self.b2
+        err = y_pred - y
+        loss = float(np.mean(err ** 2))
+        # Backward
+        dY = (2.0 / 3.0) * err  # d MSE / d y_pred (3,)
+        dW2 = np.outer(h_drop, dY)
+        db2 = dY
+        dh_drop = self.W2 @ dY
+        dh = dh_drop * mask
+        dz1 = dh * (z1 > 0).astype(float)
+        dW1 = np.outer(x, dz1)
+        db1 = dz1
+        # Update
+        self.W1 -= lr * dW1
+        self.b1 -= lr * db1
+        self.W2 -= lr * dW2
+        self.b2 -= lr * db2
+        return loss

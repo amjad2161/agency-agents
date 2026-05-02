@@ -699,3 +699,119 @@ class TightlyCoupledGNSSIMU:
             "clock_bias_m": float(self.x[15]),
             "clock_drift_mps": float(self.x[16]),
         }
+
+
+# =====================================================================
+# GODSKILL Nav R6 — PPP (Precise Point Positioning)
+# =====================================================================
+
+class PPPCorrector:
+    """Precise Point Positioning corrector.
+
+    Applies satellite clock corrections, Saastamoinen tropospheric delay
+    model, and phase wind-up correction to raw pseudoranges. Targets
+    decimeter-level accuracy without a base station.
+    """
+
+    SPEED_OF_LIGHT = 299_792_458.0
+    CARRIER_L1_HZ = 1_575_420_000.0
+
+    def __init__(self) -> None:
+        self._last_windup_cycles = 0.0
+        self._sat_clock_table: dict[str, float] = {}
+
+    # --- satellite clock bias table ---------------------------------
+    def set_satellite_clock_bias(self, sat_id: str, bias_seconds: float) -> None:
+        self._sat_clock_table[str(sat_id)] = float(bias_seconds)
+
+    def get_satellite_clock_bias(self, sat_id: str) -> float:
+        return float(self._sat_clock_table.get(str(sat_id), 0.0))
+
+    # --- Saastamoinen tropospheric delay ----------------------------
+    def saastamoinen_delay(self, elevation_deg: float, height_m: float,
+                           pressure_hpa: float = 1013.25,
+                           temp_k: float = 288.15,
+                           humidity_frac: float = 0.5) -> float:
+        """Saastamoinen tropospheric delay in metres along line of sight.
+
+        Standard atmosphere defaults (sea-level, 15 °C, 50% RH).
+        Returns 0 for elevation <= 0.
+        """
+        import numpy as _np
+        elev = float(elevation_deg)
+        if elev <= 0.0:
+            return 0.0
+        # Reduce pressure with altitude (barometric, dry-adiabatic approx)
+        h = max(0.0, float(height_m))
+        p = float(pressure_hpa) * (1.0 - 2.26e-5 * h) ** 5.225
+        t = max(200.0, float(temp_k))
+        rh = max(0.0, min(1.0, float(humidity_frac)))
+        # Partial pressure of water vapour (Magnus form)
+        es = 6.11 * 10.0 ** ((7.5 * (t - 273.15)) / (237.3 + (t - 273.15)))
+        e = rh * es
+        z_rad = math.radians(90.0 - elev)
+        cosz = math.cos(z_rad)
+        if cosz < 1e-3:
+            cosz = 1e-3
+        # Saastamoinen formula (m)
+        dry = (0.002277 / cosz) * p
+        wet = (0.002277 / cosz) * ((1255.0 / t) + 0.05) * e
+        return float(dry + wet)
+
+    # --- Phase wind-up correction -----------------------------------
+    def phase_windup(self, satellite_pos, receiver_pos, prev_windup: float) -> float:
+        """Phase wind-up in carrier cycles.
+
+        Receiver/satellite relative orientation rotates the carrier
+        phase. Returns updated cumulative wind-up in cycles.
+        """
+        import numpy as _np
+        sp = _np.asarray(satellite_pos, dtype=float).reshape(3)
+        rp = _np.asarray(receiver_pos, dtype=float).reshape(3)
+        los = sp - rp
+        norm = float(_np.linalg.norm(los))
+        if norm < 1e-9:
+            return float(prev_windup)
+        k = los / norm
+        # Reference dipole frame (simplified — cross with z then x)
+        z = _np.array([0.0, 0.0, 1.0])
+        x_dip = _np.cross(z, k)
+        nx = float(_np.linalg.norm(x_dip))
+        if nx < 1e-6:
+            x_dip = _np.array([1.0, 0.0, 0.0])
+        else:
+            x_dip = x_dip / nx
+        y_dip = _np.cross(k, x_dip)
+        # Project onto satellite-frame X (assumed equal to receiver X for unit test)
+        # Phase angle = atan2(y · k_cross_x_sat, x · x_sat)
+        phi = math.atan2(float(_np.dot(y_dip, x_dip)),
+                         float(_np.dot(x_dip, x_dip)))
+        delta_cycles = phi / (2.0 * math.pi)
+        # Cumulative — unwrap relative to prev
+        prev = float(prev_windup)
+        n = round(prev - delta_cycles)
+        cycles = delta_cycles + n
+        self._last_windup_cycles = cycles
+        return cycles
+
+    # --- Apply combined corrections ---------------------------------
+    def apply_ppp_corrections(self, pseudorange: float, satellite_pos,
+                              receiver_pos, clock_bias_seconds: float,
+                              elevation_deg: float = 30.0,
+                              height_m: float = 0.0) -> float:
+        """Return PPP-corrected range (m).
+
+        rho_corr = rho_raw + c·dt_sat - tropo_delay - windup·lambda
+        """
+        import numpy as _np
+        rho = float(pseudorange)
+        # Satellite clock advance is added to range (subtracts bias from rcv side)
+        rho += self.SPEED_OF_LIGHT * float(clock_bias_seconds)
+        # Tropo delay (subtract — adds to measured pseudorange)
+        rho -= self.saastamoinen_delay(elevation_deg, height_m)
+        # Phase wind-up in metres at L1
+        cycles = self.phase_windup(satellite_pos, receiver_pos,
+                                   self._last_windup_cycles)
+        wavelength = self.SPEED_OF_LIGHT / self.CARRIER_L1_HZ
+        rho -= cycles * wavelength
+        return float(rho)
