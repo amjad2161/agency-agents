@@ -1,40 +1,43 @@
 """
 Tier 6 — AI/ML Enhancement
 ===========================
-Pure-Python AI enhancement layer: deep radio maps, scene recognition,
+AI/ML enhancement layer: deep radio maps, scene recognition,
 trajectory prediction, uncertainty quantification, pose-graph SLAM,
+neural SLAM, LSTM trajectory prediction, transfer learning,
 and environment-adaptive bias correction.
 
-All models use lightweight in-process computation (no external deps).
-Optional PyTorch / ONNX backends auto-activate when available.
+Numpy-only neural networks. No torch / no tensorflow / no sklearn.
 """
 
 from __future__ import annotations
 
 import math
-import time
-import hashlib
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
+
+import numpy as np
 
 from .types import Estimate, Confidence, Pose, Position, Velocity
 
 
 # ---------------------------------------------------------------------------
-# Shared helpers
+# Shared helpers (legacy plain-Python helpers kept for back-compat)
 # ---------------------------------------------------------------------------
 
 def _dot(a: List[float], b: List[float]) -> float:
     return sum(x * y for x, y in zip(a, b))
 
+
 def _norm(v: List[float]) -> float:
     return math.sqrt(sum(x * x for x in v))
+
 
 def _softmax(scores: List[float]) -> List[float]:
     mx = max(scores)
     exps = [math.exp(s - mx) for s in scores]
     total = sum(exps)
     return [e / total for e in exps]
+
 
 def _mean_std(values: List[float]) -> Tuple[float, float]:
     if not values:
@@ -47,8 +50,34 @@ def _mean_std(values: List[float]) -> Tuple[float, float]:
     return mu, math.sqrt(var)
 
 
+def _cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
+    na = float(np.linalg.norm(a))
+    nb = float(np.linalg.norm(b))
+    if na < 1e-12 or nb < 1e-12:
+        return 0.0
+    return float(np.dot(a, b) / (na * nb))
+
+
 # ---------------------------------------------------------------------------
-# Radio sample for DeepRadioMap
+# Pose3D (Tier 6) — 6-DoF pose used by NeuralSLAM
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Pose3D:
+    """6-DoF pose in a local Cartesian frame."""
+    x: float = 0.0
+    y: float = 0.0
+    z: float = 0.0
+    roll: float = 0.0
+    pitch: float = 0.0
+    yaw: float = 0.0
+
+    def as_array(self) -> np.ndarray:
+        return np.array([self.x, self.y, self.z, self.roll, self.pitch, self.yaw], dtype=np.float64)
+
+
+# ---------------------------------------------------------------------------
+# Radio sample for DeepRadioMap (legacy)
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -61,40 +90,28 @@ class RadioSample:
 
 
 # ---------------------------------------------------------------------------
-# DeepRadioMap  (k-NN over fingerprint table, RSSI path-loss model)
+# DeepRadioMap (legacy k-NN fingerprint positioner — kept for back-compat)
 # ---------------------------------------------------------------------------
 
 class DeepRadioMap:
-    """
-    Lightweight radio-fingerprint positioning.
-
-    Internally stores (bssid → [(rssi, x, y), ...]) and uses
-    k-NN weighted by distance in RSSI space for position prediction.
-    """
+    """Lightweight k-NN radio-fingerprint positioning."""
 
     def __init__(self, k: int = 5) -> None:
         self._k = k
-        self._table: Dict[str, List[Tuple[float, float, float]]] = {}  # bssid → [(rssi, x, y)]
+        self._table: Dict[str, List[Tuple[float, float, float]]] = {}
 
-    # ------------------------------------------------------------------
     def train(self, sample: RadioSample) -> None:
         self._table.setdefault(sample.bssid, []).append(
             (sample.rssi_dbm, sample.true_x_m, sample.true_y_m)
         )
 
-    # ------------------------------------------------------------------
     def predict(
         self, observations: List[Tuple[str, float]]
     ) -> Optional[Tuple[float, float]]:
-        """
-        Predict (x_m, y_m) from a list of (bssid, rssi_dbm) observations.
-        Returns None if no trained data overlaps with observations.
-        """
         if not observations or not self._table:
             return None
 
-        candidates: List[Tuple[float, float, float]] = []  # (dist_sq, x, y)
-
+        candidates: List[Tuple[float, float, float]] = []
         for bssid, rssi_obs in observations:
             if bssid not in self._table:
                 continue
@@ -109,7 +126,6 @@ class DeepRadioMap:
         k = min(self._k, len(candidates))
         top = candidates[:k]
 
-        # Inverse-distance weighting (weight = 1 / (1 + d))
         total_w = 0.0
         wx, wy = 0.0, 0.0
         for d, x, y in top:
@@ -124,51 +140,155 @@ class DeepRadioMap:
 
 
 # ---------------------------------------------------------------------------
-# SceneFeatures / SceneRecognizer
+# RadioMapNet — Tier 6 numpy-only 3-layer MLP
+# ---------------------------------------------------------------------------
+
+class RadioMapNet:
+    """
+    Tiny 3-layer MLP (input → hidden ReLU → linear output) implemented
+    in numpy with He weight init, MSE loss, mini-batch SGD.
+
+    Predicts position (x, y) from a fixed-length RSSI fingerprint vector.
+    """
+
+    def __init__(
+        self,
+        input_dim: int = 8,
+        hidden_dim: int = 32,
+        output_dim: int = 2,
+        seed: int = 42,
+    ) -> None:
+        self.input_dim = int(input_dim)
+        self.hidden_dim = int(hidden_dim)
+        self.output_dim = int(output_dim)
+        rng = np.random.default_rng(seed)
+        # He initialization for ReLU layers: std = sqrt(2 / fan_in)
+        self.W1 = rng.normal(0.0, math.sqrt(2.0 / self.input_dim),
+                             size=(self.input_dim, self.hidden_dim))
+        self.b1 = np.zeros(self.hidden_dim, dtype=np.float64)
+        self.W2 = rng.normal(0.0, math.sqrt(2.0 / self.hidden_dim),
+                             size=(self.hidden_dim, self.output_dim))
+        self.b2 = np.zeros(self.output_dim, dtype=np.float64)
+
+    @staticmethod
+    def _relu(x: np.ndarray) -> np.ndarray:
+        return np.maximum(x, 0.0)
+
+    @staticmethod
+    def _relu_grad(x: np.ndarray) -> np.ndarray:
+        return (x > 0.0).astype(np.float64)
+
+    @staticmethod
+    def _mse_loss(y_pred: np.ndarray, y_true: np.ndarray) -> float:
+        return float(np.mean((y_pred - y_true) ** 2))
+
+    def forward(self, x: np.ndarray) -> np.ndarray:
+        """Forward pass. x: (N, input_dim) → (N, output_dim). 1-D x supported."""
+        single = (x.ndim == 1)
+        if single:
+            x = x.reshape(1, -1)
+        z1 = x @ self.W1 + self.b1
+        a1 = self._relu(z1)
+        y_hat = a1 @ self.W2 + self.b2
+        # Cache for backprop
+        self._cache = (x, z1, a1, y_hat)
+        return y_hat[0] if single else y_hat
+
+    def _backward(
+        self, y_true: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        x, z1, a1, y_hat = self._cache
+        n = x.shape[0]
+        dL_dy = (2.0 / n) * (y_hat - y_true)            # (N, output_dim)
+        dW2 = a1.T @ dL_dy                              # (hidden, output)
+        db2 = np.sum(dL_dy, axis=0)                     # (output,)
+        dL_da1 = dL_dy @ self.W2.T                      # (N, hidden)
+        dL_dz1 = dL_da1 * self._relu_grad(z1)           # (N, hidden)
+        dW1 = x.T @ dL_dz1                              # (input, hidden)
+        db1 = np.sum(dL_dz1, axis=0)                    # (hidden,)
+        return dW1, db1, dW2, db2
+
+    def train(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        epochs: int = 100,
+        lr: float = 0.01,
+        batch_size: int = 16,
+        seed: int = 0,
+    ) -> List[float]:
+        """Mini-batch SGD with MSE. Returns per-epoch loss history."""
+        X = np.asarray(X, dtype=np.float64)
+        y = np.asarray(y, dtype=np.float64)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+        if y.ndim == 1:
+            y = y.reshape(1, -1)
+        n = X.shape[0]
+        rng = np.random.default_rng(seed)
+        history: List[float] = []
+        for _ in range(int(epochs)):
+            idx = rng.permutation(n)
+            X_sh, y_sh = X[idx], y[idx]
+            for start in range(0, n, batch_size):
+                end = min(start + batch_size, n)
+                xb = X_sh[start:end]
+                yb = y_sh[start:end]
+                self.forward(xb)
+                dW1, db1, dW2, db2 = self._backward(yb)
+                self.W1 -= lr * dW1
+                self.b1 -= lr * db1
+                self.W2 -= lr * dW2
+                self.b2 -= lr * db2
+            # Epoch loss on full set
+            preds = self.forward(X)
+            history.append(self._mse_loss(preds, y))
+        return history
+
+    def predict(self, rssi_scan: np.ndarray) -> Tuple[float, float]:
+        """Predict (x, y) from a single RSSI fingerprint vector."""
+        rssi_scan = np.asarray(rssi_scan, dtype=np.float64).reshape(-1)
+        if rssi_scan.shape[0] != self.input_dim:
+            raise ValueError(
+                f"rssi_scan must have length {self.input_dim}, got {rssi_scan.shape[0]}"
+            )
+        out = self.forward(rssi_scan)
+        return float(out[0]), float(out[1])
+
+
+# ---------------------------------------------------------------------------
+# SceneFeatures / SceneRecognizer  (legacy 12-dim cosine classifier)
 # ---------------------------------------------------------------------------
 
 @dataclass
 class SceneFeatures:
     """12-dimensional environment feature vector."""
-    features: List[float]  # length 12
+    features: List[float]
 
     def __post_init__(self) -> None:
         if len(self.features) != 12:
-            # Pad or truncate to 12
             self.features = (self.features + [0.0] * 12)[:12]
 
 
-_SCENE_CLASSES = [
-    "outdoor_open",
-    "outdoor_urban",
-    "indoor_office",
-    "indoor_mall",
-    "underground",
-    "underwater",
-    "mixed",
-]
-
-# Per-class prototype vectors (hand-crafted heuristic centroids)
 _SCENE_PROTOTYPES: Dict[str, List[float]] = {
-    "outdoor_open":   [1,0,0,0,0,0,1,0,0,0,0,1],
-    "outdoor_urban":  [1,0,0,1,1,0,0,1,0,0,0,0],
-    "indoor_office":  [0,1,0,0,1,1,0,0,1,0,0,0],
-    "indoor_mall":    [0,1,0,1,1,1,0,0,1,0,0,0],
-    "underground":    [0,0,1,0,0,1,0,0,0,1,1,0],
-    "underwater":     [0,0,0,0,0,0,0,0,0,1,0,1],
-    "mixed":          [0.5]*12,
+    "outdoor_open":   [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+    "outdoor_urban":  [1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0],
+    "indoor_office":  [0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0],
+    "indoor_mall":    [0, 1, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0],
+    "underground":    [0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0],
+    "underwater":     [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+    "mixed":          [0.5] * 12,
 }
 
 
 class SceneRecognizer:
-    """Cosine-similarity nearest-prototype scene classifier."""
+    """Cosine-similarity nearest-prototype scene classifier (legacy)."""
 
     def classify(self, feat: SceneFeatures) -> str:
         v = feat.features
         n_v = _norm(v)
         if n_v < 1e-9:
             return "mixed"
-
         best_cls, best_sim = "mixed", -2.0
         for cls, proto in _SCENE_PROTOTYPES.items():
             n_p = _norm(proto)
@@ -182,30 +302,118 @@ class SceneRecognizer:
 
 
 # ---------------------------------------------------------------------------
-# TrajectoryPredictor  (LSTM-like ring buffer + linear extrapolation)
+# SceneClassifier — Tier 6 dict-based environment classifier
+# ---------------------------------------------------------------------------
+
+class SceneClassifier:
+    """
+    Decision-tree classifier for environment scene type.
+
+    Returns one of: indoor, outdoor, underground, underwater, urban, rural.
+    Operates on a feature dict with optional keys:
+
+        wifi_count       int     number of detected wifi APs
+        cell_count       int     number of cell towers visible
+        gnss_count       int     number of GNSS satellites in view
+        altitude_m       float   altitude above sea level (m)
+        depth_m          float   depth below water surface (m), 0 if dry
+        pressure_hpa     float   ambient pressure (hPa)
+        light_lux        float   ambient illuminance (lux)
+        magnetic_uT      float   magnetic field strength (microtesla)
+    """
+
+    LABELS = ("indoor", "outdoor", "underground", "underwater", "urban", "rural")
+
+    def __init__(self) -> None:
+        self._last_confidence: float = 0.0
+        self._last_label: str = "outdoor"
+
+    def classify(self, features: dict) -> str:
+        wifi = float(features.get("wifi_count", 0))
+        cell = float(features.get("cell_count", 0))
+        gnss = float(features.get("gnss_count", 0))
+        alt = float(features.get("altitude_m", 0.0))
+        depth = float(features.get("depth_m", 0.0))
+        pressure = float(features.get("pressure_hpa", 1013.25))
+        light = float(features.get("light_lux", 1000.0))
+        mag = float(features.get("magnetic_uT", 50.0))
+
+        scores: Dict[str, float] = {k: 0.0 for k in self.LABELS}
+
+        # Underwater — pressure spike and/or explicit depth
+        if depth > 0.5 or pressure > 1100.0:
+            scores["underwater"] += 4.0 + min(depth / 5.0, 5.0)
+        # Underground — negative altitude or low light + low gnss + high mag noise
+        if alt < -3.0:
+            scores["underground"] += 3.0 + min(-alt / 10.0, 4.0)
+        if gnss <= 1 and light < 50.0 and pressure < 1013.0:
+            scores["underground"] += 2.0
+        # Indoor — many wifi APs, low gnss, normal-ish light
+        if gnss <= 3 and wifi >= 3:
+            scores["indoor"] += 3.0 + min(wifi / 5.0, 3.0)
+        if gnss == 0 and wifi >= 1 and depth < 0.5 and alt > -3.0:
+            scores["indoor"] += 1.5
+        # Outdoor — many GNSS sats and natural light
+        if gnss >= 4:
+            scores["outdoor"] += 3.0 + min(gnss / 4.0, 3.0)
+        if light > 1000.0 and depth < 0.5:
+            scores["outdoor"] += 1.5
+        # Urban — many cells + many wifi outdoors
+        if cell >= 3 and wifi >= 5:
+            scores["urban"] += 3.0 + min((cell + wifi) / 10.0, 3.0)
+        # Rural — few cells, few wifi, lots of GNSS
+        if gnss >= 4 and wifi <= 1 and cell <= 1:
+            scores["rural"] += 3.0
+        # Magnetic anomaly hints subterranean
+        if mag > 80.0 and gnss <= 1:
+            scores["underground"] += 1.0
+
+        # Pick the winner
+        label = max(scores, key=lambda k: scores[k])
+        # If everything is zero, default to outdoor (open sky assumed)
+        total = sum(scores.values())
+        if total <= 0.0:
+            label = "outdoor"
+            confidence = 0.2
+        else:
+            top = scores[label]
+            # Softmax-style confidence: normalized winner
+            sx = np.array(list(scores.values()), dtype=np.float64)
+            sx = sx - sx.max()
+            ex = np.exp(sx)
+            probs = ex / ex.sum()
+            confidence = float(probs[list(scores.keys()).index(label)])
+            # Boost confidence if winner is dominant
+            margin = (top - sorted(scores.values())[-2]) / max(top, 1e-9)
+            confidence = max(confidence, min(0.99, 0.5 + 0.5 * margin))
+
+        self._last_label = label
+        self._last_confidence = float(np.clip(confidence, 0.0, 1.0))
+        return label
+
+    def confidence(self) -> float:
+        """Return confidence (0-1) of the most recent classify() call."""
+        return self._last_confidence
+
+
+# ---------------------------------------------------------------------------
+# Legacy TrajectoryPredictor (history + EMA velocity extrapolation)
 # ---------------------------------------------------------------------------
 
 class TrajectoryPredictor:
-    """
-    Lightweight trajectory predictor using a velocity-smoothed history buffer.
-
-    Stores the last N position estimates and extrapolates linearly
-    (with exponential smoothing of the velocity vector).
-    """
+    """Lightweight EMA-velocity trajectory predictor (legacy)."""
 
     def __init__(self, max_history: int = 30, alpha: float = 0.3) -> None:
-        self._history: List[Tuple[float, float, float]] = []  # (x, y, ts)
+        self._history: List[Tuple[float, float, float]] = []
         self._max = max_history
-        self._alpha = alpha          # EMA weight for velocity
+        self._alpha = alpha
         self._vx: float = 0.0
         self._vy: float = 0.0
 
-    # ------------------------------------------------------------------
     def push(self, est: Estimate) -> None:
-        x = est.pose.position.lon   # treat lon=x, lat=y in local frame
+        x = est.pose.position.lon
         y = est.pose.position.lat
         ts = est.ts
-
         if self._history:
             prev_x, prev_y, prev_ts = self._history[-1]
             dt = ts - prev_ts
@@ -214,14 +422,11 @@ class TrajectoryPredictor:
                 raw_vy = (y - prev_y) / dt
                 self._vx = self._alpha * raw_vx + (1 - self._alpha) * self._vx
                 self._vy = self._alpha * raw_vy + (1 - self._alpha) * self._vy
-
         self._history.append((x, y, ts))
         if len(self._history) > self._max:
             self._history.pop(0)
 
-    # ------------------------------------------------------------------
     def predict(self, horizon_s: float) -> Optional[Tuple[float, float]]:
-        """Return predicted (x_m, y_m) at t+horizon_s, or None if no history."""
         if not self._history:
             return None
         x, y, _ = self._history[-1]
@@ -229,36 +434,514 @@ class TrajectoryPredictor:
 
 
 # ---------------------------------------------------------------------------
-# EnvironmentAdapter  (per-type bias table)
+# LSTMPredictor — Tier 6 numpy LSTM cell, multi-step rollout
+# ---------------------------------------------------------------------------
+
+class LSTMPredictor:
+    """
+    Numpy LSTM cell with single-step forward and multi-step trajectory rollout.
+
+    State: hidden h (hidden_dim,), cell c (hidden_dim,).
+    Output projection maps h → (output_dim,) for predicted (dx, dy) per step.
+    """
+
+    def __init__(
+        self,
+        input_dim: int = 4,
+        hidden_dim: int = 32,
+        output_dim: int = 2,
+        seed: int = 7,
+    ) -> None:
+        self.input_dim = int(input_dim)
+        self.hidden_dim = int(hidden_dim)
+        self.output_dim = int(output_dim)
+        rng = np.random.default_rng(seed)
+        scale = math.sqrt(1.0 / (self.input_dim + self.hidden_dim))
+
+        # Concatenated [x, h] → 4 * hidden_dim gates (forget, input, candidate, output)
+        d_in = self.input_dim + self.hidden_dim
+        self.W_f = rng.normal(0.0, scale, size=(d_in, self.hidden_dim))
+        self.b_f = np.zeros(self.hidden_dim)
+        self.W_i = rng.normal(0.0, scale, size=(d_in, self.hidden_dim))
+        self.b_i = np.zeros(self.hidden_dim)
+        self.W_g = rng.normal(0.0, scale, size=(d_in, self.hidden_dim))
+        self.b_g = np.zeros(self.hidden_dim)
+        self.W_o = rng.normal(0.0, scale, size=(d_in, self.hidden_dim))
+        self.b_o = np.zeros(self.hidden_dim)
+
+        # Output head h → output_dim
+        self.W_y = rng.normal(0.0, math.sqrt(1.0 / self.hidden_dim),
+                              size=(self.hidden_dim, self.output_dim))
+        self.b_y = np.zeros(self.output_dim)
+
+        self.h = np.zeros(self.hidden_dim)
+        self.c = np.zeros(self.hidden_dim)
+
+    @staticmethod
+    def _sigmoid(x: np.ndarray) -> np.ndarray:
+        # Stable sigmoid
+        return np.where(x >= 0, 1.0 / (1.0 + np.exp(-x)), np.exp(x) / (1.0 + np.exp(x)))
+
+    def reset_state(self) -> None:
+        """Clear hidden state (h) and cell state (c)."""
+        self.h = np.zeros(self.hidden_dim)
+        self.c = np.zeros(self.hidden_dim)
+
+    def forward(self, x: np.ndarray) -> np.ndarray:
+        """Single LSTM step. x: (input_dim,). Returns predicted output (output_dim,)."""
+        x = np.asarray(x, dtype=np.float64).reshape(-1)
+        if x.shape[0] != self.input_dim:
+            raise ValueError(
+                f"x must have length {self.input_dim}, got {x.shape[0]}"
+            )
+        z = np.concatenate([x, self.h])
+        f = self._sigmoid(z @ self.W_f + self.b_f)
+        i = self._sigmoid(z @ self.W_i + self.b_i)
+        g = np.tanh(z @ self.W_g + self.b_g)
+        o = self._sigmoid(z @ self.W_o + self.b_o)
+        self.c = f * self.c + i * g
+        self.h = o * np.tanh(self.c)
+        y = self.h @ self.W_y + self.b_y
+        return y
+
+    def predict_trajectory(
+        self,
+        history: np.ndarray,
+        steps: int = 5,
+    ) -> np.ndarray:
+        """
+        Predict next `steps` positions from history of (x, y, vx, vy) rows.
+
+        Output shape: (steps, 2). Output is auto-regressively unrolled —
+        the network produces a position delta per step which we accumulate
+        on top of the last observed position with the last observed velocity.
+        """
+        history = np.asarray(history, dtype=np.float64)
+        if history.ndim != 2 or history.shape[1] != self.input_dim:
+            raise ValueError(
+                f"history must be 2-D with {self.input_dim} cols, got shape {history.shape}"
+            )
+        if history.shape[0] == 0:
+            return np.zeros((steps, self.output_dim), dtype=np.float64)
+        self.reset_state()
+        # Run the encoder over the whole history
+        last_out = np.zeros(self.output_dim)
+        for row in history:
+            last_out = self.forward(row)
+
+        # Auto-regressive rollout
+        last = history[-1].copy()
+        positions = np.zeros((steps, self.output_dim), dtype=np.float64)
+        x_pos, y_pos = float(last[0]), float(last[1])
+        vx, vy = float(last[2]), float(last[3])
+        for t in range(int(steps)):
+            delta = self.forward(np.array([x_pos, y_pos, vx, vy], dtype=np.float64))
+            # Treat output as predicted (vx, vy) for next step (delta if output_dim==2)
+            if self.output_dim >= 2:
+                vx = vx * 0.5 + 0.5 * float(delta[0])
+                vy = vy * 0.5 + 0.5 * float(delta[1])
+            x_pos = x_pos + vx
+            y_pos = y_pos + vy
+            positions[t, 0] = x_pos
+            positions[t, 1] = y_pos
+        # Silence "last_out unused" — keep for callers that subclass and want it
+        _ = last_out
+        return positions
+
+
+# ---------------------------------------------------------------------------
+# NeuralSLAMEstimator — Tier 6 lightweight neural SLAM
+# ---------------------------------------------------------------------------
+
+class NeuralSLAMEstimator:
+    """
+    Lightweight neural SLAM:
+
+      * encode_observation(sensor_dict) → 64-d float feature vector
+      * update_pose_graph(obs_vec, prev_pose) → incremental Pose3D
+      * detect_loop_closure(obs_vec) → (found, keyframe_idx) by cosine sim
+      * apply_loop_correction(keyframe_idx, current_pose) → corrected Pose3D
+        (g2o-style correction simplified to linear interpolation along the loop)
+    """
+
+    FEATURE_DIM = 64
+
+    def __init__(
+        self,
+        loop_threshold: float = 0.92,
+        history_max: int = 256,
+        seed: int = 11,
+    ) -> None:
+        self.loop_threshold = float(loop_threshold)
+        self.history_max = int(history_max)
+        self._keyframes: List[np.ndarray] = []
+        self._poses: List[Pose3D] = []
+        rng = np.random.default_rng(seed)
+        # Random projection matrix used to fold raw scalar inputs into 64-d
+        self._proj_keys: List[str] = [
+            "ax", "ay", "az", "gx", "gy", "gz",
+            "wifi_count", "cell_count", "gnss_count",
+            "altitude_m", "pressure_hpa", "light_lux",
+            "magnetic_uT", "temperature_c", "depth_m", "speed_mps",
+        ]
+        self._proj = rng.normal(
+            0.0, 1.0 / math.sqrt(len(self._proj_keys)),
+            size=(len(self._proj_keys), self.FEATURE_DIM),
+        )
+
+    def encode_observation(self, sensor_dict: dict) -> np.ndarray:
+        """Encode a heterogeneous sensor dict to a 64-d feature vector."""
+        raw = np.array(
+            [float(sensor_dict.get(k, 0.0)) for k in self._proj_keys],
+            dtype=np.float64,
+        )
+        # Stable sin/cos encoding to bound magnitudes; cos(0)=1 so feat is
+        # non-zero even when every input scalar is zero.
+        sin_half = np.sin(raw)
+        cos_half = np.cos(raw)
+        feat_a = raw @ self._proj
+        feat_b = sin_half @ self._proj
+        feat_c = cos_half @ self._proj
+        feat = feat_a + feat_b + feat_c
+        n = float(np.linalg.norm(feat))
+        if n > 1e-9:
+            feat = feat / n
+        return feat
+
+    def update_pose_graph(
+        self,
+        obs_vec: np.ndarray,
+        prev_pose: Optional[Pose3D] = None,
+    ) -> Pose3D:
+        """Incrementally update pose graph and return new Pose3D."""
+        obs_vec = np.asarray(obs_vec, dtype=np.float64).reshape(-1)
+        if prev_pose is None:
+            prev_pose = self._poses[-1] if self._poses else Pose3D()
+        if self._keyframes:
+            last_obs = self._keyframes[-1]
+            sim = _cosine_sim(obs_vec, last_obs)
+            # Lower similarity ⇒ we moved more
+            step = max(0.0, 1.0 - sim)
+        else:
+            step = 0.0
+        # Heading-aligned forward step in xy plane
+        cos_y = math.cos(prev_pose.yaw)
+        sin_y = math.sin(prev_pose.yaw)
+        new_pose = Pose3D(
+            x=prev_pose.x + step * cos_y,
+            y=prev_pose.y + step * sin_y,
+            z=prev_pose.z,
+            roll=prev_pose.roll,
+            pitch=prev_pose.pitch,
+            yaw=prev_pose.yaw,
+        )
+        self._keyframes.append(obs_vec.copy())
+        self._poses.append(new_pose)
+        if len(self._keyframes) > self.history_max:
+            self._keyframes.pop(0)
+            self._poses.pop(0)
+        return new_pose
+
+    def detect_loop_closure(self, obs_vec: np.ndarray) -> Tuple[bool, int]:
+        """Return (found, idx) — best matching keyframe by cosine similarity."""
+        obs_vec = np.asarray(obs_vec, dtype=np.float64).reshape(-1)
+        if len(self._keyframes) < 5:
+            return False, -1
+        # Skip the most-recent few frames to avoid trivial self-match
+        candidates = self._keyframes[: max(0, len(self._keyframes) - 3)]
+        if not candidates:
+            return False, -1
+        best_idx = -1
+        best_sim = -2.0
+        for i, kf in enumerate(candidates):
+            sim = _cosine_sim(obs_vec, kf)
+            if sim > best_sim:
+                best_sim = sim
+                best_idx = i
+        return (best_sim >= self.loop_threshold), best_idx
+
+    def apply_loop_correction(
+        self, keyframe_idx: int, current_pose: Pose3D
+    ) -> Pose3D:
+        """Simplified g2o-style correction: linear blend toward matched keyframe pose."""
+        if not (0 <= keyframe_idx < len(self._poses)):
+            return current_pose
+        target = self._poses[keyframe_idx]
+        # Interpolate halfway — the loop has just been closed, both endpoints
+        # carry equal weight in the absence of an information matrix.
+        corrected = Pose3D(
+            x=0.5 * (current_pose.x + target.x),
+            y=0.5 * (current_pose.y + target.y),
+            z=0.5 * (current_pose.z + target.z),
+            roll=0.5 * (current_pose.roll + target.roll),
+            pitch=0.5 * (current_pose.pitch + target.pitch),
+            yaw=0.5 * (current_pose.yaw + target.yaw),
+        )
+        # Apply correction back to the most recent stored pose
+        if self._poses:
+            self._poses[-1] = corrected
+        return corrected
+
+
+# ---------------------------------------------------------------------------
+# UncertaintyEstimator — Tier 6 ensemble + HDOP + ellipse + reliability
+# ---------------------------------------------------------------------------
+
+class UncertaintyEstimator:
+    """Multi-source uncertainty quantification."""
+
+    def compute_position_uncertainty(
+        self, position_estimates: List[np.ndarray]
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Return (mean, covariance) from an ensemble of position estimates."""
+        if not position_estimates:
+            cov = np.full((2, 2), float("inf"), dtype=np.float64)
+            np.fill_diagonal(cov, float("inf"))
+            return np.zeros(2), cov
+        pts = np.array([np.asarray(p, dtype=np.float64).reshape(-1) for p in position_estimates])
+        mean = pts.mean(axis=0)
+        if pts.shape[0] == 1:
+            cov = np.zeros((pts.shape[1], pts.shape[1]))
+        else:
+            cov = np.cov(pts.T, ddof=1)
+            if cov.ndim == 0:
+                cov = np.array([[float(cov)]])
+        return mean, cov
+
+    def hdop(self, satellite_positions: List[np.ndarray]) -> float:
+        """
+        Horizontal Dilution Of Precision from satellite line-of-sight unit vectors.
+
+        Each entry is a 3-vector (x, y, z) — the unit vector from receiver to
+        satellite, or any vector that we'll normalize internally.
+        Returns +inf if the geometry matrix is singular.
+        """
+        if len(satellite_positions) < 4:
+            return float("inf")
+        rows = []
+        for sat in satellite_positions:
+            v = np.asarray(sat, dtype=np.float64).reshape(-1)
+            if v.shape[0] < 3:
+                continue
+            n = float(np.linalg.norm(v[:3]))
+            if n < 1e-9:
+                continue
+            u = v[:3] / n
+            # Standard GNSS geometry row: [-ux, -uy, -uz, 1]
+            rows.append([-u[0], -u[1], -u[2], 1.0])
+        if len(rows) < 4:
+            return float("inf")
+        G = np.array(rows, dtype=np.float64)
+        try:
+            Q = np.linalg.inv(G.T @ G)
+        except np.linalg.LinAlgError:
+            return float("inf")
+        h_sq = Q[0, 0] + Q[1, 1]
+        if h_sq < 0:
+            return float("inf")
+        return float(math.sqrt(h_sq))
+
+    def confidence_ellipse(
+        self,
+        cov_2x2: np.ndarray,
+        confidence: float = 0.95,
+    ) -> Tuple[float, float, float]:
+        """
+        2-D confidence ellipse from a 2x2 covariance matrix.
+
+        Returns (semi_major, semi_minor, angle_rad).
+        Uses chi-square 2-DoF: scale = -2 * ln(1 - confidence).
+        """
+        cov = np.asarray(cov_2x2, dtype=np.float64)
+        if cov.shape != (2, 2):
+            raise ValueError(f"cov_2x2 must be 2x2, got shape {cov.shape}")
+        confidence = float(np.clip(confidence, 1e-6, 1.0 - 1e-9))
+        scale = -2.0 * math.log(1.0 - confidence)
+        # Symmetric cov → use eigh; ensure symmetry numerically
+        sym = 0.5 * (cov + cov.T)
+        eigvals, eigvecs = np.linalg.eigh(sym)
+        # eigh returns ascending; reverse so [0] is largest
+        order = np.argsort(eigvals)[::-1]
+        eigvals = eigvals[order]
+        eigvecs = eigvecs[:, order]
+        eigvals = np.clip(eigvals, 0.0, None)
+        semi_major = float(math.sqrt(scale * eigvals[0]))
+        semi_minor = float(math.sqrt(scale * eigvals[1]))
+        angle = float(math.atan2(eigvecs[1, 0], eigvecs[0, 0]))
+        return semi_major, semi_minor, angle
+
+    def reliability_score(self, sources: List[dict]) -> float:
+        """
+        Weighted reliability across heterogeneous sources.
+
+        Each source dict may carry:
+            quality   float  0..1   intrinsic source quality
+            snr_db    float          fallback when quality missing
+            valid     bool           hard gate, treated as 0 if False
+            weight    float  >=0    weight (default 1.0)
+        Returns 0..1.
+        """
+        if not sources:
+            return 0.0
+        total_w = 0.0
+        score = 0.0
+        for s in sources:
+            valid = bool(s.get("valid", True))
+            if not valid:
+                # Invalid source still consumes weight at quality 0
+                q = 0.0
+            elif "quality" in s:
+                q = float(np.clip(s["quality"], 0.0, 1.0))
+            elif "snr_db" in s:
+                # Map SNR to 0..1 with soft cap at 30 dB
+                q = float(np.clip(s["snr_db"] / 30.0, 0.0, 1.0))
+            else:
+                q = 0.5
+            w = float(s.get("weight", 1.0))
+            if w < 0:
+                w = 0.0
+            total_w += w
+            score += w * q
+        if total_w < 1e-12:
+            return 0.0
+        return float(np.clip(score / total_w, 0.0, 1.0))
+
+
+# ---------------------------------------------------------------------------
+# Legacy BayesianUncertaintyEstimator — kept for back-compat
+# ---------------------------------------------------------------------------
+
+class BayesianUncertaintyEstimator:
+    """Weighted mean + per-axis std-dev across estimates (legacy)."""
+
+    def estimate(
+        self, estimates: List[Estimate]
+    ) -> Tuple[float, float, float, float]:
+        if not estimates:
+            return 0.0, 0.0, float("inf"), float("inf")
+        xs = [e.pose.position.lon for e in estimates]
+        ys = [e.pose.position.lat for e in estimates]
+        weights = [
+            1.0 / max(e.confidence.horizontal_m, 0.01)
+            for e in estimates
+        ]
+        total_w = sum(weights)
+        mx = sum(w * x for w, x in zip(weights, xs)) / total_w
+        my = sum(w * y for w, y in zip(weights, ys)) / total_w
+        if len(estimates) == 1:
+            sx = estimates[0].confidence.horizontal_m
+            sy = estimates[0].confidence.horizontal_m
+        else:
+            sx = math.sqrt(sum(w * (x - mx) ** 2 for w, x in zip(weights, xs)) / total_w)
+            sy = math.sqrt(sum(w * (y - my) ** 2 for w, y in zip(weights, ys)) / total_w)
+        return mx, my, sx, sy
+
+
+# ---------------------------------------------------------------------------
+# PoseEdge / PoseGraphSLAM (legacy)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PoseEdge:
+    """Constraint between two poses in the graph."""
+    from_id: int
+    to_id: int
+    dx_m: float
+    dy_m: float
+    dtheta_rad: float
+    information: float = 1.0
+
+
+class PoseGraphSLAM:
+    """Lightweight pose-graph SLAM with simple gradient-descent optimization (legacy)."""
+
+    def __init__(self, learning_rate: float = 0.05, iterations: int = 50) -> None:
+        self._nodes: List[List[float]] = []
+        self._edges: List[PoseEdge] = []
+        self._lr = learning_rate
+        self._iterations = iterations
+
+    def add_pose(self, x: float, y: float, theta: float) -> int:
+        idx = len(self._nodes)
+        self._nodes.append([x, y, theta])
+        return idx
+
+    def add_edge(self, edge: PoseEdge) -> None:
+        self._edges.append(edge)
+
+    def close_loop(self) -> None:
+        if len(self._nodes) < 2 or not self._edges:
+            return
+        for _ in range(self._iterations):
+            grads = [[0.0, 0.0, 0.0] for _ in self._nodes]
+            for e in self._edges:
+                i, j = e.from_id, e.to_id
+                if i >= len(self._nodes) or j >= len(self._nodes):
+                    continue
+                ni, nj = self._nodes[i], self._nodes[j]
+                cos_t = math.cos(ni[2])
+                sin_t = math.sin(ni[2])
+                pred_dx = cos_t * (nj[0] - ni[0]) + sin_t * (nj[1] - ni[1])
+                pred_dy = -sin_t * (nj[0] - ni[0]) + cos_t * (nj[1] - ni[1])
+                pred_dth = nj[2] - ni[2]
+                rx = pred_dx - e.dx_m
+                ry = pred_dy - e.dy_m
+                rt = pred_dth - e.dtheta_rad
+                while rt > math.pi:
+                    rt -= 2 * math.pi
+                while rt < -math.pi:
+                    rt += 2 * math.pi
+                w = e.information
+                if i != 0:
+                    grads[i][0] += w * rx * cos_t
+                    grads[i][1] += w * ry * (-sin_t)
+                    grads[i][2] += w * rt
+                if j != 0:
+                    grads[j][0] -= w * rx * cos_t
+                    grads[j][1] -= w * ry * cos_t
+                    grads[j][2] -= w * rt
+            for k in range(1, len(self._nodes)):
+                for d in range(3):
+                    self._nodes[k][d] -= self._lr * grads[k][d]
+
+
+# ---------------------------------------------------------------------------
+# EnvironmentAdapter — legacy bias correction + Tier 6 transfer learning
 # ---------------------------------------------------------------------------
 
 class EnvironmentAdapter:
     """
-    Learns per-environment-type position bias from ground-truth corrections
-    and applies it to future estimates.
+    Two-faced adapter:
+
+      Legacy API
+      ----------
+      learn(env_type, dx, dy)   record per-env position errors
+      apply(env_type, est)      bias-correct an Estimate
+
+      Tier 6 API
+      ----------
+      store_reference(env_id, feature_vector)   register environment fingerprint
+      adapt(current_features) -> env_id          cosine-match to closest env
+      fine_tune(net, samples, epochs=10)         few-shot fine-tune a RadioMapNet
     """
 
     def __init__(self) -> None:
         self._bias: Dict[str, List[Tuple[float, float]]] = {}
+        self._refs: Dict[str, np.ndarray] = {}
 
-    # ------------------------------------------------------------------
+    # ----- Legacy API -----
+
     def learn(self, env_type: str, dx: float, dy: float) -> None:
-        """Record an observed position error (dx, dy) for env_type."""
         self._bias.setdefault(env_type, []).append((dx, dy))
-        # Keep at most 200 samples per type
         if len(self._bias[env_type]) > 200:
             self._bias[env_type].pop(0)
 
-    # ------------------------------------------------------------------
     def apply(self, env_type: str, est: Estimate) -> Estimate:
-        """Return a bias-corrected copy of est for the given env_type."""
         samples = self._bias.get(env_type, [])
         if not samples:
             return est
-
         mean_dx = sum(s[0] for s in samples) / len(samples)
         mean_dy = sum(s[1] for s in samples) / len(samples)
-
         old_pos = est.pose.position
         new_pos = Position(
             lat=old_pos.lat - mean_dy,
@@ -279,148 +962,57 @@ class EnvironmentAdapter:
             raw=est.raw,
         )
 
+    # ----- Tier 6 API -----
 
-# ---------------------------------------------------------------------------
-# BayesianUncertaintyEstimator
-# ---------------------------------------------------------------------------
+    def store_reference(self, env_id: str, feature_vector: np.ndarray) -> None:
+        """Save a normalized fingerprint for later cosine matching."""
+        v = np.asarray(feature_vector, dtype=np.float64).reshape(-1).copy()
+        n = float(np.linalg.norm(v))
+        if n > 1e-12:
+            v = v / n
+        self._refs[str(env_id)] = v
 
-class BayesianUncertaintyEstimator:
-    """
-    Combines multiple position estimates into a weighted mean and
-    returns per-axis uncertainty (std deviation).
+    def adapt(self, current_features: np.ndarray) -> str:
+        """Return the stored env_id with the highest cosine similarity."""
+        if not self._refs:
+            return ""
+        v = np.asarray(current_features, dtype=np.float64).reshape(-1)
+        n = float(np.linalg.norm(v))
+        if n > 1e-12:
+            v = v / n
+        best_id = ""
+        best_sim = -2.0
+        for env_id, ref in self._refs.items():
+            sim = float(np.dot(v, ref))
+            if sim > best_sim:
+                best_sim = sim
+                best_id = env_id
+        return best_id
 
-    Returns (mean_x, mean_y, std_x, std_y).
-    """
-
-    # ------------------------------------------------------------------
-    def estimate(
-        self, estimates: List[Estimate]
-    ) -> Tuple[float, float, float, float]:
-        if not estimates:
-            return 0.0, 0.0, float("inf"), float("inf")
-
-        xs = [e.pose.position.lon for e in estimates]
-        ys = [e.pose.position.lat for e in estimates]
-        weights = [
-            1.0 / max(e.confidence.horizontal_m, 0.01)
-            for e in estimates
-        ]
-        total_w = sum(weights)
-
-        mx = sum(w * x for w, x in zip(weights, xs)) / total_w
-        my = sum(w * y for w, y in zip(weights, ys)) / total_w
-
-        if len(estimates) == 1:
-            sx = estimates[0].confidence.horizontal_m
-            sy = estimates[0].confidence.horizontal_m
-        else:
-            sx = math.sqrt(sum(w * (x - mx) ** 2 for w, x in zip(weights, xs)) / total_w)
-            sy = math.sqrt(sum(w * (y - my) ** 2 for w, y in zip(weights, ys)) / total_w)
-
-        return mx, my, sx, sy
-
-
-# ---------------------------------------------------------------------------
-# PoseEdge / PoseGraphSLAM
-# ---------------------------------------------------------------------------
-
-@dataclass
-class PoseEdge:
-    """Constraint between two poses in the graph."""
-    from_id: int
-    to_id: int
-    dx_m: float
-    dy_m: float
-    dtheta_rad: float
-    information: float = 1.0  # inverse variance weight
-
-
-class PoseGraphSLAM:
-    """
-    Lightweight pose-graph SLAM with simple gradient-descent optimization.
-
-    Nodes: (x, y, theta) — stored in ._nodes list.
-    Edges: constraints — stored in ._edges list.
-    close_loop() runs one GD sweep to minimize constraint residuals.
-    """
-
-    def __init__(self, learning_rate: float = 0.05, iterations: int = 50) -> None:
-        self._nodes: List[List[float]] = []   # [[x,y,theta], ...]
-        self._edges: List[PoseEdge] = []
-        self._lr = learning_rate
-        self._iterations = iterations
-
-    # ------------------------------------------------------------------
-    def add_pose(self, x: float, y: float, theta: float) -> int:
-        idx = len(self._nodes)
-        self._nodes.append([x, y, theta])
-        return idx
-
-    # ------------------------------------------------------------------
-    def add_edge(self, edge: PoseEdge) -> None:
-        self._edges.append(edge)
-
-    # ------------------------------------------------------------------
-    def close_loop(self) -> None:
-        """Run gradient-descent to minimise constraint residuals."""
-        if len(self._nodes) < 2 or not self._edges:
-            return
-
-        for _ in range(self._iterations):
-            grads = [[0.0, 0.0, 0.0] for _ in self._nodes]
-
-            for e in self._edges:
-                i, j = e.from_id, e.to_id
-                if i >= len(self._nodes) or j >= len(self._nodes):
-                    continue
-                ni, nj = self._nodes[i], self._nodes[j]
-
-                # Predicted relative pose from node i to j
-                cos_t = math.cos(ni[2])
-                sin_t = math.sin(ni[2])
-                pred_dx = cos_t * (nj[0] - ni[0]) + sin_t * (nj[1] - ni[1])
-                pred_dy = -sin_t * (nj[0] - ni[0]) + cos_t * (nj[1] - ni[1])
-                pred_dth = nj[2] - ni[2]
-
-                # Residuals
-                rx = pred_dx - e.dx_m
-                ry = pred_dy - e.dy_m
-                rt = pred_dth - e.dtheta_rad
-                # Normalise theta residual to [-pi, pi]
-                while rt > math.pi:
-                    rt -= 2 * math.pi
-                while rt < -math.pi:
-                    rt += 2 * math.pi
-
-                w = e.information
-                # Accumulate gradients (simplified; fix node 0)
-                if i != 0:
-                    grads[i][0] += w * rx * cos_t
-                    grads[i][1] += w * ry * (-sin_t)
-                    grads[i][2] += w * rt
-                if j != 0:
-                    grads[j][0] -= w * rx * cos_t
-                    grads[j][1] -= w * ry * cos_t
-                    grads[j][2] -= w * rt
-
-            # Apply gradients (skip node 0 — anchor)
-            for k in range(1, len(self._nodes)):
-                for d in range(3):
-                    self._nodes[k][d] -= self._lr * grads[k][d]
+    def fine_tune(
+        self,
+        net: "RadioMapNet",
+        new_samples: List[Tuple[np.ndarray, np.ndarray]],
+        epochs: int = 10,
+        lr: float = 0.005,
+    ) -> List[float]:
+        """
+        Few-shot fine-tune a RadioMapNet on a small set of (features, target) pairs.
+        Lower default learning rate to avoid catastrophic forgetting.
+        """
+        if not new_samples:
+            return []
+        X = np.array([np.asarray(s[0], dtype=np.float64).reshape(-1) for s in new_samples])
+        y = np.array([np.asarray(s[1], dtype=np.float64).reshape(-1) for s in new_samples])
+        return net.train(X, y, epochs=epochs, lr=lr, batch_size=max(1, min(8, X.shape[0])))
 
 
 # ---------------------------------------------------------------------------
-# AIEnhancer  — main public class
+# AIEnhancer — legacy public class (kept for back-compat)
 # ---------------------------------------------------------------------------
 
 class AIEnhancer:
-    """
-    Tier-6 AI/ML enhancement layer.
-
-    Wraps scene recognition, radio-map positioning,
-    trajectory prediction, environment adaptation,
-    Bayesian uncertainty, and pose-graph SLAM.
-    """
+    """Tier-6 AI/ML enhancement layer (legacy Estimate-shaped API)."""
 
     def __init__(self) -> None:
         self.scene_recognizer = SceneRecognizer()
@@ -431,34 +1023,17 @@ class AIEnhancer:
         self.pose_graph = PoseGraphSLAM()
         self._env_type: str = "outdoor_open"
 
-    # ------------------------------------------------------------------
-    def enhance(
-        self, est: Estimate, env_type: Optional[str] = None
-    ) -> Estimate:
-        """
-        Apply AI enhancements to a raw position estimate.
-
-        Steps:
-          1. Detect / override environment type.
-          2. Apply learned environment bias correction.
-          3. Smooth trajectory.
-          4. Update confidence based on Bayesian uncertainty.
-        """
+    def enhance(self, est: Estimate, env_type: Optional[str] = None) -> Estimate:
         etype = env_type or self._env_type
         adapted = self.environment_adapter.apply(etype, est)
         self.trajectory_predictor.push(adapted)
-
-        # Refine confidence using trajectory smoothness
         horiz = adapted.confidence.horizontal_m
         if len(self.trajectory_predictor._history) >= 3:
-            # Use velocity variance as proxy for confidence quality
             vx = self.trajectory_predictor._vx
             vy = self.trajectory_predictor._vy
             speed = math.sqrt(vx ** 2 + vy ** 2)
-            # If speed is very low, slightly tighten uncertainty
             if speed < 0.5:
                 horiz = horiz * 0.95
-
         new_conf = Confidence(
             horizontal_m=horiz,
             vertical_m=adapted.confidence.vertical_m,
@@ -474,12 +1049,84 @@ class AIEnhancer:
             raw=adapted.raw,
         )
 
-    # ------------------------------------------------------------------
     def quantify_uncertainty(
         self, estimates: List[Estimate]
     ) -> Tuple[float, float, float, float]:
-        """
-        Return (mean_x, mean_y, std_x, std_y) from a list of estimates.
-        Uses Bayesian uncertainty estimator internally.
-        """
         return self.uncertainty_estimator.estimate(estimates)
+
+
+# ---------------------------------------------------------------------------
+# AIEnhancement — new Tier 6 dict-based public class
+# ---------------------------------------------------------------------------
+
+class AIEnhancement:
+    """
+    Tier 6 AI/ML enhancement layer, dict-based API.
+
+    enhance(sensor_dict, position_estimate) -> dict
+        Runs scene classification, neural SLAM update, ensemble uncertainty,
+        and reliability scoring. Returns an enriched dict containing the
+        original position plus AI-derived signals.
+    """
+
+    def __init__(self) -> None:
+        self.scene_classifier = SceneClassifier()
+        self.uncertainty = UncertaintyEstimator()
+        self.lstm = LSTMPredictor()
+        self.slam = NeuralSLAMEstimator()
+        self.adapter = EnvironmentAdapter()
+        self.radio_net = RadioMapNet()
+        self._last_pose: Pose3D = Pose3D()
+        self._ensemble: List[np.ndarray] = []
+
+    def enhance(self, sensor_dict: dict, position_estimate: dict) -> dict:
+        """Apply Tier 6 enhancement to a single observation."""
+        sensor_dict = sensor_dict or {}
+        position_estimate = dict(position_estimate or {})
+
+        # Scene
+        scene = self.scene_classifier.classify(sensor_dict)
+        scene_conf = self.scene_classifier.confidence()
+
+        # Neural SLAM update
+        obs_vec = self.slam.encode_observation(sensor_dict)
+        new_pose = self.slam.update_pose_graph(obs_vec, self._last_pose)
+        loop_found, loop_idx = self.slam.detect_loop_closure(obs_vec)
+        if loop_found:
+            new_pose = self.slam.apply_loop_correction(loop_idx, new_pose)
+        self._last_pose = new_pose
+
+        # Ensemble uncertainty: keep last N raw position estimates as ensemble
+        x = float(position_estimate.get("x", position_estimate.get("lon", 0.0)))
+        y = float(position_estimate.get("y", position_estimate.get("lat", 0.0)))
+        self._ensemble.append(np.array([x, y]))
+        if len(self._ensemble) > 16:
+            self._ensemble.pop(0)
+        mean, cov = self.uncertainty.compute_position_uncertainty(self._ensemble)
+        if cov.shape == (2, 2):
+            sm, sn, ang = self.uncertainty.confidence_ellipse(cov, confidence=0.95)
+        else:
+            sm, sn, ang = 0.0, 0.0, 0.0
+
+        # Reliability score from sources advertised in sensor_dict
+        sources = sensor_dict.get("sources", []) or []
+        reliability = self.uncertainty.reliability_score(sources)
+
+        return {
+            **position_estimate,
+            "scene": scene,
+            "scene_confidence": scene_conf,
+            "slam_pose": {
+                "x": new_pose.x, "y": new_pose.y, "z": new_pose.z,
+                "yaw": new_pose.yaw,
+            },
+            "loop_closed": bool(loop_found),
+            "loop_keyframe": int(loop_idx),
+            "ensemble_mean_xy": (float(mean[0]), float(mean[1])) if mean.shape[0] >= 2 else (0.0, 0.0),
+            "uncertainty_ellipse_m": {
+                "semi_major": sm,
+                "semi_minor": sn,
+                "angle_rad": ang,
+            },
+            "reliability": reliability,
+        }
