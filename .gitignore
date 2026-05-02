@@ -1,3 +1,9 @@
+# Generated bridge artifacts (HTML and GLB)
+assets/avatar/*.html
+assets/avatar/*.glb
+assets/visualizations/*.html
+assets/scenes/*.html
+
 # macOS
 .DS_Store
 .AppleDouble
