@@ -80,10 +80,13 @@ def stop_server():
 
 def open_chat(icon, item):
     chat_script = HERE / "native_chat.py"
-    venv_py = AGENCY_ROOT / ".venv" / "Scripts" / "pythonw.exe"
-    py = str(venv_py) if venv_py.exists() else sys.executable.replace("python.exe", "pythonw.exe")
-    if not Path(py).exists():
-        py = sys.executable
+    venv_pyw = AGENCY_ROOT / ".venv" / "Scripts" / "pythonw.exe"
+    if venv_pyw.exists():
+        py = str(venv_pyw)
+    else:
+        # Fall back to pythonw next to the current interpreter; otherwise current python.
+        candidate = Path(sys.executable).with_name("pythonw.exe")
+        py = str(candidate) if candidate.exists() else sys.executable
     subprocess.Popen([py, str(chat_script)],
                      creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
 

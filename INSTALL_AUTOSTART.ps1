@@ -26,6 +26,10 @@ W "Copied jarvis_os/ → $dstOS" Green
 
 Step "STEP 3 — Install Python deps (pystray, Pillow, keyboard)"
 & $Pip install pystray Pillow keyboard --quiet 2>&1 | Where-Object { $_ -match "error|installed|Successfully" } | ForEach-Object { W $_ }
+if ($LASTEXITCODE -ne 0) {
+    W "pip install failed (exit code $LASTEXITCODE). Aborting." Red
+    exit 1
+}
 
 Step "STEP 4 — Create launcher batch files"
 $trayBat = Join-Path $AgencyRoot "jarvis_tray.bat"
