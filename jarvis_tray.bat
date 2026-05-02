@@ -1,4 +1,22 @@
 @echo off
-cd /d "%USERPROFILE%\agency"
-start "" "%USERPROFILE%\agency\.venv\Scripts\pythonw.exe" "%USERPROFILE%\agency\jarvis_os\tray.py"
-start "" "%USERPROFILE%\agency\.venv\Scripts\pythonw.exe" "%USERPROFILE%\agency\jarvis_os\hotkey_listener.py"
+setlocal
+if not defined AGENCY_ROOT set "AGENCY_ROOT=%USERPROFILE%\agency"
+set "PYW=%AGENCY_ROOT%\.venv\Scripts\pythonw.exe"
+set "TRAY=%AGENCY_ROOT%\jarvis_os\tray.py"
+set "HOTKEY=%AGENCY_ROOT%\jarvis_os\hotkey_listener.py"
+if not exist "%PYW%" (
+    echo [JARVIS] pythonw.exe missing at %PYW%
+    echo [JARVIS] Run INSTALL_AUTOSTART.cmd to set up the venv.
+    pause
+    exit /b 1
+)
+if not exist "%TRAY%" (
+    echo [JARVIS] tray.py missing at %TRAY%
+    pause
+    exit /b 1
+)
+cd /d "%AGENCY_ROOT%"
+start "" "%PYW%" "%TRAY%"
+if exist "%HOTKEY%" (
+    start "" "%PYW%" "%HOTKEY%"
+)

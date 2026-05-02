@@ -1,7 +1,11 @@
 # INSTALL_AUTOSTART.ps1 — register JARVIS as Windows OS-level service
 # Adds tray + hotkey to startup; installs deps into venv
 
-$AgencyRoot = "$env:USERPROFILE\agency"
+if ($env:AGENCY_ROOT) {
+    $AgencyRoot = $env:AGENCY_ROOT
+} else {
+    $AgencyRoot = "$env:USERPROFILE\agency"
+}
 $JarvisOS   = Join-Path $AgencyRoot "jarvis_os"
 $Venv       = Join-Path $AgencyRoot ".venv"
 $Pip        = Join-Path $Venv "Scripts\pip.exe"
@@ -11,21 +15,56 @@ $PythonW    = Join-Path $Venv "Scripts\pythonw.exe"
 function Step($t) { Write-Host "`n========== $t ==========" -ForegroundColor Cyan }
 function W($m,$c="White") { Write-Host "  $m" -ForegroundColor $c }
 
+function Resolve-PythonLauncher {
+    foreach ($name in @("python", "py")) {
+        $cmd = Get-Command $name -ErrorAction SilentlyContinue
+        if ($cmd) {
+            if ($name -eq "py") { return @($cmd.Source, "-3") }
+            return @($cmd.Source)
+        }
+    }
+    return $null
+}
+
 Step "STEP 1 — Verify agency repo + venv"
-if (!(Test-Path $AgencyRoot)) { W "agency missing at $AgencyRoot" Red; exit 1 }
-if (!(Test-Path $Venv))       { W "Creating venv..." Yellow; python -m venv $Venv }
+if (!(Test-Path $AgencyRoot)) {
+    W "agency missing at $AgencyRoot" Red
+    W "Set `$env:AGENCY_ROOT or run install.ps1 first to create the agency root." Yellow
+    exit 1
+}
+if (!(Test-Path $Venv)) {
+    W "Creating venv..." Yellow
+    $launcher = Resolve-PythonLauncher
+    if (-not $launcher) {
+        W "Could not find 'python' or 'py' on PATH. Install Python 3.10+ first." Red
+        exit 1
+    }
+    & $launcher[0] $launcher[1..($launcher.Length-1)] -m venv $Venv
+    if ($LASTEXITCODE -ne 0) {
+        W "venv creation failed (exit $LASTEXITCODE)." Red
+        exit 1
+    }
+}
 W "agency: $AgencyRoot" Green
 W "venv:   $Venv" Green
 
 Step "STEP 2 — Copy jarvis_os/ into agency repo"
 $srcOS = Join-Path $PSScriptRoot "jarvis_os"
 $dstOS = Join-Path $AgencyRoot "jarvis_os"
-if (Test-Path $dstOS) { Remove-Item $dstOS -Recurse -Force }
+if (Test-Path $dstOS) {
+    # Preserve the existing directory in case the user has local edits.
+    $stamp  = Get-Date -Format "yyyyMMdd_HHmmss"
+    $backup = "$dstOS.bak.$stamp"
+    W "Existing jarvis_os/ found — backing up to $backup" Yellow
+    Move-Item $dstOS $backup -Force
+}
 Copy-Item $srcOS $dstOS -Recurse -Force
 W "Copied jarvis_os/ → $dstOS" Green
 
 Step "STEP 3 — Install Python deps (pystray, Pillow, keyboard)"
-& $Pip install pystray Pillow keyboard --quiet 2>&1 | Where-Object { $_ -match "error|installed|Successfully" } | ForEach-Object { W $_ }
+& $Pip install pystray Pillow keyboard 2>&1 |
+    Where-Object { $_ -match "error|installed|Successfully" } |
+    ForEach-Object { W $_ }
 if ($LASTEXITCODE -ne 0) {
     W "pip install failed (exit code $LASTEXITCODE). Aborting." Red
     exit 1
