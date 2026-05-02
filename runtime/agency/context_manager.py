@@ -1,14 +1,25 @@
-"""
-context_manager.py — JARVIS Pass 24
-Thread-local context stack with automatic JARVIS context fields.
+"""context_manager.py — JARVIS Pass 24 + persistent KV extension.
+
+Two coexisting APIs on a single ContextManager class:
+
+1. Thread-local context stack (Pass 24) — push/pop/get/scope/reset/...
+2. Persistent KV store with TTL, tags, domains — store/recall/forget/...
+
+The two APIs share no state. Persistent-store methods operate on
+`self._entries`; stack methods operate on the module-level thread-local
+`_local.stack`.
 """
 
 from __future__ import annotations
 
 import contextlib
+import json
 import threading
+import time
 import uuid
 from copy import deepcopy
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Iterator
 
 try:
@@ -17,6 +28,7 @@ except ImportError:
     class Tracer:  # type: ignore
         def push_context(self, **kw: Any) -> None: pass
         def pop_context(self) -> None: pass
+
 
 _DEFAULTS: dict[str, Any] = {
     "session_id":   lambda: str(uuid.uuid4())[:8],
@@ -41,13 +53,66 @@ def _current_frame() -> dict:
     return stack[-1] if stack else {}
 
 
-class ContextManager:
-    """Thread-local context stack with scope() context-manager protocol."""
+DEFAULT_CONTEXT_PATH = Path.home() / ".jarvis" / "context.json"
 
-    def __init__(self, tracer: Any = None):
+
+@dataclass
+class ContextEntry:
+    """Single entry in the persistent KV store."""
+
+    key: str = ""
+    value: Any = None
+    domain: str = "default"
+    tags: list[str] = field(default_factory=list)
+    ttl_seconds: float | None = None
+    created_at: float = field(default_factory=time.time)
+
+    def is_expired(self) -> bool:
+        if self.ttl_seconds is None or self.ttl_seconds == 0:
+            return False
+        return time.time() - self.created_at > self.ttl_seconds
+
+    def to_dict(self) -> dict:
+        return {
+            "key": self.key,
+            "value": self.value,
+            "domain": self.domain,
+            "tags": list(self.tags),
+            "ttl_seconds": self.ttl_seconds,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ContextEntry":
+        return cls(
+            key=data.get("key", ""),
+            value=data.get("value"),
+            domain=data.get("domain", "default"),
+            tags=list(data.get("tags", [])),
+            ttl_seconds=data.get("ttl_seconds"),
+            created_at=float(data.get("created_at", time.time())),
+        )
+
+
+class ContextManager:
+    """Thread-local stack + persistent KV store."""
+
+    def __init__(
+        self,
+        store_path: str | Path | None = None,
+        tracer: Any = None,
+    ):
         self._tracer = tracer or Tracer()
         self._turn_counter = 0
         self._lock = threading.Lock()
+
+        # Persistent KV state
+        self._store_path: Path | None = Path(store_path) if store_path else None
+        self._entries: dict[str, dict[str, ContextEntry]] = {}
+        if self._store_path is not None:
+            self._load()
+
+    # ─── Thread-local stack API (Pass 24) ─────────────────────────────────────
 
     def push(self, key: str, value: Any) -> None:
         stack = _get_stack()
@@ -113,6 +178,127 @@ class ContextManager:
     def _make_initial_frame(self) -> dict:
         return {k: v() for k, v in _DEFAULTS.items()}
 
+    # ─── Persistent KV API ────────────────────────────────────────────────────
+
+    def store(
+        self,
+        key: str,
+        value: Any,
+        domain: str = "default",
+        tags: list[str] | None = None,
+        ttl_seconds: float | None = None,
+    ) -> ContextEntry:
+        entry = ContextEntry(
+            key=key,
+            value=value,
+            domain=domain,
+            tags=list(tags or []),
+            ttl_seconds=ttl_seconds,
+            created_at=time.time(),
+        )
+        self._entries.setdefault(domain, {})[key] = entry
+        self._save()
+        return entry
+
+    def recall(self, key: str, domain: str = "default") -> Any:
+        entry = self._entries.get(domain, {}).get(key)
+        if entry is None:
+            return None
+        if entry.is_expired():
+            self._entries[domain].pop(key, None)
+            self._save()
+            return None
+        return entry.value
+
+    def recall_recent(
+        self,
+        domain: str | None = None,
+        n: int = 10,
+    ) -> list[ContextEntry]:
+        live: list[ContextEntry] = []
+        for d, items in self._entries.items():
+            if domain is not None and d != domain:
+                continue
+            for entry in items.values():
+                if not entry.is_expired():
+                    live.append(entry)
+        live.sort(key=lambda e: e.created_at, reverse=True)
+        return live[:n]
+
+    def search_by_tag(self, tag: str) -> list[ContextEntry]:
+        out: list[ContextEntry] = []
+        for items in self._entries.values():
+            for entry in items.values():
+                if not entry.is_expired() and tag in entry.tags:
+                    out.append(entry)
+        return out
+
+    def forget(self, key: str, domain: str = "default") -> bool:
+        bucket = self._entries.get(domain)
+        if bucket is None or key not in bucket:
+            return False
+        bucket.pop(key)
+        self._save()
+        return True
+
+    def purge_expired(self) -> int:
+        removed = 0
+        for d, items in list(self._entries.items()):
+            for k in list(items.keys()):
+                if items[k].is_expired():
+                    items.pop(k)
+                    removed += 1
+        if removed:
+            self._save()
+        return removed
+
+    def dump_domain(self, domain: str) -> dict[str, Any]:
+        bucket = self._entries.get(domain, {})
+        return {
+            k: e.value
+            for k, e in bucket.items()
+            if not e.is_expired()
+        }
+
+    def clear_domain(self, domain: str) -> int:
+        bucket = self._entries.pop(domain, {})
+        if bucket:
+            self._save()
+        return len(bucket)
+
+    def all_domains(self) -> list[str]:
+        return list(self._entries.keys())
+
+    # ─── Persistence helpers ──────────────────────────────────────────────────
+
+    def _save(self) -> None:
+        if self._store_path is None:
+            return
+        try:
+            self._store_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                d: {k: e.to_dict() for k, e in items.items()}
+                for d, items in self._entries.items()
+            }
+            self._store_path.write_text(
+                json.dumps(payload, indent=2, default=str),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
+    def _load(self) -> None:
+        if self._store_path is None or not self._store_path.exists():
+            return
+        try:
+            data = json.loads(self._store_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        for d, items in data.items():
+            self._entries[d] = {
+                k: ContextEntry.from_dict(v) for k, v in items.items()
+            }
+
 
 _default_context_manager: ContextManager | None = None
 
@@ -122,27 +308,3 @@ def get_context_manager() -> ContextManager:
     if _default_context_manager is None:
         _default_context_manager = ContextManager()
     return _default_context_manager
-
-# === ContextEntry — added by SUPER_DRIVER (Pass 25 hotfix) ===
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any
-
-@dataclass
-class ContextEntry:
-    """Single entry in the agent's working context."""
-    content: str
-    kind: str = "message"
-    ts: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    tags: list[str] = field(default_factory=list)
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict:
-        return {"content": self.content, "kind": self.kind, "ts": self.ts,
-                "tags": list(self.tags), "metadata": dict(self.metadata)}
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "ContextEntry":
-        return cls(content=data.get("content",""), kind=data.get("kind","message"),
-                   ts=data.get("ts", datetime.now(timezone.utc).isoformat()),
-                   tags=list(data.get("tags",[])), metadata=dict(data.get("metadata",{})))

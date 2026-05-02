@@ -322,6 +322,3 @@ class JarvisEmotion:
             f"JarvisEmotion(state={self.current.value!r}, "
             f"confidence={self.confidence:.2f})"
         )
-r}, "
-            f"confidence={self.confidence:.2f})"
-        )
