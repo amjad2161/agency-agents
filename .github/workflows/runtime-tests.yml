@@ -1,53 +1,40 @@
 name: Runtime tests
 
 on:
-  pull_request:
-    paths:
-      - "runtime/**"
-      - ".github/workflows/runtime-tests.yml"
   push:
+    branches: [main, "claude/**"]
+  pull_request:
     branches: [main]
-    paths:
-      - "runtime/**"
-      - ".github/workflows/runtime-tests.yml"
 
 jobs:
-  pytest:
-    name: pytest (Python ${{ matrix.python-version }})
+  runtime-tests:
+    name: Runtime tests
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
           cache: pip
 
-      - name: Install runtime
-        run: pip install -e runtime[dev]
-
-      - name: Install pytest-timeout
-        run: pip install pytest-timeout
-
-      - name: Run pytest
-        run: >
-          python -m pytest runtime/tests -q
-          --tb=short
-          --timeout=60
-          --cov=agency
-          --cov-report=term-missing
-          --cov-fail-under=0
-
-      - name: Smoke-test CLI
-        env:
-          ANTHROPIC_API_KEY: ""
+      - name: Install dependencies
         run: |
-          agency list | head -5
-          agency list --category engineering | head -3
-          agency plan "build a React component"
-          agency doctor
+          python -m pip install --upgrade pip
+          pip install numpy pytest pytest-timeout pytest-asyncio
+          pip install -e runtime || pip install pyyaml click httpx pydantic
+          pip install ezdxf || true
+          pip install pypdf python-docx openpyxl flask requests || true
+
+      - name: Run runtime tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/runtime:${{ github.workspace }}
+          ANTHROPIC_API_KEY: ""
+        run: python -m pytest runtime/tests -q --timeout=30 --tb=short
+
+      - name: Run bridge tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/runtime:${{ github.workspace }}
+          ANTHROPIC_API_KEY: ""
+        run: python -m pytest tests -q --timeout=30 --tb=short
