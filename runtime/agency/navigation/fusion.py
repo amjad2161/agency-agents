@@ -166,12 +166,18 @@ class UKF:
 
 # ── Particle Filter ───────────────────────────────────────────────────────────
 class ParticleFilter:
-    """Bootstrap Particle Filter. State per particle: [x,y,heading]."""
+    """Bootstrap Particle Filter. State per particle: [x,y,heading].
+
+    Adds adaptive resampling (only when Neff drops below threshold), roughening
+    (post-resample jitter to combat sample impoverishment), and a convergence
+    metric for runtime monitoring.
+    """
 
     def __init__(self, n_particles: int = 200, x0: float = 0.0, y0: float = 0.0) -> None:
         self._N = n_particles
         self._particles = [[x0, y0, 0.0] for _ in range(n_particles)]
         self._weights = [1.0/n_particles]*n_particles
+        self._last_resampled: bool = False
 
     def predict(self, dt: float, q_sigma: float) -> None:
         for p in self._particles:
@@ -180,16 +186,75 @@ class ParticleFilter:
             p[2] += random.gauss(0, 0.01*dt)
 
     def update(self, z: Vec, sigma_obs: float) -> None:
-        """z=[x_obs, y_obs]. Likelihood = Gaussian."""
+        """z=[x_obs, y_obs]. Likelihood = Gaussian. Always resamples (legacy)."""
+        self._reweight(z, sigma_obs)
+        self._resample()
+        self._last_resampled = True
+
+    def _reweight(self, z: Vec, sigma_obs: float) -> None:
         new_w = []
         for p, w in zip(self._particles, self._weights):
-            dx = z[0]-p[0]; dy = z[1]-p[1]
-            dist2 = dx**2+dy**2
-            lkl = math.exp(-0.5*dist2/(sigma_obs**2+1e-9))
-            new_w.append(w*lkl)
-        s = sum(new_w)+1e-30
-        self._weights = [w/s for w in new_w]
-        self._resample()
+            dx = z[0] - p[0]
+            dy = z[1] - p[1]
+            dist2 = dx * dx + dy * dy
+            lkl = math.exp(-0.5 * dist2 / (sigma_obs * sigma_obs + 1e-9))
+            new_w.append(w * lkl)
+        s = sum(new_w) + 1e-30
+        self._weights = [w / s for w in new_w]
+
+    def neff(self) -> float:
+        """Effective sample size: 1 / sum(w_i^2)."""
+        s2 = sum(w * w for w in self._weights)
+        return 1.0 / max(s2, 1e-30)
+
+    def adaptive_resampling(
+        self,
+        z: Vec | None = None,
+        sigma_obs: float | None = None,
+        threshold_ratio: float = 0.5,
+    ) -> bool:
+        """Reweight (if observation given) and systematically resample only when
+        Neff < threshold_ratio * N.  Returns True if resampling occurred.
+        """
+        if z is not None and sigma_obs is not None:
+            self._reweight(z, sigma_obs)
+        threshold = threshold_ratio * self._N
+        did = False
+        if self.neff() < threshold:
+            self._resample()
+            did = True
+        self._last_resampled = did
+        return did
+
+    def roughening(self, K: float = 0.2) -> None:
+        """Add scaled-Gaussian jitter to each state component to prevent sample
+        impoverishment after resampling.  Sigma per dim is K * range / N^(1/d).
+        """
+        if not self._particles:
+            return
+        N = self._N
+        d = len(self._particles[0])
+        # range per dimension
+        ranges = []
+        for dim in range(d):
+            vals = [p[dim] for p in self._particles]
+            ranges.append(max(vals) - min(vals))
+        denom = max(N ** (1.0 / max(d, 1)), 1e-9)
+        sigmas = [K * r / denom for r in ranges]
+        for p in self._particles:
+            for dim in range(d):
+                if sigmas[dim] > 0:
+                    p[dim] += random.gauss(0.0, sigmas[dim])
+
+    def convergence_metric(self) -> dict:
+        """Return diagnostics: neff, entropy, max_weight."""
+        neff = self.neff()
+        max_w = max(self._weights) if self._weights else 0.0
+        entropy = 0.0
+        for w in self._weights:
+            if w > 1e-30:
+                entropy -= w * math.log(w)
+        return {"neff": neff, "entropy": entropy, "max_weight": max_w}
 
     def _resample(self) -> None:
         """Systematic resampling."""
@@ -219,6 +284,47 @@ class ParticleFilter:
             for r in range(3):
                 for c in range(3): C[r][c]+=w*d[r]*d[c]
         return C
+
+
+class MapMatchingParticle(ParticleFilter):
+    """Particle filter with map-matching constraints.
+
+    Snaps particles to road / corridor segments from a VectorMapStore when they
+    fall within ``snap_radius_m`` of a known segment.  Particles outside the
+    radius keep their proposed state.
+    """
+
+    def __init__(
+        self,
+        n_particles: int = 200,
+        x0: float = 0.0,
+        y0: float = 0.0,
+        snap_radius_m: float = 5.0,
+    ) -> None:
+        super().__init__(n_particles, x0, y0)
+        self.snap_radius_m = float(snap_radius_m)
+
+    def update_with_map(self, map_store) -> int:
+        """Snap each particle's (x, y) to nearest map segment within radius.
+
+        ``map_store`` must expose ``nearest_point(x, y)`` returning either
+        ``(x_snap, y_snap, dist)`` or ``None`` when no segment is available.
+        Returns the number of particles snapped.
+        """
+        snapped = 0
+        for p in self._particles:
+            try:
+                hit = map_store.nearest_point(p[0], p[1])
+            except Exception:
+                hit = None
+            if hit is None:
+                continue
+            x_snap, y_snap, dist = hit
+            if dist <= self.snap_radius_m:
+                p[0] = x_snap
+                p[1] = y_snap
+                snapped += 1
+        return snapped
 
 # ── SensorFusion ──────────────────────────────────────────────────────────────
 class SensorFusion:

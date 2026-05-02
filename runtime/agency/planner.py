@@ -56,7 +56,8 @@ class Planner:
             brain = SupremeJarvisBrain(self.registry)
             top_results = brain.top_k(request, k=self.shortlist_size)
             candidates = [skill for skill, _ in top_results]
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            log.warning("plan.brain_unavailable falling back to keyword match: %s", exc)
             candidates = []
         # Fall back to naive search if brain returns nothing.
         if not candidates:

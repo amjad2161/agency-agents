@@ -4,15 +4,45 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
-@dataclass
 class TurnRecord:
-    role: str
-    text: str
-    ts: float = field(default_factory=time.time)
+    """One conversation turn. Accepts either ``text`` or ``content`` (alias)."""
+
+    __slots__ = ("role", "text", "ts")
+
+    def __init__(
+        self,
+        role: str,
+        text: str | None = None,
+        ts: float | None = None,
+        *,
+        content: str | None = None,
+    ) -> None:
+        if text is None and content is None:
+            raise TypeError("TurnRecord requires text= or content=")
+        if text is not None and content is not None and text != content:
+            raise ValueError("text and content must match if both supplied")
+        self.role = role
+        self.text = text if text is not None else content  # type: ignore[assignment]
+        self.ts = ts if ts is not None else time.time()
+
+    @property
+    def content(self) -> str:
+        return self.text
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, TurnRecord):
+            return NotImplemented
+        return self.role == other.role and self.text == other.text and self.ts == other.ts
+
+    def __repr__(self) -> str:
+        return f"TurnRecord(role={self.role!r}, text={self.text!r}, ts={self.ts!r})"
+
+    def to_dict(self) -> dict:
+        return {"role": self.role, "text": self.text, "ts": self.ts}
 
 
 @dataclass
@@ -60,4 +90,4 @@ class MemoryStore:
         with path.open("w", encoding="utf-8") as f:
             f.write(json.dumps({"kind": "header", "skill_slug": session.skill_slug}) + "\n")
             for turn in session.turns:
-                f.write(json.dumps({"kind": "turn", **asdict(turn)}) + "\n")
+                f.write(json.dumps({"kind": "turn", **turn.to_dict()}) + "\n")

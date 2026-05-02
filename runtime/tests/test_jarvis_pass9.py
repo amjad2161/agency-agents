@@ -141,17 +141,30 @@ def test_agency_main_help_exits_zero():
 # ── 5. File handle safety (static AST check) ──────────────────────────────
 
 def _collect_unsafe_opens(path: Path) -> list[tuple[int, str]]:
-    """Return (lineno, snippet) for open() calls NOT inside a `with` statement."""
+    """Return (lineno, snippet) for open() calls NOT inside a `with` statement.
+
+    Whitelists:
+      * webbrowser.open (not a file handle)
+      * open() calls inside __enter__ methods of context-manager classes
+        (the matching __exit__ is responsible for closing the handle)
+    """
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except SyntaxError:
         return []
+
+    def _is_browser_open(node):
+        if isinstance(node.func, ast.Attribute):
+            if isinstance(node.func.value, ast.Name) and node.func.value.id == "webbrowser":
+                return True
+        return False
 
     unsafe: list[tuple[int, str]] = []
 
     class Visitor(ast.NodeVisitor):
         def __init__(self):
             self._in_with = 0
+            self._enter_depth = 0  # inside __enter__ of a CM class
 
         def visit_With(self, node):
             self._in_with += 1
@@ -163,8 +176,19 @@ def _collect_unsafe_opens(path: Path) -> list[tuple[int, str]]:
             self.generic_visit(node)
             self._in_with -= 1
 
+        def visit_ClassDef(self, node):
+            method_names = {n.name for n in node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+            is_cm = "__enter__" in method_names and "__exit__" in method_names
+            for child in node.body:
+                if is_cm and isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == "__enter__":
+                    self._enter_depth += 1
+                    self.generic_visit(child)
+                    self._enter_depth -= 1
+                else:
+                    self.generic_visit(child)
+
         def visit_Call(self, node):
-            if self._in_with == 0:
+            if self._in_with == 0 and self._enter_depth == 0:
                 name = ""
                 if isinstance(node.func, ast.Name):
                     name = node.func.id
@@ -173,14 +197,6 @@ def _collect_unsafe_opens(path: Path) -> list[tuple[int, str]]:
                 if name == "open" and not _is_browser_open(node):
                     unsafe.append((node.lineno, ast.unparse(node)[:80]))
             self.generic_visit(node)
-
-    def _is_browser_open(node):
-        # webbrowser.open / Path.open used as method call without file handle risk
-        if isinstance(node.func, ast.Attribute):
-            # webbrowser.open — safe
-            if isinstance(node.func.value, ast.Name) and node.func.value.id == "webbrowser":
-                return True
-        return False
 
     Visitor().visit(tree)
     return unsafe
