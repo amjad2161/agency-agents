@@ -1429,3 +1429,61 @@ class SlidingWindowFilter:
             out[idx:idx + s, idx:idx + s] = b
             idx += s
         return out
+
+
+# ============================================================================
+# R9 — Dual-Rate Kalman Filter (fast IMU predict + slow GPS update)
+# ============================================================================
+
+class DualRateKalmanFilter:
+    """Kalman filter with dual measurement rates.
+
+    Fast loop (IMU): integrates accel/gyro at high rate.
+    Slow loop (GPS): position update at low rate.
+    State: 6-DOF [px, py, pz, vx, vy, vz].
+    """
+
+    def __init__(self, fast_hz: float = 10.0, slow_hz: float = 1.0,
+                 q_accel: float = 0.5, r_pos: float = 5.0):
+        import numpy as _np
+        self._np = _np
+        self.dt_fast = 1.0 / float(fast_hz)
+        self.dt_slow = 1.0 / float(slow_hz)
+        self.x = _np.zeros(6)
+        self.P = _np.eye(6) * 10.0
+        self.q_accel = float(q_accel)
+        self.R = _np.eye(3) * (float(r_pos) ** 2)
+
+    def set_rates(self, fast_hz: float, slow_hz: float):
+        self.dt_fast = 1.0 / float(fast_hz)
+        self.dt_slow = 1.0 / float(slow_hz)
+
+    def fast_predict(self, imu_accel, imu_gyro, dt: float | None = None):
+        """High-rate predict from IMU acceleration (gyro accepted, unused)."""
+        np = self._np
+        dt_use = float(dt) if dt is not None else self.dt_fast
+        a = np.asarray(imu_accel, dtype=float).reshape(3)
+        F = np.eye(6)
+        F[0, 3] = dt_use; F[1, 4] = dt_use; F[2, 5] = dt_use
+        B = np.zeros((6, 3))
+        B[0:3, :] = np.eye(3) * (0.5 * dt_use * dt_use)
+        B[3:6, :] = np.eye(3) * dt_use
+        self.x = F @ self.x + B @ a
+        # Process covariance from accel-noise propagation
+        G = np.zeros((6, 3))
+        G[0:3, :] = np.eye(3) * (0.5 * dt_use * dt_use)
+        G[3:6, :] = np.eye(3) * dt_use
+        Q = G @ (self.q_accel ** 2 * np.eye(3)) @ G.T
+        self.P = F @ self.P @ F.T + Q
+        return self.x.copy()
+
+    def slow_update(self, gps_pos):
+        """Low-rate position correction."""
+        np = self._np
+        z = np.asarray(gps_pos, dtype=float).reshape(3)
+        H = np.zeros((3, 6)); H[0, 0] = H[1, 1] = H[2, 2] = 1.0
+        S = H @ self.P @ H.T + self.R
+        K = self.P @ H.T @ np.linalg.inv(S)
+        self.x = self.x + K @ (z - H @ self.x)
+        self.P = (np.eye(6) - K @ H) @ self.P
+        return self.x.copy()

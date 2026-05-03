@@ -1070,3 +1070,56 @@ class SBASCorrector:
         hpl = float(np.linalg.norm(H[:, 0:2].T @ sigma))
         vpl = float(np.linalg.norm(H[:, 2] * sigma))
         return np.array([hpl, vpl])
+
+
+# ============================================================================
+# R9 — Multipath Mitigation (narrow-correlator, Hatch filter, cycle slips)
+# ============================================================================
+
+class MultiPathMitigator:
+    """GNSS multipath detection and pseudorange smoothing.
+
+    Combines narrow vs wide correlator differencing, Hatch carrier-phase
+    smoothing, and cycle-slip detection on phase differences.
+    """
+
+    NARROW_SPACING_CHIPS = 0.1
+    WIDE_SPACING_CHIPS = 1.0
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+
+    def compute_multipath_indicator(self, narrow_corr: float,
+                                    wide_corr: float) -> float:
+        """Indicator = |wide - narrow| / max(|wide|, eps)."""
+        n = float(narrow_corr)
+        w = float(wide_corr)
+        denom = max(abs(w), 1e-9)
+        return abs(w - n) / denom
+
+    def smooth_pseudorange(self, pseudoranges, carrier_phases, n: int = 5):
+        """Hatch carrier-smoothed pseudorange.
+
+        P_smooth[k] = ((n-1)/n)·(P_smooth[k-1] + (Φ[k] - Φ[k-1]))
+                    + (1/n)·P_raw[k]
+        """
+        np = self._np
+        P = np.asarray(pseudoranges, dtype=float).reshape(-1)
+        Phi = np.asarray(carrier_phases, dtype=float).reshape(-1)
+        if P.size == 0:
+            return P
+        out = np.zeros_like(P)
+        out[0] = P[0]
+        a = (n - 1.0) / float(n)
+        b = 1.0 / float(n)
+        for k in range(1, P.size):
+            d_phi = Phi[k] - Phi[k - 1]
+            out[k] = a * (out[k - 1] + d_phi) + b * P[k]
+        return out
+
+    def detect_cycle_slip(self, phase_diffs, threshold: float = 0.1):
+        """Boolean array: True where |Δϕ| exceeds ``threshold`` cycles."""
+        np = self._np
+        d = np.asarray(phase_diffs, dtype=float).reshape(-1)
+        return np.abs(d) > float(threshold)

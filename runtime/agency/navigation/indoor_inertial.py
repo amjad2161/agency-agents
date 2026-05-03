@@ -720,3 +720,48 @@ class FootMountedIMU:
     @property
     def step_count(self) -> int:
         return self._step_count
+
+
+# ============================================================================
+# R9 — Altimeter / Variometer (complementary baro + accel-z fusion)
+# ============================================================================
+
+class AltimeterBaroVSI:
+    """Variometric vertical-speed indicator.
+
+    Complementary filter blends low-frequency barometric altitude with
+    high-frequency accelerometer-derived vertical motion.
+    Crossover frequency fixed at 0.1 Hz (configurable via tau).
+    """
+
+    GRAVITY = 9.80665  # m/s²
+
+    def __init__(self, tau: float = 1.591549):
+        # tau = 1/(2π · f_c).  At f_c = 0.1 Hz → tau ≈ 1.5915 s.
+        self.tau = float(tau)
+        self.alt = 0.0
+        self.vz = 0.0
+
+    def reset(self, alt_m: float):
+        self.alt = float(alt_m)
+        self.vz = 0.0
+
+    def update(self, baro_alt_m: float, accel_z_m_s2: float, dt: float):
+        """Single-step complementary filter update.
+
+        Returns (filtered_alt_m, vz_m_s).
+        """
+        baro = float(baro_alt_m)
+        a_world_z = float(accel_z_m_s2) - self.GRAVITY
+        dt = float(dt)
+        alpha = self.tau / (self.tau + dt)
+        # Integrate acceleration into vertical velocity, blend with baro rate
+        baro_rate = (baro - self.alt) / max(dt, 1e-9)
+        self.vz = alpha * (self.vz + a_world_z * dt) + (1.0 - alpha) * baro_rate
+        # Integrate velocity, blend with raw baro
+        self.alt = alpha * (self.alt + self.vz * dt) + (1.0 - alpha) * baro
+        return (self.alt, self.vz)
+
+    @property
+    def crossover_freq(self) -> float:
+        return 0.1

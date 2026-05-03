@@ -595,3 +595,53 @@ class WiFiRTTPositioning:
         except np.linalg.LinAlgError:
             accuracy = float(np.mean(sigmas))
         return (float(p_est[0]), float(p_est[1]), accuracy)
+
+
+# ============================================================================
+# R9 — BLE Proximity Mapper (RSSI path-loss trilateration)
+# ============================================================================
+
+class BLEProximityMapper:
+    """BLE beacon proximity positioning via log-distance path-loss model.
+
+    PL(d) = PL0 + 10·n·log10(d), with n=2.0 (free space), PL0=-59 dBm @ 1 m.
+    """
+
+    PATH_LOSS_EXPONENT = 2.0
+    REFERENCE_RSSI_DBM = -59.0   # PL0 at d = 1 m
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.beacons = []  # (id, position_2d, distance_m)
+
+    def rssi_to_distance(self, rssi_dbm: float) -> float:
+        """Invert path-loss model to recover distance (m)."""
+        rssi = float(rssi_dbm)
+        exp = (self.REFERENCE_RSSI_DBM - rssi) / (10.0 * self.PATH_LOSS_EXPONENT)
+        return float(10.0 ** exp)
+
+    def add_beacon(self, beacon_id, known_pos, rssi_dbm: float):
+        np = self._np
+        d = self.rssi_to_distance(rssi_dbm)
+        self.beacons.append((str(beacon_id),
+                             np.asarray(known_pos, dtype=float).reshape(2),
+                             float(d)))
+
+    def trilaterate_position(self):
+        """Return (x, y) from ≥3 beacons via eq-0-subtraction LS, else None."""
+        np = self._np
+        if len(self.beacons) < 3:
+            return None
+        anchors = np.array([b[1] for b in self.beacons])
+        ranges = np.array([b[2] for b in self.beacons])
+        a0 = anchors[0]
+        r0 = ranges[0]
+        A = 2.0 * (a0 - anchors[1:])
+        b = (np.sum(a0 * a0) - np.sum(anchors[1:] ** 2, axis=1)) \
+            - (r0 ** 2 - ranges[1:] ** 2)
+        try:
+            p, *_ = np.linalg.lstsq(A, b, rcond=None)
+        except np.linalg.LinAlgError:
+            return None
+        return (float(p[0]), float(p[1]))

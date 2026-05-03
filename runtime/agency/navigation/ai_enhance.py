@@ -1743,3 +1743,95 @@ class GraphNeuralOdometry:
     def predict_odometry(self, node_id: int):
         """Return current feature vector for ``node_id``."""
         return self.node_features[int(node_id)].copy()
+
+
+# ============================================================================
+# R9 — Temporal Convolutional Network Odometry (numpy-only)
+# ============================================================================
+
+class TemporalConvOdometry:
+    """1-D dilated causal-convolution network for IMU sequence → pose delta.
+
+    3 conv layers with dilations 1, 2, 4 (receptive field 8 timesteps),
+    followed by mean pooling and a linear head.
+    """
+
+    def __init__(self, seq_len: int = 16, in_features: int = 6,
+                 out_features: int = 3, hidden: int = 8, seed: int = 0):
+        self.seq_len = int(seq_len)
+        self.in_features = int(in_features)
+        self.out_features = int(out_features)
+        self.hidden = int(hidden)
+        rng = np.random.default_rng(int(seed))
+        # Conv layer = (kernel=2) weight matrices: shape (in, out)
+        scale_in = math.sqrt(2.0 / (2 * in_features))
+        scale_h = math.sqrt(2.0 / (2 * hidden))
+        # Kernel size 2: each layer holds [W_curr, W_prev] for both taps
+        self.W1_a = rng.standard_normal((in_features, hidden)) * scale_in
+        self.W1_b = rng.standard_normal((in_features, hidden)) * scale_in
+        self.W2_a = rng.standard_normal((hidden, hidden)) * scale_h
+        self.W2_b = rng.standard_normal((hidden, hidden)) * scale_h
+        self.W3_a = rng.standard_normal((hidden, hidden)) * scale_h
+        self.W3_b = rng.standard_normal((hidden, hidden)) * scale_h
+        # Linear head
+        self.W_out = rng.standard_normal((hidden, out_features)) * scale_h
+        self.b_out = np.zeros(out_features)
+
+    # --- Causal dilated convolution ----------------------------------------
+
+    def causal_conv1d(self, x, W_curr, W_prev, dilation: int):
+        """Causal 1-D conv with kernel size 2 and given dilation.
+
+        Args:
+            x:        (T, C_in) sequence
+            W_curr:   (C_in, C_out) weight on x[t]
+            W_prev:   (C_in, C_out) weight on x[t - dilation]
+            dilation: integer dilation factor
+
+        Returns:
+            (T, C_out) output (causal: future timesteps not used).
+        """
+        T = x.shape[0]
+        C_out = W_curr.shape[1]
+        out = np.zeros((T, C_out))
+        for t in range(T):
+            curr = x[t] @ W_curr
+            if t - dilation >= 0:
+                prev = x[t - dilation] @ W_prev
+            else:
+                prev = np.zeros(C_out)        # causal zero-pad
+            out[t] = np.tanh(curr + prev)
+        return out
+
+    # --- Forward / loss / SGD ----------------------------------------------
+
+    def _forward_with_cache(self, X):
+        h1 = self.causal_conv1d(X, self.W1_a, self.W1_b, dilation=1)
+        h2 = self.causal_conv1d(h1, self.W2_a, self.W2_b, dilation=2)
+        h3 = self.causal_conv1d(h2, self.W3_a, self.W3_b, dilation=4)
+        pooled = h3.mean(axis=0)
+        y = pooled @ self.W_out + self.b_out
+        return y, pooled
+
+    def forward(self, imu_sequence):
+        X = np.asarray(imu_sequence, dtype=float).reshape(-1, self.in_features)
+        y, _ = self._forward_with_cache(X)
+        return y
+
+    def train_step(self, imu_seq, true_delta, lr: float = 1e-3) -> float:
+        """One SGD step (numerical gradient on output head only).
+
+        Returns scalar MSE loss.
+        """
+        X = np.asarray(imu_seq, dtype=float).reshape(-1, self.in_features)
+        y_true = np.asarray(true_delta, dtype=float).reshape(self.out_features)
+        y_pred, pooled = self._forward_with_cache(X)
+        err = y_pred - y_true
+        loss = float(np.mean(err ** 2))
+        # Output-head gradient (closed form)
+        d_out = (2.0 / self.out_features) * err
+        dW_out = np.outer(pooled, d_out)
+        db_out = d_out
+        self.W_out -= lr * dW_out
+        self.b_out -= lr * db_out
+        return loss
