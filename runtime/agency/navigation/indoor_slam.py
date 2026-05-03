@@ -811,3 +811,9 @@ class SemanticLandmarkMapper:
                 if float(np.linalg.norm(pi - pj)) <= self.CONNECT_RADIUS:
                     adj[i].append(j)
         return adj
+
+
+# ============================================================================
+# R14 — re-export FastSLAM2 + UltraWidebandPositioning from helper module
+# ============================================================================
+from ._r14_slam import FastSLAM2, UltraWidebandPositioning  # noqa: E402,F401

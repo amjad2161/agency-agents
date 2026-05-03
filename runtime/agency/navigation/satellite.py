@@ -1417,3 +1417,85 @@ class DifferentialGNSS:
         if age < 2.0 * float(threshold):
             return "degraded"
         return "invalid"
+
+
+# ============================================================================
+# R14 — Carrier-Phase Ambiguity Resolution (RTK integer fix via bootstrap)
+# ============================================================================
+
+class CarrierPhaseAmbiguityResolution:
+    """Integer ambiguity bootstrap for RTK carrier-phase positioning.
+
+    Stores a float ambiguity vector + covariance, then sequentially
+    rounds each ambiguity conditional on the previously fixed values.
+    """
+
+    def __init__(self, wavelength: float = 0.1903):
+        import numpy as _np
+        self._np = _np
+        self.wavelength = float(wavelength)
+        self._float_ambiguities = None
+        self._cov = None
+        self._fixed = False
+        self._fixed_vec = None
+
+    def set_float_solution(self, float_amb, cov):
+        np = self._np
+        self._float_ambiguities = np.asarray(float_amb, dtype=float).reshape(-1).copy()
+        self._cov = np.asarray(cov, dtype=float).copy()
+        if self._cov.shape != (self._float_ambiguities.size,
+                               self._float_ambiguities.size):
+            raise ValueError("cov shape must be (n, n)")
+        self._fixed = False
+        self._fixed_vec = None
+
+    def bootstrap_fix(self):
+        """Sequential conditional rounding (LDL bootstrap)."""
+        np = self._np
+        if self._float_ambiguities is None:
+            raise ValueError("call set_float_solution first")
+        a = self._float_ambiguities.copy()
+        P = self._cov.copy()
+        n = a.size
+        fixed = np.zeros(n)
+        for k in range(n):
+            fixed[k] = float(np.round(a[k]))
+            if k + 1 < n:
+                # Conditional update of remaining ambiguities given a_k fixed
+                pkk = max(P[k, k], 1e-12)
+                gain = P[k + 1:, k] / pkk
+                a[k + 1:] = a[k + 1:] + gain * (fixed[k] - a[k])
+                P[k + 1:, k + 1:] = P[k + 1:, k + 1:] - np.outer(
+                    P[k + 1:, k], P[k, k + 1:]) / pkk
+        self._fixed = True
+        self._fixed_vec = fixed
+        return fixed
+
+    def phase_range_correction(self, integer_amb, carrier_cycles):
+        np = self._np
+        N = np.asarray(integer_amb, dtype=float).reshape(-1)
+        phi = np.asarray(carrier_cycles, dtype=float).reshape(-1)
+        return (phi + N) * self.wavelength
+
+    def fix_ratio(self) -> float:
+        """Variance-based ratio test: smaller residual variance → larger ratio."""
+        np = self._np
+        if self._float_ambiguities is None or self._fixed_vec is None:
+            return float("inf")
+        diff = self._float_ambiguities - self._fixed_vec
+        try:
+            P_inv = np.linalg.inv(self._cov)
+        except np.linalg.LinAlgError:
+            return float("inf")
+        best = float(diff @ P_inv @ diff)
+        # Second-best: all-rounded-up vector as competing hypothesis
+        alt = np.round(self._float_ambiguities + 0.5)
+        diff2 = self._float_ambiguities - alt
+        second = float(diff2 @ P_inv @ diff2)
+        if best <= 0:
+            return float("inf")
+        return float(second / best)
+
+    @property
+    def is_fixed(self) -> bool:
+        return self._fixed

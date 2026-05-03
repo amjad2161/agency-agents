@@ -2177,3 +2177,71 @@ class ReinforcementPathPlanner:
             state = self._step(state, a)
             path.append(state)
         return path
+
+
+# ============================================================================
+# R14 — Attention-Based Multi-Modal Sensor Fusion (multi-head SDPA)
+# ============================================================================
+
+class AttentionBasedSensorFusion:
+    """Scaled-dot-product multi-head attention over heterogeneous sensors.
+
+    Each modality vector is projected/padded to ``d_model``, then split into
+    ``n_heads`` chunks of size ``d_head = d_model // n_heads``.  Per-head
+    Q/K/V projections produce a context vector that is concatenated, mean-
+    pooled across modalities, and projected by ``W_O``.
+    """
+
+    def __init__(self, d_model: int = 16, n_heads: int = 4,
+                 n_modalities: int = 3, seed: int = 42):
+        if d_model % n_heads != 0:
+            raise ValueError("d_model must be divisible by n_heads")
+        self.d_model = int(d_model)
+        self.n_heads = int(n_heads)
+        self.d_head = self.d_model // self.n_heads
+        self.n_modalities = int(n_modalities)
+        rng = np.random.default_rng(int(seed))
+        self.W_Q = rng.normal(0, 0.1, (self.n_heads, self.d_head, self.d_head))
+        self.W_K = rng.normal(0, 0.1, (self.n_heads, self.d_head, self.d_head))
+        self.W_V = rng.normal(0, 0.1, (self.n_heads, self.d_head, self.d_head))
+        self.W_O = rng.normal(0, 0.1, (self.d_model, self.d_model))
+        self._last_attn = None
+
+    def _project(self, x):
+        v = np.asarray(x, dtype=float).reshape(-1)
+        out = np.zeros(self.d_model)
+        n = min(v.size, self.d_model)
+        out[:n] = v[:n]
+        return out
+
+    @staticmethod
+    def _softmax(x):
+        x = x - np.max(x, axis=-1, keepdims=True)
+        e = np.exp(x)
+        return e / np.sum(e, axis=-1, keepdims=True)
+
+    def attend(self, modality_vectors):
+        """Return fused (d_model,) vector from a list of modality vectors."""
+        X = np.stack([self._project(v) for v in modality_vectors])  # (M, d_model)
+        # Split along last axis into n_heads chunks of d_head
+        X_heads = X.reshape(X.shape[0], self.n_heads, self.d_head)
+        head_outputs = []
+        attn_per_head = []
+        for h in range(self.n_heads):
+            Xh = X_heads[:, h, :]                          # (M, d_head)
+            Q = Xh @ self.W_Q[h]
+            K = Xh @ self.W_K[h]
+            V = Xh @ self.W_V[h]
+            scores = Q @ K.T / math.sqrt(self.d_head)      # (M, M)
+            attn = self._softmax(scores)
+            head_outputs.append(attn @ V)                  # (M, d_head)
+            attn_per_head.append(attn)
+        concat = np.concatenate(head_outputs, axis=-1)     # (M, d_model)
+        pooled = concat.mean(axis=0)                       # (d_model,)
+        out = pooled @ self.W_O
+        self._last_attn = attn_per_head
+        return out
+
+    def update_weights(self, grad, lr: float = 1e-3):
+        g = np.asarray(grad, dtype=float).reshape(self.W_O.shape)
+        self.W_O = self.W_O - float(lr) * g

@@ -1853,3 +1853,83 @@ class ZeroVelocityUpdateFilter:
         if self.detect_stationary(a_window, np.zeros_like(a_window)):
             self.apply_zupt(self.x, self.P)
         return (self.x[0:3].copy(), self.x[3:6].copy(), self.x[6:9].copy())
+
+
+# ============================================================================
+# R14 — Covariance-Intersection Filter (decentralised conservative fusion)
+# ============================================================================
+
+class CovarianceIntersectionFilter:
+    """Covariance-Intersection fusion.
+
+    P_fused⁻¹ = ω · P_a⁻¹ + (1−ω) · P_b⁻¹
+    x_fused = P_fused · (ω · P_a⁻¹ x_a + (1−ω) · P_b⁻¹ x_b)
+
+    ω is chosen to minimise det(P_fused) via golden-section search on [0, 1].
+    """
+
+    PHI_INV = (math.sqrt(5.0) - 1.0) / 2.0   # golden ratio constant
+
+    def __init__(self, state_dim: int = 3):
+        import numpy as _np
+        self._np = _np
+        self.state_dim = int(state_dim)
+        self.x = _np.zeros(self.state_dim)
+        self.P = _np.eye(self.state_dim) * 100.0
+
+    def _det_ci(self, omega: float, Pa_inv, Pb_inv) -> float:
+        np = self._np
+        Y = float(omega) * Pa_inv + (1.0 - float(omega)) * Pb_inv
+        try:
+            P = np.linalg.inv(Y)
+        except np.linalg.LinAlgError:
+            P = np.linalg.pinv(Y)
+        return float(np.linalg.det(P))
+
+    def _golden_search(self, Pa_inv, Pb_inv, tol: float = 1e-4) -> float:
+        a, b = 0.0, 1.0
+        c = b - self.PHI_INV * (b - a)
+        d = a + self.PHI_INV * (b - a)
+        for _ in range(50):
+            if self._det_ci(c, Pa_inv, Pb_inv) < self._det_ci(d, Pa_inv, Pb_inv):
+                b = d
+            else:
+                a = c
+            if abs(b - a) < tol:
+                break
+            c = b - self.PHI_INV * (b - a)
+            d = a + self.PHI_INV * (b - a)
+        return float(0.5 * (a + b))
+
+    def fuse(self, x_a, P_a, x_b, P_b):
+        np = self._np
+        x_a = np.asarray(x_a, dtype=float).reshape(self.state_dim)
+        x_b = np.asarray(x_b, dtype=float).reshape(self.state_dim)
+        P_a = np.asarray(P_a, dtype=float).reshape(self.state_dim,
+                                                   self.state_dim)
+        P_b = np.asarray(P_b, dtype=float).reshape(self.state_dim,
+                                                   self.state_dim)
+        try:
+            Pa_inv = np.linalg.inv(P_a)
+        except np.linalg.LinAlgError:
+            Pa_inv = np.linalg.pinv(P_a)
+        try:
+            Pb_inv = np.linalg.inv(P_b)
+        except np.linalg.LinAlgError:
+            Pb_inv = np.linalg.pinv(P_b)
+        omega = self._golden_search(Pa_inv, Pb_inv)
+        Y = omega * Pa_inv + (1.0 - omega) * Pb_inv
+        try:
+            P_fused = np.linalg.inv(Y)
+        except np.linalg.LinAlgError:
+            P_fused = np.linalg.pinv(Y)
+        x_fused = P_fused @ (omega * Pa_inv @ x_a
+                             + (1.0 - omega) * Pb_inv @ x_b)
+        self.x = x_fused
+        self.P = P_fused
+        return (x_fused, P_fused)
+
+    def update_self(self, x_new, P_new):
+        x_a = self.x.copy()
+        P_a = self.P.copy()
+        return self.fuse(x_a, P_a, x_new, P_new)
