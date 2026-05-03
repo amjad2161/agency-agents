@@ -1652,3 +1652,119 @@ class InformationFilter:
         merged.Y = self.Y + other.Y
         merged.y = self.y + other.y
         return merged
+
+
+# ============================================================================
+# R12 — Asynchronous Multi-Sensor Fusion (timestamp-priority queue)
+# ============================================================================
+
+import heapq as _r12_heapq
+
+class AsynchronousMultiSensorFusion:
+    """Timestamp-ordered fusion of measurements arriving at different rates.
+
+    Maintains a single 6-state ([px,py,pz,vx,vy,vz]) estimate.  Process
+    measurements in chronological order; supports out-of-sequence updates
+    by replaying from a saved snapshot.
+    """
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self._queue = []          # (t, seq, sensor_type, data)
+        self._seq = 0
+        self.x = _np.zeros(6)
+        self.P = _np.eye(6) * 10.0
+        self.t_last = 0.0
+        self._last_imu = _np.zeros(3)
+        self._history = []        # snapshots for OOS updates
+
+    def add_measurement(self, t: float, sensor_type: str, data):
+        """Enqueue a measurement keyed by timestamp (lower = earlier)."""
+        np = self._np
+        d = np.asarray(data, dtype=float)
+        _r12_heapq.heappush(self._queue,
+                            (float(t), self._seq, str(sensor_type), d))
+        self._seq += 1
+
+    # --- Internal step processing ------------------------------------------
+
+    def _propagate(self, dt: float):
+        np = self._np
+        F = np.eye(6)
+        F[0, 3] = dt; F[1, 4] = dt; F[2, 5] = dt
+        B = np.zeros((6, 3))
+        B[0:3, :] = np.eye(3) * (0.5 * dt * dt)
+        B[3:6, :] = np.eye(3) * dt
+        self.x = F @ self.x + B @ self._last_imu
+        Q = np.eye(6) * (0.05 * dt)
+        self.P = F @ self.P @ F.T + Q
+
+    def _apply(self, sensor_type: str, data):
+        np = self._np
+        if sensor_type == "imu":
+            self._last_imu = data.reshape(3)
+            return
+        if sensor_type == "gps":
+            H = np.zeros((3, 6))
+            H[0, 0] = H[1, 1] = H[2, 2] = 1.0
+            R = np.eye(3) * 25.0
+        elif sensor_type == "baro":
+            H = np.zeros((1, 6)); H[0, 2] = 1.0
+            R = np.eye(1) * 4.0
+            data = data.reshape(1)
+        else:
+            return
+        z = data.reshape(-1)
+        S = H @ self.P @ H.T + R
+        K = self.P @ H.T @ np.linalg.inv(S)
+        self.x = self.x + K @ (z - H @ self.x)
+        self.P = (np.eye(6) - K @ H) @ self.P
+
+    def process_until(self, t_now: float):
+        """Pop and process every queued measurement with t ≤ t_now."""
+        np = self._np
+        out = []
+        while self._queue and self._queue[0][0] <= float(t_now):
+            t, _, sensor_type, data = _r12_heapq.heappop(self._queue)
+            dt = max(t - self.t_last, 0.0)
+            if dt > 0:
+                self._propagate(dt)
+            self._apply(sensor_type, data)
+            self.t_last = t
+            self._history.append((t, self.x.copy(), self.P.copy()))
+            out.append((t, self.x.copy()))
+        return out
+
+    def propagate_to(self, t: float):
+        """Dead-reckon current state forward to ``t`` using last IMU sample."""
+        dt = max(float(t) - self.t_last, 0.0)
+        if dt > 0:
+            self._propagate(dt)
+            self.t_last = float(t)
+        return self.x.copy()
+
+    def out_of_sequence_update(self, t_old: float, z, H, R):
+        """Retroactive update at ``t_old`` followed by re-propagation."""
+        np = self._np
+        # Find the snapshot at or before t_old
+        snap = None
+        for entry in reversed(self._history):
+            if entry[0] <= float(t_old):
+                snap = entry
+                break
+        if snap is None:
+            return self.x.copy()
+        t_snap, x_snap, P_snap = snap
+        self.x = x_snap.copy()
+        self.P = P_snap.copy()
+        self.t_last = t_snap
+        # Apply update at t_snap
+        H = np.asarray(H, dtype=float).reshape(-1, 6)
+        R = np.asarray(R, dtype=float).reshape(H.shape[0], H.shape[0])
+        z = np.asarray(z, dtype=float).reshape(-1)
+        S = H @ self.P @ H.T + R
+        K = self.P @ H.T @ np.linalg.inv(S)
+        self.x = self.x + K @ (z - H @ self.x)
+        self.P = (np.eye(6) - K @ H) @ self.P
+        return self.x.copy()

@@ -645,3 +645,90 @@ class BLEProximityMapper:
         except np.linalg.LinAlgError:
             return None
         return (float(p[0]), float(p[1]))
+
+
+# ============================================================================
+# R12 — Radio SLAM (joint AP mapping + receiver localisation)
+# ============================================================================
+
+class RadioSLAM:
+    """Simultaneous localisation and AP mapping from RSSI observations.
+
+    Each observation: (cur_pos, RSSI in dBm) at a known receiver pose.
+    AP positions are estimated as RSSI-weighted centroids of observation
+    poses; receiver position can then be refined by least-squares
+    trilateration against estimated APs.
+    """
+
+    REFERENCE_RSSI_DBM = -59.0
+    PATH_LOSS_EXPONENT = 2.0
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.observations = {}    # ap_id -> list[(pos_2d, rssi_dbm)]
+
+    @staticmethod
+    def _rssi_to_distance(rssi_dbm: float) -> float:
+        exp = (RadioSLAM.REFERENCE_RSSI_DBM - float(rssi_dbm)) \
+              / (10.0 * RadioSLAM.PATH_LOSS_EXPONENT)
+        return float(10.0 ** exp)
+
+    def observe(self, ap_id, rssi_dbm: float, cur_pos):
+        np = self._np
+        pos = np.asarray(cur_pos, dtype=float).reshape(2)
+        self.observations.setdefault(str(ap_id), []) \
+            .append((pos.copy(), float(rssi_dbm)))
+
+    def estimate_ap_position(self, ap_id):
+        """Return AP position as RSSI-weighted centroid of observation points."""
+        np = self._np
+        obs = self.observations.get(str(ap_id), [])
+        if not obs:
+            return np.zeros(2)
+        # Convert RSSI to a positive linear weight (higher RSSI → higher weight)
+        weights = np.array([10.0 ** (r / 10.0) for _, r in obs])
+        positions = np.stack([p for p, _ in obs])
+        w_sum = float(np.sum(weights))
+        if w_sum <= 0:
+            return positions.mean(axis=0)
+        return (weights[:, None] * positions).sum(axis=0) / w_sum
+
+    def map_uncertainty(self, ap_id):
+        """Sample covariance of observation positions for a given AP."""
+        np = self._np
+        obs = self.observations.get(str(ap_id), [])
+        if len(obs) < 2:
+            return np.eye(2) * 1.0
+        positions = np.stack([p for p, _ in obs])
+        return np.cov(positions, rowvar=False)
+
+    def update_position_from_map(self, cur_pos, observations):
+        """Refine ``cur_pos`` from a list of (ap_id, rssi_dbm) observations.
+
+        Uses the AP positions already stored to do an LS trilateration.
+        """
+        np = self._np
+        anchors = []
+        ranges = []
+        for ap_id, rssi in observations:
+            apid = str(ap_id)
+            if apid not in self.observations:
+                continue
+            ap_pos = self.estimate_ap_position(apid)
+            anchors.append(ap_pos)
+            ranges.append(self._rssi_to_distance(rssi))
+        if len(anchors) < 3:
+            return np.asarray(cur_pos, dtype=float).reshape(2)
+        anchors = np.stack(anchors)
+        ranges = np.array(ranges)
+        a0 = anchors[0]
+        r0 = ranges[0]
+        A = 2.0 * (a0 - anchors[1:])
+        b = (np.sum(a0 * a0) - np.sum(anchors[1:] ** 2, axis=1)) \
+            - (r0 ** 2 - ranges[1:] ** 2)
+        try:
+            p, *_ = np.linalg.lstsq(A, b, rcond=None)
+        except np.linalg.LinAlgError:
+            return np.asarray(cur_pos, dtype=float).reshape(2)
+        return p

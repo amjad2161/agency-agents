@@ -1302,3 +1302,63 @@ class IonosphericStormDetector:
         """Iono-error inflation factor as a function of Kp geomagnetic index."""
         s = 1.0 + 0.1 * (float(kp_index) - 3.0)
         return float(max(1.0, min(2.5, s)))
+
+
+# ============================================================================
+# R12 — Software-Defined GNSS Clock Steering Loop (PLL/FLL + NCO)
+# ============================================================================
+
+class GNSSClockSteeringLoop:
+    """Carrier tracking loop: PLL discriminator, FLL discriminator, 2nd-order
+    NCO loop filter, and Carrier Lock Indicator (CLI).
+    """
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.phase = 0.0          # rad
+        self.freq = 0.0           # Hz
+        self._phase_acc = 0.0     # integrator state for loop filter
+        self._freq_acc = 0.0      # integrator state for loop filter
+
+    def discriminator_pll(self, I: float, Q: float) -> float:
+        """Costas-loop arctan PLL discriminator (rad)."""
+        I = float(I)
+        Q = float(Q)
+        if abs(I) < 1e-12 and abs(Q) < 1e-12:
+            return 0.0
+        return math.atan2(Q, I)
+
+    def discriminator_fll(self, I1: float, Q1: float,
+                          I2: float, Q2: float, dt: float) -> float:
+        """Cross-product FLL frequency-error discriminator (Hz)."""
+        cross = float(I1) * float(Q2) - float(I2) * float(Q1)
+        dot = float(I1) * float(I2) + float(Q1) * float(Q2)
+        # Atan2(cross, dot) is more robust for ±π wrapping
+        delta_phi = math.atan2(cross, dot if abs(dot) > 1e-12 else 1e-12)
+        return float(delta_phi / (2.0 * math.pi * max(float(dt), 1e-9)))
+
+    def update_nco(self, phase_err: float, freq_err: float, dt: float,
+                   bandwidth_hz: float = 10.0):
+        """Second-order loop-filter NCO update.
+
+        Returns the new (phase_rad, freq_hz) NCO state.
+        """
+        wn = 2.0 * math.pi * float(bandwidth_hz)
+        zeta = math.sqrt(2.0) / 2.0
+        k1 = 2.0 * zeta * wn       # phase coefficient
+        k2 = wn * wn               # frequency coefficient
+        self.freq += k2 * float(phase_err) * float(dt) + float(freq_err) * float(dt)
+        self.phase += (k1 * float(phase_err) + 2.0 * math.pi * self.freq) * float(dt)
+        # Wrap phase to [-π, π]
+        self.phase = (self.phase + math.pi) % (2.0 * math.pi) - math.pi
+        return (float(self.phase), float(self.freq))
+
+    def carrier_lock_indicator(self, I, Q) -> float:
+        """CLI = (I² − Q²) / (I² + Q²); >0.85 indicates phase-locked."""
+        np = self._np
+        Ia = np.asarray(I, dtype=float).reshape(-1)
+        Qa = np.asarray(Q, dtype=float).reshape(-1)
+        num = float(np.sum(Ia ** 2 - Qa ** 2))
+        den = float(np.sum(Ia ** 2 + Qa ** 2)) + 1e-12
+        return float(num / den)

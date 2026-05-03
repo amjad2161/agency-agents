@@ -861,3 +861,69 @@ class ElevatorDetector:
         if tail.size == 0:
             return False
         return float(np.mean(np.abs(tail))) < 0.1 * self.GRAVITY
+
+
+# ============================================================================
+# R12 — Gait Phase Estimator (8-phase biomechanical model)
+# ============================================================================
+
+class GaitPhaseEstimator:
+    """8-phase pedestrian gait phase classifier using accel-z + gyro-y.
+
+    Phases (0–7):
+      0 heel-strike, 1 loading, 2 mid-stance, 3 terminal-stance,
+      4 pre-swing,  5 initial-swing, 6 mid-swing, 7 terminal-swing.
+    """
+
+    PHASE_NAMES = (
+        "heel-strike", "loading", "mid-stance", "terminal-stance",
+        "pre-swing", "initial-swing", "mid-swing", "terminal-swing",
+    )
+    GRAVITY = 9.80665
+
+    def detect_phases(self, accel_z, gyro_y, threshold: float = 0.5):
+        """Map each sample to a phase index in [0, 7]."""
+        a = np.asarray(accel_z, dtype=float).reshape(-1) - self.GRAVITY
+        g = np.asarray(gyro_y, dtype=float).reshape(-1)
+        n = min(a.size, g.size)
+        if n == 0:
+            return []
+        thr = float(threshold)
+        out = []
+        for i in range(n):
+            ai = a[i]
+            gi = g[i]
+            # Stance vs swing by sign of accel-z (loading -> +ve impact)
+            if ai > thr:                       # impact / loading peaks
+                out.append(0 if i == 0 or a[i - 1] <= thr else 1)
+            elif abs(ai) <= thr:               # quiet stance / mid-swing
+                if abs(gi) <= thr:
+                    out.append(2)              # mid-stance
+                else:
+                    out.append(6)              # mid-swing
+            elif ai < -thr:                    # negative accel (push-off / pre-swing)
+                if gi > thr:
+                    out.append(4)              # pre-swing
+                elif gi < -thr:
+                    out.append(7)              # terminal-swing
+                else:
+                    out.append(3)              # terminal-stance
+            else:
+                out.append(5)                  # initial-swing
+        return out
+
+    def estimate_cadence(self, phase_timestamps) -> float:
+        """Steps-per-minute from the timestamps of repeated heel strikes."""
+        ts = list(phase_timestamps)
+        if len(ts) < 2:
+            return 0.0
+        intervals = [ts[i + 1] - ts[i] for i in range(len(ts) - 1)]
+        avg = float(np.mean(intervals))
+        if avg <= 0:
+            return 0.0
+        return float(60.0 / avg)
+
+    def step_length_from_frequency(self, cadence_spm: float,
+                                   height_m: float) -> float:
+        """Grieve linear step-length model: L = 0.35·h + 0.01·cadence."""
+        return float(0.35 * float(height_m) + 0.01 * float(cadence_spm))

@@ -2020,3 +2020,79 @@ class AdaptiveMapMatcher:
             path.append(seg_ids[last])
         path.reverse()
         return path
+
+
+# ============================================================================
+# R12 — Continual Learning Navigator (Elastic Weight Consolidation)
+# ============================================================================
+
+class ContinualLearningNavigator:
+    """EWC-regularised continual learner for nav models.
+
+    Stores a small dict of weights and per-weight Fisher importance.
+    Calling :py:meth:`consolidate` snapshots the current weights and
+    Fisher diagonal so the next task is penalised against drifting
+    away from them.
+    """
+
+    def __init__(self, weight_shape=(8, 4), seed: int = 0):
+        rng = np.random.default_rng(int(seed))
+        self.weights = {"W": rng.standard_normal(weight_shape) * 0.1}
+        self.old_weights = {k: v.copy() for k, v in self.weights.items()}
+        self.fisher = {k: np.zeros_like(v) for k, v in self.weights.items()}
+        self.lambda_ewc = 100.0
+
+    def compute_fisher_diagonal(self, data_loader):
+        """Empirical Fisher diagonal: average of per-sample squared gradients.
+
+        ``data_loader`` is an iterable of (X, Y) pairs.  We model the
+        forward pass as a single-layer linear projection and use the
+        prediction-error gradient as a proxy.
+        """
+        fisher = {k: np.zeros_like(v) for k, v in self.weights.items()}
+        n = 0
+        for X, Y in data_loader:
+            X = np.asarray(X, dtype=float).reshape(-1, self.weights["W"].shape[0])
+            Y = np.asarray(Y, dtype=float).reshape(-1, self.weights["W"].shape[1])
+            pred = X @ self.weights["W"]
+            err = pred - Y
+            grad = X.T @ err / max(X.shape[0], 1)
+            fisher["W"] += grad ** 2
+            n += 1
+        if n > 0:
+            for k in fisher:
+                fisher[k] /= n
+        return fisher
+
+    @staticmethod
+    def ewc_loss(current_weights, old_weights, fisher,
+                 lambda_ewc: float = 100.0) -> float:
+        """EWC penalty: λ/2 · Σ F_i · (θ_i − θ*_i)² over all weights."""
+        total = 0.0
+        for k in current_weights:
+            diff = current_weights[k] - old_weights[k]
+            total += float(np.sum(fisher[k] * diff ** 2))
+        return float(0.5 * lambda_ewc * total)
+
+    def train_with_ewc(self, data, labels, old_weights=None, fisher=None,
+                       lr: float = 0.01, epochs: int = 1):
+        """One-pass SGD with EWC regulariser; returns the updated weights."""
+        if old_weights is None:
+            old_weights = self.old_weights
+        if fisher is None:
+            fisher = self.fisher
+        X = np.asarray(data, dtype=float).reshape(-1, self.weights["W"].shape[0])
+        Y = np.asarray(labels, dtype=float).reshape(-1, self.weights["W"].shape[1])
+        for _ in range(int(epochs)):
+            pred = X @ self.weights["W"]
+            err = pred - Y
+            grad_loss = X.T @ err / max(X.shape[0], 1)
+            grad_ewc = self.lambda_ewc * fisher["W"] \
+                       * (self.weights["W"] - old_weights["W"])
+            self.weights["W"] -= lr * (grad_loss + grad_ewc)
+        return {k: v.copy() for k, v in self.weights.items()}
+
+    def consolidate(self, data_loader):
+        """Snapshot current weights and refresh Fisher importance."""
+        self.fisher = self.compute_fisher_diagonal(data_loader)
+        self.old_weights = {k: v.copy() for k, v in self.weights.items()}
