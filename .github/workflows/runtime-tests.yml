@@ -5,13 +5,23 @@ on:
     branches: [main, "claude/**"]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   runtime-tests:
     name: Runtime tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -19,22 +29,34 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install dependencies
+      - name: Install core dependencies
         run: |
           python -m pip install --upgrade pip
           pip install numpy pytest pytest-timeout pytest-asyncio
-          pip install -e runtime || pip install pyyaml click httpx pydantic
-          pip install ezdxf || true
-          pip install pypdf python-docx openpyxl flask requests || true
 
-      - name: Run runtime tests
+      - name: Install optional dependencies (best-effort)
+        continue-on-error: true
+        run: |
+          pip install pyyaml click httpx pydantic
+          pip install pypdf python-docx openpyxl flask requests
+          pip install ezdxf
+
+      - name: Show environment
+        run: |
+          python --version
+          pip list | head -40
+          echo "PYTHONPATH=$GITHUB_WORKSPACE/runtime:$GITHUB_WORKSPACE"
+
+      - name: Run runtime/ tests
         env:
           PYTHONPATH: ${{ github.workspace }}/runtime:${{ github.workspace }}
           ANTHROPIC_API_KEY: ""
-        run: python -m pytest runtime/tests -q --timeout=30 --tb=short
+        run: |
+          python -m pytest runtime/ -q --timeout=30 --tb=short -p no:warnings
 
-      - name: Run bridge tests
+      - name: Run tests/ (bridge + nav improvement rounds)
         env:
           PYTHONPATH: ${{ github.workspace }}/runtime:${{ github.workspace }}
           ANTHROPIC_API_KEY: ""
-        run: python -m pytest tests -q --timeout=30 --tb=short
+        run: |
+          python -m pytest tests/ -q --timeout=30 --tb=short -p no:warnings
