@@ -1002,3 +1002,71 @@ class LEOSatelliteNav:
 
         self._receiver_estimate = r
         return r
+
+
+# ============================================================================
+# R8 — SBAS Corrector (WAAS/EGNOS/MSAS-style augmentation)
+# ============================================================================
+
+class SBASCorrector:
+    """Satellite-Based Augmentation System corrections.
+
+    Applies fast clock corrections, ionospheric grid corrections, and
+    computes Horizontal/Vertical Protection Levels.
+    """
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+
+    def apply_fast_corrections(self, sv_id, pseudorange: float,
+                               fast_corr_dict) -> float:
+        """Subtract per-SV fast clock correction from pseudorange.
+
+        Args:
+            sv_id: Satellite vehicle identifier (key into dict)
+            pseudorange: Raw pseudorange (m)
+            fast_corr_dict: {sv_id: correction_m}
+        """
+        corr = float(fast_corr_dict.get(sv_id, 0.0))
+        return float(pseudorange) - corr
+
+    def interpolate_ionospheric_grid(self, lat: float, lon: float,
+                                     iono_grid_points) -> float:
+        """Inverse-distance-weighted interpolation of vertical iono delay.
+
+        Args:
+            lat, lon: Pierce-point coordinates (deg)
+            iono_grid_points: Iterable of (lat, lon, delay_m) tuples
+        """
+        np = self._np
+        pts = list(iono_grid_points)
+        if not pts:
+            return 0.0
+        weights = []
+        delays = []
+        for plat, plon, pdelay in pts:
+            d2 = (float(plat) - float(lat)) ** 2 + \
+                 (float(plon) - float(lon)) ** 2
+            if d2 < 1e-12:
+                return float(pdelay)
+            weights.append(1.0 / d2)
+            delays.append(float(pdelay))
+        w = np.asarray(weights, dtype=float)
+        d = np.asarray(delays, dtype=float)
+        return float(np.sum(w * d) / np.sum(w))
+
+    def compute_protection_levels(self, H_matrix, sigma_vec):
+        """Compute HPL and VPL from geometry and per-satellite sigmas.
+
+        HPL = ||H[:,0:2]ᵀ · sigma||
+        VPL = ||H[:,2] * sigma||
+        """
+        np = self._np
+        H = np.asarray(H_matrix, dtype=float).reshape(-1, H_matrix.shape[1]
+                                                      if hasattr(H_matrix, 'shape')
+                                                      else 3)
+        sigma = np.asarray(sigma_vec, dtype=float).reshape(-1)
+        hpl = float(np.linalg.norm(H[:, 0:2].T @ sigma))
+        vpl = float(np.linalg.norm(H[:, 2] * sigma))
+        return np.array([hpl, vpl])

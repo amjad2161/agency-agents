@@ -1083,3 +1083,57 @@ class AcousticModemNav:
             if abs(arr[i] - med) > sigma_threshold * std:
                 out[i] = med
         return out
+
+
+# ============================================================================
+# R8 — Pressure-Depth Navigation (UNESCO 1983 + Mackenzie sound speed)
+# ============================================================================
+
+class PressureDepthNav:
+    """Pressure-derived depth, Mackenzie sound speed, vertical velocity."""
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+
+    def depth_from_pressure(self, pressure_dbar: float,
+                            latitude_deg: float) -> float:
+        """UNESCO 1983 depth from pressure (decibars) with latitude correction.
+
+        d = (9.72659e2·p − 2.512e-1·p² + 2.279e-4·p³ − 1.82e-7·p⁴)
+            ÷ (9.780318·(1 + 5.2788e-3·sin²φ) + 2.36e-5·p)
+        where p = pressure_dbar / 10  (decibars→bar via /10 per spec).
+        """
+        p = float(pressure_dbar) / 10.0
+        sin2 = math.sin(math.radians(float(latitude_deg))) ** 2
+        num = (9.72659e2 * p
+               - 2.512e-1 * p * p
+               + 2.279e-4 * p ** 3
+               - 1.82e-7 * p ** 4)
+        denom = 9.780318 * (1.0 + 5.2788e-3 * sin2) + 2.36e-5 * p
+        return float(num / denom)
+
+    def sound_speed_mackenzie(self, temp_c: float, salinity_ppt: float,
+                              depth_m: float) -> float:
+        """Mackenzie 1981 sound-speed equation in m/s."""
+        T = float(temp_c)
+        S = float(salinity_ppt)
+        D = float(depth_m)
+        c = (1448.96
+             + 4.591 * T
+             - 5.304e-2 * T * T
+             + 2.374e-4 * T ** 3
+             + 1.340 * (S - 35.0)
+             + 1.630e-2 * D
+             + 1.675e-7 * D * D
+             - 1.025e-2 * T * (S - 35.0)
+             - 7.139e-13 * T * D ** 3)
+        return float(c)
+
+    def vertical_velocity(self, depth_series, dt: float):
+        """Estimate vertical velocity via centred finite differences."""
+        np = self._np
+        arr = np.asarray(depth_series, dtype=float).reshape(-1)
+        if arr.size == 0:
+            return arr
+        return np.gradient(arr, float(dt))

@@ -525,3 +525,73 @@ class VisualPlaceRecognition:
     @property
     def db_size(self) -> int:
         return len(self._db)
+
+
+# ============================================================================
+# R8 — WiFi RTT (802.11mc Fine Time Measurement) Positioning
+# ============================================================================
+
+class WiFiRTTPositioning:
+    """802.11mc Round-Trip-Time positioning with weighted least squares.
+
+    Each access point provides a 2-D anchor position and a measured RTT;
+    the receiver position is solved by linearising around the anchor centroid.
+    """
+
+    SPEED_OF_LIGHT = 299792458.0
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.aps = []  # list of (position_2d, distance_m)
+
+    def add_ap(self, ap_id, position_2d, rtt_ns: float):
+        """Add an AP with its 2-D position and measured RTT in nanoseconds.
+
+        Distance = c · RTT(ns) · 1e-9 / 2  (round-trip).
+        """
+        np = self._np
+        d_m = self.SPEED_OF_LIGHT * float(rtt_ns) * 1e-9 / 2.0
+        self.aps.append((str(ap_id),
+                         np.asarray(position_2d, dtype=float).reshape(2),
+                         float(d_m)))
+
+    def ranging_error_model(self, d_m: float) -> float:
+        """802.11mc empirical ranging-error standard deviation (m)."""
+        return 0.3 + 0.02 * float(d_m)
+
+    def compute_position(self):
+        """Solve receiver (x, y) via weighted linear least squares.
+
+        Returns (x, y, accuracy_m) or ``None`` if fewer than 3 APs.
+        """
+        np = self._np
+        if len(self.aps) < 3:
+            return None
+
+        anchors = np.array([a[1] for a in self.aps])
+        ranges = np.array([a[2] for a in self.aps])
+        sigmas = np.array([self.ranging_error_model(r) for r in ranges])
+
+        # Linearise by subtracting eq 0 from the rest:
+        # |p - a_i|² - |p - a_0|² = r_i² - r_0²
+        # ⇒ 2·(a_0 - a_i)ᵀ·p = (a_0·a_0 - a_i·a_i) - (r_0² - r_i²)
+        a0 = anchors[0]
+        r0 = ranges[0]
+        A = 2.0 * (a0 - anchors[1:])
+        b = (np.sum(a0 * a0) - np.sum(anchors[1:] ** 2, axis=1)) \
+            - (r0 ** 2 - ranges[1:] ** 2)
+        s2 = sigmas[1:] ** 2 + sigmas[0] ** 2
+        w = 1.0 / np.maximum(s2, 1e-12)
+        Aw = A * w[:, None]
+        bw = b * w
+        try:
+            p_est, *_ = np.linalg.lstsq(Aw, bw, rcond=None)
+        except np.linalg.LinAlgError:
+            return None
+        try:
+            cov = np.linalg.inv(A.T @ (A * w[:, None]))
+            accuracy = float(math.sqrt(max(np.trace(cov), 0.0)))
+        except np.linalg.LinAlgError:
+            accuracy = float(np.mean(sigmas))
+        return (float(p_est[0]), float(p_est[1]), accuracy)

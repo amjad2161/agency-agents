@@ -1362,3 +1362,70 @@ class SquareRootUKF:
     def covariance(self):
         """Reconstructed covariance matrix P = S · Sᵀ."""
         return self.S @ self.S.T
+
+
+# ============================================================================
+# R8 — Sliding Window Filter (fixed-lag smoother with marginalization)
+# ============================================================================
+
+class SlidingWindowFilter:
+    """Fixed-lag sliding-window filter with Schur-complement marginalization.
+
+    Stores up to ``max_window`` poses with their covariances. When the window
+    overflows, the oldest pose is marginalized out (here implemented as a
+    drop-after-Schur-update — sufficient for block-diagonal information form).
+    """
+
+    def __init__(self, max_window: int = 10):
+        import numpy as _np
+        self._np = _np
+        self.max_window = int(max_window)
+        self.poses = []
+        self.covs = []
+
+    def add_pose(self, pose, cov):
+        """Add a pose with its covariance to the window."""
+        np = self._np
+        self.poses.append(np.asarray(pose, dtype=float).copy())
+        self.covs.append(np.asarray(cov, dtype=float).copy())
+        if len(self.poses) > self.max_window:
+            self.marginalize_oldest()
+
+    def marginalize_oldest(self):
+        """Schur-complement marginalize and drop the oldest pose.
+
+        For block-diagonal poses (independent), this reduces to dropping
+        the oldest entry. The Schur complement of block A in
+            [[A, B],
+             [Bᵀ, C]]
+        is C - Bᵀ A⁻¹ B; with B=0 (independent), it equals C.
+        """
+        if not self.poses:
+            return
+        self.poses.pop(0)
+        self.covs.pop(0)
+
+    def get_window_poses(self):
+        """Return list of (pose, cov) tuples in window order."""
+        return list(zip(self.poses, self.covs))
+
+    @property
+    def information_matrix(self):
+        """Block-diagonal information matrix Λ = blkdiag(P_k⁻¹)."""
+        np = self._np
+        if not self.covs:
+            return np.zeros((0, 0))
+        blocks = []
+        for P in self.covs:
+            try:
+                blocks.append(np.linalg.inv(P))
+            except np.linalg.LinAlgError:
+                blocks.append(np.linalg.pinv(P))
+        sizes = [b.shape[0] for b in blocks]
+        n = sum(sizes)
+        out = np.zeros((n, n))
+        idx = 0
+        for b, s in zip(blocks, sizes):
+            out[idx:idx + s, idx:idx + s] = b
+            idx += s
+        return out

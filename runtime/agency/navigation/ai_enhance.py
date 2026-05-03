@@ -1674,3 +1674,72 @@ class FederatedNavigationLearner:
             "W2": self.W2.copy(),
             "b2": self.b2.copy(),
         }
+
+
+# ============================================================================
+# R8 — Graph Neural Odometry (message-passing GNN over pose graph)
+# ============================================================================
+
+class GraphNeuralOdometry:
+    """Lightweight GNN for pose-graph odometry refinement.
+
+    Each node holds a state feature vector. Each message-passing step
+    aggregates neighbour features (mean) and applies tanh(W · concat).
+    """
+
+    def __init__(self):
+        self.nodes = {}              # id -> state_vec
+        self.edges = []              # list of (i, j, rel_motion)
+        self.node_features = {}      # id -> feature_vec
+        self._W = None
+        self._next_id = 0
+
+    def add_node(self, state_vec) -> int:
+        """Add a node with its state vector. Returns the assigned ID."""
+        s = np.asarray(state_vec, dtype=float).reshape(-1)
+        node_id = int(self._next_id)
+        self._next_id += 1
+        self.nodes[node_id] = s.copy()
+        self.node_features[node_id] = s.copy()
+        return node_id
+
+    def add_edge(self, i: int, j: int, relative_motion):
+        """Add a directed edge i → j with associated relative motion."""
+        self.edges.append((int(i), int(j),
+                           np.asarray(relative_motion, dtype=float).copy()))
+
+    def _neighbours(self, node_id: int):
+        """Return list of node IDs that share an edge with ``node_id``."""
+        out = []
+        for i, j, _ in self.edges:
+            if i == node_id and j in self.node_features:
+                out.append(j)
+            elif j == node_id and i in self.node_features:
+                out.append(i)
+        return out
+
+    def message_passing_step(self):
+        """One round of GNN message passing (mean-aggregator + tanh)."""
+        if not self.node_features:
+            return
+        # Determine feature dimension and lazy-init W
+        dim = len(next(iter(self.node_features.values())))
+        if self._W is None or self._W.shape != (dim, 2 * dim):
+            # Concat-input weight matrix init: [I | I] / 2 keeps signal stable
+            self._W = np.hstack([np.eye(dim), np.eye(dim)]) / 2.0
+
+        new_features = {}
+        for nid, own in self.node_features.items():
+            neigh_ids = self._neighbours(nid)
+            if neigh_ids:
+                agg = np.mean(np.stack(
+                    [self.node_features[n] for n in neigh_ids]), axis=0)
+            else:
+                agg = np.zeros_like(own)
+            x = np.concatenate([own, agg])
+            new_features[nid] = np.tanh(self._W @ x)
+        self.node_features = new_features
+
+    def predict_odometry(self, node_id: int):
+        """Return current feature vector for ``node_id``."""
+        return self.node_features[int(node_id)].copy()
