@@ -1882,3 +1882,88 @@ class SBLAcousticPositioner:
         np = self._np
         p = np.asarray(pos_xyz, dtype=float).reshape(3)
         return float(np.linalg.norm(p))
+
+
+# ============================================================================
+# R29 — Bathymetric Map Matcher (depth-profile underwater navigation)
+# ============================================================================
+
+class BathymetricMapMatcher:
+    """Bathymetric map matching: bilinear depth lookup + sequence SSE matching."""
+
+    def __init__(self, lat_grid, lon_grid, depth_map):
+        import numpy as _np
+        self._np = _np
+        self.lat_grid = _np.asarray(lat_grid, dtype=float).reshape(-1)
+        self.lon_grid = _np.asarray(lon_grid, dtype=float).reshape(-1)
+        self.depth_map = _np.asarray(depth_map, dtype=float)
+        if self.depth_map.shape != (self.lat_grid.size,
+                                     self.lon_grid.size):
+            raise ValueError("depth_map shape must be (lat, lon)")
+
+    def _idx(self, lat: float, lon: float):
+        np = self._np
+        lat_v = float(np.clip(lat, float(self.lat_grid.min()),
+                              float(self.lat_grid.max())))
+        lon_v = float(np.clip(lon, float(self.lon_grid.min()),
+                              float(self.lon_grid.max())))
+        ilat = int(np.clip(int(np.searchsorted(self.lat_grid, lat_v)) - 1,
+                           0, self.lat_grid.size - 2))
+        ilon = int(np.clip(int(np.searchsorted(self.lon_grid, lon_v)) - 1,
+                           0, self.lon_grid.size - 2))
+        return ilat, ilon, lat_v, lon_v
+
+    def reference_depth(self, lat: float, lon: float) -> float:
+        ilat, ilon, lat_v, lon_v = self._idx(float(lat), float(lon))
+        lat0 = self.lat_grid[ilat]; lat1 = self.lat_grid[ilat + 1]
+        lon0 = self.lon_grid[ilon]; lon1 = self.lon_grid[ilon + 1]
+        dlat = (lat_v - lat0) / max(lat1 - lat0, 1e-12)
+        dlon = (lon_v - lon0) / max(lon1 - lon0, 1e-12)
+        d00 = self.depth_map[ilat, ilon]
+        d10 = self.depth_map[ilat + 1, ilon]
+        d01 = self.depth_map[ilat, ilon + 1]
+        d11 = self.depth_map[ilat + 1, ilon + 1]
+        return float((1 - dlat) * ((1 - dlon) * d00 + dlon * d01)
+                     + dlat * ((1 - dlon) * d10 + dlon * d11))
+
+    def depth_residual(self, measured_depth: float, lat: float,
+                       lon: float) -> float:
+        return float(measured_depth) - self.reference_depth(lat, lon)
+
+    def match_sequence(self, depth_sequence, candidate_positions) -> int:
+        np = self._np
+        seq = np.asarray(depth_sequence, dtype=float).reshape(-1)
+        best_idx = 0
+        best_score = float("inf")
+        for i, traj in enumerate(candidate_positions):
+            errs = []
+            for k, (lat, lon) in enumerate(traj):
+                if k >= seq.size:
+                    break
+                r = self.depth_residual(float(seq[k]), float(lat), float(lon))
+                errs.append(r * r)
+            score = float(sum(errs)) if errs else float("inf")
+            if score < best_score:
+                best_score = score
+                best_idx = i
+        return best_idx
+
+    def gradient(self, lat: float, lon: float):
+        np = self._np
+        ilat, ilon, _, _ = self._idx(float(lat), float(lon))
+        dlat_step = float(self.lat_grid[ilat + 1] - self.lat_grid[ilat])
+        dlon_step = float(self.lon_grid[ilon + 1] - self.lon_grid[ilon])
+        dd_dlat = (self.depth_map[ilat + 1, ilon]
+                   - self.depth_map[ilat, ilon]) / max(dlat_step, 1e-12)
+        dd_dlon = (self.depth_map[ilat, ilon + 1]
+                   - self.depth_map[ilat, ilon]) / max(dlon_step, 1e-12)
+        return np.array([dd_dlat, dd_dlon])
+
+    def position_update(self, lat: float, lon: float,
+                        measured_depth: float, step: float = 0.001):
+        np = self._np
+        r = self.depth_residual(measured_depth, lat, lon)
+        g = self.gradient(lat, lon)
+        denom = float(g @ g) + 1e-9
+        return np.array([float(lat) - float(step) * r * g[0] / denom,
+                         float(lon) - float(step) * r * g[1] / denom])

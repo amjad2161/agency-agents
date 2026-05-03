@@ -1846,3 +1846,98 @@ class GravityAnomalyNavigator:
         # Move along gradient to reduce |anomaly|
         return np.array([float(pos_lat) - float(step_size) * anom * grad[0] / denom,
                          float(pos_lon) - float(step_size) * anom * grad[1] / denom])
+
+
+# ============================================================================
+# R29 — Terrain Referenced Navigation (TRN) — DEM altitude profile matching
+# ============================================================================
+
+class TerrainReferencingNavigator:
+    """Match measured altitude profile against DEM trajectory candidates."""
+
+    def __init__(self, lat_grid, lon_grid, elevation_map):
+        import numpy as _np
+        self._np = _np
+        self.lat_grid = _np.asarray(lat_grid, dtype=float).reshape(-1)
+        self.lon_grid = _np.asarray(lon_grid, dtype=float).reshape(-1)
+        self.elev_map = _np.asarray(elevation_map, dtype=float)
+        if self.elev_map.shape != (self.lat_grid.size,
+                                    self.lon_grid.size):
+            raise ValueError("elevation_map shape must be (lat, lon)")
+
+    def _idx(self, lat: float, lon: float):
+        np = self._np
+        lat_v = float(np.clip(lat, float(self.lat_grid.min()),
+                              float(self.lat_grid.max())))
+        lon_v = float(np.clip(lon, float(self.lon_grid.min()),
+                              float(self.lon_grid.max())))
+        ilat = int(np.clip(int(np.searchsorted(self.lat_grid, lat_v)) - 1,
+                           0, self.lat_grid.size - 2))
+        ilon = int(np.clip(int(np.searchsorted(self.lon_grid, lon_v)) - 1,
+                           0, self.lon_grid.size - 2))
+        return ilat, ilon, lat_v, lon_v
+
+    def terrain_elevation(self, lat: float, lon: float) -> float:
+        ilat, ilon, lat_v, lon_v = self._idx(float(lat), float(lon))
+        lat0 = self.lat_grid[ilat]; lat1 = self.lat_grid[ilat + 1]
+        lon0 = self.lon_grid[ilon]; lon1 = self.lon_grid[ilon + 1]
+        dlat = (lat_v - lat0) / max(lat1 - lat0, 1e-12)
+        dlon = (lon_v - lon0) / max(lon1 - lon0, 1e-12)
+        e00 = self.elev_map[ilat, ilon]
+        e10 = self.elev_map[ilat + 1, ilon]
+        e01 = self.elev_map[ilat, ilon + 1]
+        e11 = self.elev_map[ilat + 1, ilon + 1]
+        return float((1 - dlat) * ((1 - dlon) * e00 + dlon * e01)
+                     + dlat * ((1 - dlon) * e10 + dlon * e11))
+
+    def altitude_residual(self, measured_alt: float, lat: float,
+                          lon: float) -> float:
+        return float(measured_alt) - self.terrain_elevation(lat, lon)
+
+    def match_profile(self, alt_sequence, candidate_trajectories) -> int:
+        np = self._np
+        seq = np.asarray(alt_sequence, dtype=float).reshape(-1)
+        best_idx = 0
+        best_score = float("inf")
+        for i, traj in enumerate(candidate_trajectories):
+            errs = []
+            for k, (lat, lon) in enumerate(traj):
+                if k >= seq.size:
+                    break
+                r = self.altitude_residual(float(seq[k]), float(lat),
+                                            float(lon))
+                errs.append(r * r)
+            score = float(sum(errs)) if errs else float("inf")
+            if score < best_score:
+                best_score = score
+                best_idx = i
+        return best_idx
+
+    def gradient_step(self, lat: float, lon: float, measured_alt: float,
+                      step: float = 0.001):
+        np = self._np
+        # Numerical gradient via small lat/lon perturbation
+        eps = 1e-5
+        e_lat_p = self.terrain_elevation(lat + eps, lon)
+        e_lat_m = self.terrain_elevation(lat - eps, lon)
+        e_lon_p = self.terrain_elevation(lat, lon + eps)
+        e_lon_m = self.terrain_elevation(lat, lon - eps)
+        g_lat = (e_lat_p - e_lat_m) / (2.0 * eps)
+        g_lon = (e_lon_p - e_lon_m) / (2.0 * eps)
+        r = self.altitude_residual(measured_alt, lat, lon)
+        denom = g_lat * g_lat + g_lon * g_lon + 1e-9
+        return np.array([float(lat) - float(step) * r * g_lat / denom,
+                         float(lon) - float(step) * r * g_lon / denom])
+
+    def correlation_score(self, alt_sequence, trajectory) -> float:
+        np = self._np
+        seq = np.asarray(alt_sequence, dtype=float).reshape(-1)
+        n = min(seq.size, len(trajectory))
+        if n == 0:
+            return 0.0
+        terrain = np.array([self.terrain_elevation(float(lat), float(lon))
+                            for lat, lon in trajectory[:n]])
+        a = seq[:n] - float(seq[:n].mean())
+        b = terrain - float(terrain.mean())
+        denom = (float(np.linalg.norm(a)) * float(np.linalg.norm(b))) + 1e-12
+        return float(np.dot(a, b) / denom)

@@ -2796,3 +2796,161 @@ class UncertaintyQuantifier:
         except np.linalg.LinAlgError:
             C_inv = np.linalg.pinv(C)
         return float(e @ C_inv @ e)
+
+
+# ============================================================================
+# R29 — Time Alignment Filter (sensor synchronisation via interpolation)
+# ============================================================================
+
+class TimeAlignmentFilter:
+    """Time-align asynchronous sensor samples to common timeline."""
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self._samples = {}   # sensor_id -> list of (t, value)
+
+    def add_sample(self, sensor_id, timestamp_s: float, value):
+        np = self._np
+        v = np.asarray(value, dtype=float)
+        if sensor_id not in self._samples:
+            self._samples[sensor_id] = []
+        self._samples[sensor_id].append((float(timestamp_s), v))
+
+    def interpolate(self, sensor_id, t_query: float):
+        np = self._np
+        samples = sorted(self._samples.get(sensor_id, []),
+                         key=lambda s: s[0])
+        if not samples:
+            return np.zeros(1)
+        if t_query <= samples[0][0]:
+            return samples[0][1].copy()
+        if t_query >= samples[-1][0]:
+            return samples[-1][1].copy()
+        for k in range(len(samples) - 1):
+            t0, v0 = samples[k]
+            t1, v1 = samples[k + 1]
+            if t0 <= t_query <= t1:
+                alpha = (float(t_query) - t0) / max(t1 - t0, 1e-12)
+                return v0 + alpha * (v1 - v0)
+        return samples[-1][1].copy()
+
+    def align_to_timeline(self, timeline, sensor_id):
+        np = self._np
+        out = np.array([self.interpolate(sensor_id, float(t))
+                        for t in timeline])
+        return out
+
+    def lag(self, sensor_a, sensor_b) -> float:
+        np = self._np
+        sa = self._samples.get(sensor_a, [])
+        sb = self._samples.get(sensor_b, [])
+        if not sa or not sb:
+            return 0.0
+        ta = float(np.mean([t for t, _ in sa]))
+        tb = float(np.mean([t for t, _ in sb]))
+        return float(tb - ta)
+
+    def sync_offset(self, sensor_id, offset_s: float):
+        if sensor_id not in self._samples:
+            return
+        self._samples[sensor_id] = [(t + float(offset_s), v)
+                                    for t, v in self._samples[sensor_id]]
+
+
+# ============================================================================
+# R29 — JPDA Tracker (Joint Probabilistic Data Association)
+# ============================================================================
+
+class JPDATracker:
+    """JPDA multi-target tracking with chi-square gating and clutter model."""
+
+    def __init__(self, gate_chi2: float = 9.21):
+        import numpy as _np
+        self._np = _np
+        self.gate_chi2 = float(gate_chi2)
+        self._tracks = {}   # tid -> (state, cov)
+
+    def add_track(self, tid, state, cov):
+        np = self._np
+        self._tracks[tid] = (
+            np.asarray(state, dtype=float).reshape(-1).copy(),
+            np.asarray(cov, dtype=float).copy(),
+        )
+
+    def mahalanobis(self, track_id, z, R) -> float:
+        np = self._np
+        x, P = self._tracks[track_id]
+        z = np.asarray(z, dtype=float).reshape(-1)
+        R = np.asarray(R, dtype=float)
+        S = P + R
+        try:
+            S_inv = np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            S_inv = np.linalg.pinv(S)
+        d = z - x
+        return float(d @ S_inv @ d)
+
+    def gate(self, track_id, z, R) -> bool:
+        return self.mahalanobis(track_id, z, R) < self.gate_chi2
+
+    def association_probs(self, track_id, measurements, R,
+                          clutter_density: float = 0.01):
+        np = self._np
+        x, P = self._tracks[track_id]
+        R = np.asarray(R, dtype=float)
+        S = P + R
+        try:
+            S_inv = np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            S_inv = np.linalg.pinv(S)
+        sign, logdet = np.linalg.slogdet(S + np.eye(S.shape[0]) * 1e-12)
+        n = len(measurements)
+        likes = np.zeros(n + 1)
+        norm = 1.0 / math.sqrt((2.0 * math.pi) ** S.shape[0]
+                                * max(math.exp(logdet), 1e-300))
+        for i, m in enumerate(measurements):
+            z = np.asarray(m, dtype=float).reshape(-1)
+            d = z - x
+            quad = float(d @ S_inv @ d)
+            likes[i] = norm * math.exp(-0.5 * quad)
+        likes[-1] = float(clutter_density)
+        total = float(likes.sum())
+        if total <= 0:
+            likes[-1] = 1.0
+            total = 1.0
+        return likes / total
+
+    def update_track(self, track_id, measurements, R):
+        np = self._np
+        x, P = self._tracks[track_id]
+        R = np.asarray(R, dtype=float)
+        beta = self.association_probs(track_id, measurements, R)
+        if len(measurements) == 0:
+            return x.copy(), P.copy()
+        S = P + R
+        try:
+            S_inv = np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            S_inv = np.linalg.pinv(S)
+        K = P @ S_inv
+        # Combined innovation
+        innov_combined = np.zeros_like(x)
+        for i, m in enumerate(measurements):
+            z = np.asarray(m, dtype=float).reshape(-1)
+            innov_combined = innov_combined + beta[i] * (z - x)
+        x_new = x + K @ innov_combined
+        # Standard P update with extra spread term (Bar-Shalom JPDA)
+        P_assoc = (np.eye(P.shape[0]) - K) @ P
+        # Spread term
+        spread = np.zeros_like(P)
+        for i, m in enumerate(measurements):
+            z = np.asarray(m, dtype=float).reshape(-1)
+            innov = z - x
+            spread = spread + beta[i] * np.outer(innov, innov)
+        spread = spread - np.outer(innov_combined, innov_combined)
+        P_new = beta[-1] * P + (1.0 - beta[-1]) * P_assoc \
+                + K @ spread @ K.T
+        P_new = 0.5 * (P_new + P_new.T)
+        self._tracks[track_id] = (x_new, P_new)
+        return x_new, P_new

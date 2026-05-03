@@ -2667,3 +2667,61 @@ class TrajectoryLSTMPredictor:
     def reset_state(self):
         self.h = np.zeros(self.hidden_dim)
         self.c = np.zeros(self.hidden_dim)
+
+
+# ============================================================================
+# R29 — Radio Map Localiser (WiFi/BLE fingerprint k-NN + affine map)
+# ============================================================================
+
+class RadioMapLocaliser:
+    """Radio fingerprint database with k-NN locate + trainable affine map."""
+
+    def __init__(self, feature_dim: int = 10):
+        self.feature_dim = int(feature_dim)
+        self._db = []          # list of (pos_xy, features)
+        self.W = np.zeros((2, self.feature_dim))
+        self.b = np.zeros(2)
+
+    def add_fingerprint(self, pos_xy, features):
+        p = np.asarray(pos_xy, dtype=float).reshape(2)
+        f = np.asarray(features, dtype=float).reshape(self.feature_dim)
+        self._db.append((p, f))
+
+    def knn_locate(self, query_features, k: int = 3):
+        if not self._db:
+            return np.zeros(2)
+        q = np.asarray(query_features, dtype=float).reshape(self.feature_dim)
+        dists = np.array([float(np.linalg.norm(f - q))
+                          for _, f in self._db])
+        k_use = min(int(k), len(self._db))
+        idx = np.argsort(dists)[:k_use]
+        weights = 1.0 / (dists[idx] + 1e-9)
+        weights = weights / float(weights.sum())
+        positions = np.stack([self._db[i][0] for i in idx])
+        return (weights[:, None] * positions).sum(axis=0)
+
+    def train_radio_map(self, features_list, pos_list,
+                        epochs: int = 5, lr: float = 0.01):
+        X = np.asarray(features_list, dtype=float).reshape(
+            -1, self.feature_dim)
+        Y = np.asarray(pos_list, dtype=float).reshape(-1, 2)
+        n = X.shape[0]
+        for _ in range(int(epochs)):
+            for i in range(n):
+                f = X[i]; y = Y[i]
+                pred = self.W @ f + self.b
+                err = pred - y
+                self.W = self.W - float(lr) * np.outer(err, f)
+                self.b = self.b - float(lr) * err
+        return self.W.copy(), self.b.copy()
+
+    def predict_position(self, features):
+        f = np.asarray(features, dtype=float).reshape(self.feature_dim)
+        return self.W @ f + self.b
+
+    @staticmethod
+    def fingerprint_similarity(f1, f2) -> float:
+        a = np.asarray(f1, dtype=float).reshape(-1)
+        b = np.asarray(f2, dtype=float).reshape(-1)
+        denom = (float(np.linalg.norm(a)) * float(np.linalg.norm(b))) + 1e-12
+        return float(np.dot(a, b) / denom)
