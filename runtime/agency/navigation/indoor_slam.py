@@ -901,3 +901,55 @@ class CellularTowerPositioning:
     def positioning_error_bound(self, n_towers: int,
                                 avg_dist_m: float) -> float:
         return float(avg_dist_m) / max(1.0, float(n_towers) ** 0.5)
+
+
+# ============================================================================
+# R22 — Offline Vector Map (polyline road network + closest-point matching)
+# ============================================================================
+
+class OfflineVectorMap:
+    """Polyline road/corridor network with closest-segment map matching."""
+
+    def __init__(self):
+        self.segments = []
+
+    def add_segment(self, p1, p2, metadata=None):
+        self.segments.append((np.asarray(p1, dtype=float).reshape(2),
+                              np.asarray(p2, dtype=float).reshape(2),
+                              metadata))
+
+    def _project_point_on_segment(self, pt, p1, p2):
+        d = p2 - p1
+        len_sq = float(np.dot(d, d))
+        if len_sq < 1e-12:
+            return p1.copy(), 0.0
+        t = float(np.clip(np.dot(pt - p1, d) / len_sq, 0.0, 1.0))
+        return p1 + t * d, t
+
+    def match(self, query_xy):
+        pt = np.asarray(query_xy, dtype=float).reshape(2)
+        best_pt = None
+        best_idx = 0
+        best_dist = float("inf")
+        for i, (p1, p2, _) in enumerate(self.segments):
+            cp, _ = self._project_point_on_segment(pt, p1, p2)
+            d = float(np.linalg.norm(pt - cp))
+            if d < best_dist:
+                best_dist = d
+                best_pt = cp
+                best_idx = i
+        return best_pt, best_idx, best_dist
+
+    def constrain_position(self, raw_xy, max_off_road_m: float = 5.0):
+        mp, idx, dist = self.match(raw_xy)
+        if dist <= float(max_off_road_m):
+            return mp, True, dist
+        return np.asarray(raw_xy, dtype=float).reshape(2), False, dist
+
+    def segment_length(self, idx: int) -> float:
+        p1, p2, _ = self.segments[int(idx)]
+        return float(np.linalg.norm(p2 - p1))
+
+    def total_length(self) -> float:
+        return float(sum(self.segment_length(i)
+                         for i in range(len(self.segments))))

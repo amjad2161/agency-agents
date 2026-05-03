@@ -1961,3 +1961,53 @@ class GNSSSpoofingDetector:
 
     def composite_alert(self, *alerts: int) -> int:
         return max(alerts) if alerts else self.ALERT_NONE
+
+
+# ============================================================================
+# R22 — Multi-Frequency GNSS (L1/L2/L5 ionosphere-free combinations)
+# ============================================================================
+
+class MultiFrequencyGNSS:
+    """L1/L2/L5 ionosphere-free linear combinations + LS PVT helpers."""
+
+    F_L1 = 1575.42e6
+    F_L2 = 1227.60e6
+    F_L5 = 1176.45e6
+    C = 299792458.0
+
+    def iono_free_l1l2(self, P1_m: float, P2_m: float) -> float:
+        f1, f2 = self.F_L1, self.F_L2
+        return float((f1 ** 2 * float(P1_m) - f2 ** 2 * float(P2_m))
+                     / (f1 ** 2 - f2 ** 2))
+
+    def iono_free_l1l5(self, P1_m: float, P5_m: float) -> float:
+        f1, f5 = self.F_L1, self.F_L5
+        return float((f1 ** 2 * float(P1_m) - f5 ** 2 * float(P5_m))
+                     / (f1 ** 2 - f5 ** 2))
+
+    def triple_freq_combination(self, P1: float, P2: float, P5: float) -> float:
+        c12 = self.iono_free_l1l2(P1, P2)
+        c15 = self.iono_free_l1l5(P1, P5)
+        return float(0.5 * (c12 + c15))
+
+    def geometry_matrix(self, sat_positions_ecef, rx_pos_ecef):
+        import numpy as np
+        rx = np.asarray(rx_pos_ecef, dtype=float).reshape(3)
+        rows = []
+        for sv in sat_positions_ecef:
+            sv = np.asarray(sv, dtype=float).reshape(3)
+            diff = rx - sv
+            rng = float(np.linalg.norm(diff)) + 1e-12
+            rows.append([-diff[0] / rng, -diff[1] / rng, -diff[2] / rng, 1.0])
+        return np.asarray(rows, dtype=float)
+
+    def least_squares_pvt(self, H, pseudoranges):
+        import numpy as np
+        pr = np.asarray(pseudoranges, dtype=float).reshape(-1)
+        result, *_ = np.linalg.lstsq(H, pr, rcond=None)
+        return result
+
+    def iono_correction(self, P1_m: float, P2_m: float) -> float:
+        f1, f2 = self.F_L1, self.F_L2
+        return float((f2 ** 2 / (f1 ** 2 - f2 ** 2))
+                     * (float(P1_m) - float(P2_m)))

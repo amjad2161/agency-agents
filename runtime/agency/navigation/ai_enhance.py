@@ -2348,3 +2348,89 @@ class TransferLearningNavigator:
                                 - 1.0
                                 - 2.0 * np.log(ratio + 1e-9)))
         return kl
+
+
+# ============================================================================
+# R22 — Visual Odometry Frontend (LK optical flow + 2-D rotation SVD)
+# ============================================================================
+
+class VisualOdometryFrontend:
+    """Lucas-Kanade optical flow + SVD-based 2-D rotation estimator."""
+
+    def __init__(self, win_size: int = 7, max_iter: int = 20,
+                 eps: float = 1e-3):
+        self.win = int(win_size)
+        self.max_iter = int(max_iter)
+        self.eps = float(eps)
+        self.prev_frame = None
+        self.pose = np.eye(4)
+
+    def _sobel(self, img):
+        img = np.asarray(img, dtype=float)
+        Ix = np.zeros_like(img)
+        Iy = np.zeros_like(img)
+        Ix[:, 1:-1] = (img[:, 2:] - img[:, :-2]) / 2.0
+        Iy[1:-1, :] = (img[2:, :] - img[:-2, :]) / 2.0
+        return Ix, Iy
+
+    def track_features(self, prev_img, curr_img, prev_pts):
+        Ix, Iy = self._sobel(prev_img.astype(float))
+        tracked = []
+        valid = []
+        h, w = prev_img.shape[:2]
+        hw = self.win // 2
+        for pt in prev_pts:
+            x = float(pt[0]); y = float(pt[1])
+            dx = 0.0; dy = 0.0
+            ok = True
+            for _ in range(self.max_iter):
+                xi = int(round(x + dx)); yi = int(round(y + dy))
+                if not (1 <= xi < w - 1 and 1 <= yi < h - 1):
+                    ok = False; break
+                x0 = max(0, xi - hw); x1 = min(w, xi + hw + 1)
+                y0 = max(0, yi - hw); y1 = min(h, yi + hw + 1)
+                Ixx = float(np.sum(Ix[y0:y1, x0:x1] ** 2))
+                Iyy = float(np.sum(Iy[y0:y1, x0:x1] ** 2))
+                Ixy = float(np.sum(Ix[y0:y1, x0:x1] * Iy[y0:y1, x0:x1]))
+                xi0 = int(round(x)); yi0 = int(round(y))
+                xp0 = max(0, xi0 - hw); xp1 = min(w, xi0 + hw + 1)
+                yp0 = max(0, yi0 - hw); yp1 = min(h, yi0 + hw + 1)
+                It = (curr_img[yp0:yp1, xp0:xp1].astype(float)
+                      - prev_img[yp0:yp1, xp0:xp1].astype(float))
+                bx = -float(np.sum(Ix[yp0:yp1, xp0:xp1] * It))
+                by = -float(np.sum(Iy[yp0:yp1, xp0:xp1] * It))
+                det = Ixx * Iyy - Ixy ** 2
+                if abs(det) < 1e-12:
+                    ok = False; break
+                vx = (Iyy * bx - Ixy * by) / det
+                vy = (Ixx * by - Ixy * bx) / det
+                dx += vx; dy += vy
+                if vx * vx + vy * vy < self.eps ** 2:
+                    break
+            tracked.append((x + dx, y + dy))
+            valid.append(ok)
+        return np.asarray(tracked, dtype=float), np.asarray(valid, dtype=bool)
+
+    def estimate_rotation(self, prev_pts, curr_pts, valid):
+        prev_pts = np.asarray(prev_pts, dtype=float)
+        curr_pts = np.asarray(curr_pts, dtype=float)
+        valid = np.asarray(valid, dtype=bool)
+        p = prev_pts[valid]; c = curr_pts[valid]
+        if len(p) < 2:
+            return 0.0
+        dp = p - p.mean(axis=0)
+        dc = c - c.mean(axis=0)
+        H = dp.T @ dc
+        U, _, Vt = np.linalg.svd(H)
+        R2 = Vt.T @ U.T
+        return float(math.atan2(R2[1, 0], R2[0, 0]))
+
+    def update_pose(self, translation_2d, rotation_rad: float):
+        c = math.cos(float(rotation_rad)); s = math.sin(float(rotation_rad))
+        dT = np.eye(4)
+        dT[0, 0], dT[0, 1] = c, -s
+        dT[1, 0], dT[1, 1] = s, c
+        dT[0, 3] = float(translation_2d[0])
+        dT[1, 3] = float(translation_2d[1])
+        self.pose = self.pose @ dT
+        return self.pose.copy()

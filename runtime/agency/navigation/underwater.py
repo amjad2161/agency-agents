@@ -1574,3 +1574,65 @@ class USBLPositionerR20:
 
     def max_unambiguous_angle(self) -> float:
         return float(math.degrees(math.asin(0.5)))   # 30°
+
+
+# ============================================================================
+# R22 — Underwater Strapdown INS (6-DOF NED mechanisation)
+# ============================================================================
+
+class UnderwaterStrapdownINS:
+    """6-DOF strapdown INS for underwater: integrates specific force + omega."""
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.pos = _np.zeros(3)
+        self.vel = _np.zeros(3)
+        self.att = _np.zeros(3)
+        self.g_ned = _np.array([0.0, 0.0, 9.80665])
+        self.bias_a = _np.zeros(3)
+        self.bias_g = _np.zeros(3)
+
+    def _Rbn(self, roll: float, pitch: float, yaw: float):
+        np = self._np
+        cr = math.cos(roll); sr = math.sin(roll)
+        cp = math.cos(pitch); sp = math.sin(pitch)
+        cy = math.cos(yaw); sy = math.sin(yaw)
+        return np.array([
+            [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+            [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+            [-sp, cp * sr, cp * cr],
+        ])
+
+    def update(self, f_body, omega_body, dt: float):
+        np = self._np
+        f_b = np.asarray(f_body, dtype=float).reshape(3) - self.bias_a
+        w_b = np.asarray(omega_body, dtype=float).reshape(3) - self.bias_g
+        roll, pitch, yaw = self.att
+        cr = math.cos(roll); sr = math.sin(roll)
+        cp = math.cos(pitch); sp = math.sin(pitch)
+        d_roll = w_b[0] + sr * math.tan(pitch) * w_b[1] \
+                 + cr * math.tan(pitch) * w_b[2]
+        d_pitch = cr * w_b[1] - sr * w_b[2]
+        cp_safe = max(abs(cp), 1e-9)
+        d_yaw = (sr / cp_safe) * w_b[1] + (cr / cp_safe) * w_b[2]
+        self.att = self.att + np.array([d_roll, d_pitch, d_yaw]) * float(dt)
+        R = self._Rbn(*self.att)
+        f_ned = R @ f_b - self.g_ned
+        self.vel = self.vel + f_ned * float(dt)
+        self.pos = self.pos + self.vel * float(dt)
+        return self.pos.copy()
+
+    def set_bias(self, acc_bias, gyro_bias):
+        np = self._np
+        self.bias_a = np.asarray(acc_bias, dtype=float).reshape(3).copy()
+        self.bias_g = np.asarray(gyro_bias, dtype=float).reshape(3).copy()
+
+    def reset(self, pos=None, vel=None, att=None):
+        np = self._np
+        self.pos = np.zeros(3) if pos is None \
+            else np.asarray(pos, dtype=float).reshape(3).copy()
+        self.vel = np.zeros(3) if vel is None \
+            else np.asarray(vel, dtype=float).reshape(3).copy()
+        self.att = np.zeros(3) if att is None \
+            else np.asarray(att, dtype=float).reshape(3).copy()

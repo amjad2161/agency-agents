@@ -2365,3 +2365,72 @@ class AdaptivePredictiveFilter:
             scale = float(np.mean(recent)) + 1e-9
             self.Q = np.eye(self.dim) * (1e-3 * scale)
         return self.Q.copy()
+
+
+# ============================================================================
+# R22 — Tightly-Coupled Visual-Inertial Odometry (EKF, augmented inv-depth)
+# ============================================================================
+
+class TightCoupledVIO:
+    """EKF visual-inertial filter with inverse-depth augmented state."""
+
+    def __init__(self, n_features: int = 3):
+        import numpy as _np
+        self._np = _np
+        self.nf = int(n_features)
+        self.dim = 9 + self.nf
+        self.x = _np.zeros(self.dim)
+        self.P = _np.eye(self.dim) * 0.1
+        self.Q = _np.eye(self.dim) * 1e-4
+        self.dt = 0.01
+
+    def imu_predict(self, accel, gyro=None):
+        np = self._np
+        a = np.asarray(accel, dtype=float).reshape(3) - self.x[6:9]
+        F = np.eye(self.dim)
+        F[0:3, 3:6] = np.eye(3) * self.dt
+        self.x[0:3] = self.x[0:3] + self.x[3:6] * self.dt \
+                      + 0.5 * a * self.dt ** 2
+        self.x[3:6] = self.x[3:6] + a * self.dt
+        self.P = F @ self.P @ F.T + self.Q
+        return self.x[:6].copy()
+
+    def visual_update(self, feature_idx: int, pixel_uv,
+                      focal_length: float = 1.0):
+        np = self._np
+        if int(feature_idx) >= self.nf:
+            return None
+        rho = float(self.x[9 + feature_idx])
+        if abs(rho) < 1e-9:
+            self.x[9 + feature_idx] = 1.0
+            rho = 1.0
+        f = float(focal_length)
+        pred = np.array([self.x[0] * rho * f, self.x[1] * rho * f])
+        z = np.asarray(pixel_uv, dtype=float).reshape(2)
+        innov = z - pred
+        H = np.zeros((2, self.dim))
+        H[0, 0] = rho * f
+        H[0, 9 + feature_idx] = self.x[0] * f
+        H[1, 1] = rho * f
+        H[1, 9 + feature_idx] = self.x[1] * f
+        R = np.eye(2) * 0.5
+        S = H @ self.P @ H.T + R
+        try:
+            K = self.P @ H.T @ np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            return innov
+        self.x = self.x + K @ innov
+        I = np.eye(self.dim)
+        self.P = (I - K @ H) @ self.P @ (I - K @ H).T + K @ R @ K.T
+        self.P = 0.5 * (self.P + self.P.T)
+        return innov
+
+    def state_position(self):
+        return self.x[:3].copy()
+
+    def state_velocity(self):
+        return self.x[3:6].copy()
+
+    def feature_depth(self, idx: int) -> float:
+        rho = float(self.x[9 + int(idx)])
+        return float(1.0 / rho) if abs(rho) > 1e-9 else float("inf")
