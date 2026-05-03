@@ -1692,3 +1692,58 @@ class SonarRayCasting:
         sim = self.scan(origin_xy, angles_rad)
         diffs = np.abs(sim - np.asarray(measured_ranges, dtype=float))
         return float(np.mean(1.0 / (1.0 + diffs)))
+
+
+# ============================================================================
+# R24 — Acoustic Doppler Current Profiler (ADCP)
+# ============================================================================
+
+class AcousticDopplerCurrentProfiler:
+    """ADCP: water-column current profile from Doppler frequency shifts."""
+
+    def __init__(self, n_bins: int = 10, bin_size_m: float = 2.0,
+                 beam_angle_deg: float = 20.0):
+        import numpy as _np
+        self._np = _np
+        self.n_bins = int(n_bins)
+        self.bin_size = float(bin_size_m)
+        self.beam_angle = float(math.radians(beam_angle_deg))
+        self.sound_speed = 1500.0
+        self.profiles = []
+
+    def doppler_to_velocity(self, freq_shift_hz: float,
+                            carrier_freq_hz: float) -> float:
+        cos_a = max(math.cos(self.beam_angle), 1e-9)
+        return float(self.sound_speed * float(freq_shift_hz)
+                     / (2.0 * float(carrier_freq_hz) * cos_a))
+
+    def process_beam(self, freq_shifts_hz, carrier_freq_hz: float):
+        np = self._np
+        return np.asarray([self.doppler_to_velocity(float(f),
+                                                    float(carrier_freq_hz))
+                           for f in freq_shifts_hz], dtype=float)
+
+    def add_profile(self, depth_m: float, current_vec_ms):
+        np = self._np
+        self.profiles.append((float(depth_m),
+                              np.asarray(current_vec_ms, dtype=float).reshape(3)))
+
+    def mean_current(self):
+        np = self._np
+        if not self.profiles:
+            return np.zeros(3)
+        return np.mean([p[1] for p in self.profiles], axis=0)
+
+    def shear(self) -> float:
+        np = self._np
+        if len(self.profiles) < 2:
+            return 0.0
+        speeds = [float(np.linalg.norm(p[1])) for p in self.profiles]
+        return float(np.std(speeds))
+
+    def bottom_track_velocity(self, bottom_freq_shifts,
+                              carrier_freq_hz: float):
+        np = self._np
+        return np.asarray([self.doppler_to_velocity(float(f),
+                                                    float(carrier_freq_hz))
+                           for f in bottom_freq_shifts], dtype=float)

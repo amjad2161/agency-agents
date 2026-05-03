@@ -2525,3 +2525,69 @@ class CovarianceResamplingPF:
     def estimate(self) -> float:
         np = self._np
         return float(np.average(self.particles[:, 0], weights=self.weights))
+
+
+# ============================================================================
+# R24 — Iterated Extended Kalman Filter (IEKF)
+# ============================================================================
+
+class IteratedEKF:
+    """EKF that re-linearises the update step n_iter times."""
+
+    def __init__(self, dim_x: int, dim_z: int, n_iter: int = 3):
+        import numpy as _np
+        self._np = _np
+        self.dim_x = int(dim_x)
+        self.dim_z = int(dim_z)
+        self.n_iter = int(n_iter)
+        self.x = _np.zeros(self.dim_x)
+        self.P = _np.eye(self.dim_x)
+        self.Q = _np.eye(self.dim_x) * 1e-4
+        self.F = _np.eye(self.dim_x)
+
+    def predict(self, F=None, Q=None):
+        np = self._np
+        Fm = self.F if F is None else np.asarray(F, dtype=float).reshape(
+            self.dim_x, self.dim_x)
+        Qm = self.Q if Q is None else np.asarray(Q, dtype=float).reshape(
+            self.dim_x, self.dim_x)
+        self.x = Fm @ self.x
+        self.P = Fm @ self.P @ Fm.T + Qm
+        return self.x.copy()
+
+    def update(self, z, H, R):
+        np = self._np
+        z = np.asarray(z, dtype=float).reshape(self.dim_z)
+        H = np.asarray(H, dtype=float).reshape(self.dim_z, self.dim_x)
+        R = np.asarray(R, dtype=float).reshape(self.dim_z, self.dim_z)
+        x_i = self.x.copy()
+        innov = z - H @ x_i
+        S = H @ self.P @ H.T + R
+        try:
+            K = self.P @ H.T @ np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            return self.x.copy(), innov
+        for _ in range(self.n_iter):
+            innov = z - H @ x_i
+            x_i = self.x + K @ innov
+        self.x = x_i
+        self.P = (np.eye(self.dim_x) - K @ H) @ self.P
+        return self.x.copy(), innov
+
+    def innovation_covariance(self, H, R):
+        np = self._np
+        H = np.asarray(H, dtype=float).reshape(self.dim_z, self.dim_x)
+        R = np.asarray(R, dtype=float).reshape(self.dim_z, self.dim_z)
+        return H @ self.P @ H.T + R
+
+    def mahalanobis_distance(self, z, H, R) -> float:
+        np = self._np
+        z = np.asarray(z, dtype=float).reshape(self.dim_z)
+        H = np.asarray(H, dtype=float).reshape(self.dim_z, self.dim_x)
+        innov = z - H @ self.x
+        S = self.innovation_covariance(H, R)
+        try:
+            S_inv = np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            S_inv = np.linalg.pinv(S)
+        return float(innov @ S_inv @ innov)

@@ -2495,3 +2495,65 @@ class OnlinePlaceDatabase:
         mask = np.asarray(keep, dtype=bool)
         self.features = self.features[mask]
         self.labels = [l for l, k in zip(self.labels, keep) if k]
+
+
+# ============================================================================
+# R24 — Map-Based Lane Estimator (HD map lane assignment + snap)
+# ============================================================================
+
+class MapBasedLaneEstimator:
+    """HD map lane assignment with lateral-offset estimation + snap-to-centre."""
+
+    def __init__(self, lane_width_m: float = 3.5):
+        self.lane_width = float(lane_width_m)
+        self.lanes = []
+        self.current_lane = None
+        self.lateral_offset = 0.0
+
+    def add_lane(self, lane_id, center_xy, heading_rad: float):
+        self.lanes.append({
+            "id": lane_id,
+            "center": np.asarray(center_xy, dtype=float).reshape(2),
+            "heading": float(heading_rad),
+        })
+
+    def _lateral_distance(self, lane, pos_xy) -> float:
+        pos = np.asarray(pos_xy, dtype=float).reshape(2)
+        diff = pos - lane["center"]
+        perp = np.array([-math.sin(lane["heading"]),
+                         math.cos(lane["heading"])])
+        return float(np.dot(diff, perp))
+
+    def assign_lane(self, pos_xy):
+        pos = np.asarray(pos_xy, dtype=float).reshape(2)
+        best = None
+        best_d = float("inf")
+        for lane in self.lanes:
+            d = float(np.linalg.norm(pos - lane["center"]))
+            if d < best_d:
+                best_d = d
+                best = lane
+        self.current_lane = best
+        if best is not None:
+            self.lateral_offset = self._lateral_distance(best, pos_xy)
+        return best, best_d
+
+    def in_lane_bounds(self, pos_xy) -> bool:
+        if self.current_lane is None:
+            self.assign_lane(pos_xy)
+        if self.current_lane is None:
+            return False
+        lat = self._lateral_distance(self.current_lane, pos_xy)
+        return abs(lat) <= self.lane_width / 2.0
+
+    def lane_constrained_position(self, raw_xy):
+        pos = np.asarray(raw_xy, dtype=float).reshape(2)
+        lane, _ = self.assign_lane(pos)
+        if lane is None:
+            return pos
+        lat = self._lateral_distance(lane, pos)
+        if abs(lat) <= self.lane_width / 2.0:
+            perp = np.array([-math.sin(lane["heading"]),
+                             math.cos(lane["heading"])])
+            return pos - lat * perp
+        return pos

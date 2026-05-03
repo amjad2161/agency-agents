@@ -2076,3 +2076,72 @@ class NavICReceiver:
             return float(math.sqrt(max(Q[0, 0] + Q[1, 1] + Q[2, 2], 0.0)))
         except np.linalg.LinAlgError:
             return float("inf")
+
+
+# ============================================================================
+# R24 — QZSS (Quasi-Zenith Satellite System) Receiver
+# ============================================================================
+
+class QZSSReceiver:
+    """QZSS (Japan) high-elevation augmentation receiver."""
+
+    F_L1 = 1575.42e6
+    F_L2 = 1227.60e6
+    F_L6 = 1278.75e6
+    C = 299792458.0
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.sats = {}
+        self.sbas_corr = {}
+
+    def add_satellite(self, prn, pos_ecef, health: bool = True):
+        np = self._np
+        self.sats[prn] = {
+            "pos_ecef": np.asarray(pos_ecef, dtype=float).reshape(3),
+            "health": bool(health),
+        }
+
+    def add_sbas_correction(self, prn, range_corr_m: float):
+        self.sbas_corr[prn] = float(range_corr_m)
+
+    def corrected_pseudorange(self, prn, raw_pr_m: float) -> float:
+        corr = self.sbas_corr.get(prn, 0.0)
+        return float(raw_pr_m) + float(corr)
+
+    def elevation_mask(self, rx_pos, min_elevation_rad: float = 0.0873):
+        np = self._np
+        rx = np.asarray(rx_pos, dtype=float).reshape(3)
+        visible = []
+        for prn, sv in self.sats.items():
+            if not sv["health"]:
+                continue
+            diff = sv["pos_ecef"] - rx
+            rng = float(np.linalg.norm(diff)) + 1e-12
+            el = float(math.asin(max(-1.0, min(1.0, diff[2] / rng))))
+            if el >= float(min_elevation_rad):
+                visible.append(prn)
+        return visible
+
+    def lex_clock_correction(self, prn, satellite_clock_err_m: float) -> float:
+        return float(satellite_clock_err_m) * 0.95
+
+    def dop_from_visible(self, rx_pos) -> float:
+        np = self._np
+        rx = np.asarray(rx_pos, dtype=float).reshape(3)
+        rows = []
+        for prn, sv in self.sats.items():
+            if not sv["health"]:
+                continue
+            diff = rx - sv["pos_ecef"]
+            rng = float(np.linalg.norm(diff)) + 1e-12
+            rows.append([diff[0] / rng, diff[1] / rng, diff[2] / rng, 1.0])
+        if len(rows) < 4:
+            return float("inf")
+        H = np.asarray(rows, dtype=float)
+        try:
+            Q = np.linalg.inv(H.T @ H)
+            return float(math.sqrt(max(float(np.trace(Q)), 0.0)))
+        except np.linalg.LinAlgError:
+            return float("inf")

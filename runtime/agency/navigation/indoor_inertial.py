@@ -1217,3 +1217,64 @@ class WheelEncoderOdometry:
         v_linear = (dl + dr) / (2.0 * max(float(dt), 1e-9))
         v_angular = (dr - dl) / (self.L * max(float(dt), 1e-9))
         return float(v_linear), float(v_angular)
+
+
+# ============================================================================
+# R24 — ZUPT Velocity Aider (zero-velocity detector + EKF velocity aiding)
+# ============================================================================
+
+class ZUPTVelocityAider:
+    """Zero-velocity detector with Kalman velocity aiding for foot-mounted IMU."""
+
+    def __init__(self, accel_threshold: float = 0.05,
+                 gyro_threshold: float = 0.01, window: int = 5):
+        self.accel_thr = float(accel_threshold)
+        self.gyro_thr = float(gyro_threshold)
+        self.window = int(window)
+        self._accel_buf = []
+        self._gyro_buf = []
+        self.velocity = np.zeros(3)
+        self.P_vel = np.eye(3) * 0.01
+        self.Q_vel = np.eye(3) * 1e-4
+        self.R_zupt = np.eye(3) * 1e-6
+
+    def push_sample(self, accel, gyro):
+        self._accel_buf.append(float(np.linalg.norm(
+            np.asarray(accel, dtype=float).reshape(3))))
+        self._gyro_buf.append(float(np.linalg.norm(
+            np.asarray(gyro, dtype=float).reshape(3))))
+        if len(self._accel_buf) > self.window:
+            self._accel_buf.pop(0)
+            self._gyro_buf.pop(0)
+
+    def is_stationary(self) -> bool:
+        if len(self._accel_buf) < self.window:
+            return False
+        a_var = float(np.var(self._accel_buf))
+        g_var = float(np.var(self._gyro_buf))
+        return a_var < self.accel_thr and g_var < self.gyro_thr
+
+    def predict_velocity(self, accel_ned, dt: float):
+        a = np.asarray(accel_ned, dtype=float).reshape(3)
+        self.velocity = self.velocity + a * float(dt)
+        self.P_vel = self.P_vel + self.Q_vel
+        return self.velocity.copy()
+
+    def apply_zupt(self):
+        H = np.eye(3)
+        S = H @ self.P_vel @ H.T + self.R_zupt
+        try:
+            K = self.P_vel @ H.T @ np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            return self.velocity.copy()
+        innov = np.zeros(3) - self.velocity
+        self.velocity = self.velocity + K @ innov
+        self.P_vel = (np.eye(3) - K @ H) @ self.P_vel
+        return self.velocity.copy()
+
+    def step(self, accel, gyro, accel_ned, dt: float):
+        self.push_sample(accel, gyro)
+        self.predict_velocity(accel_ned, dt)
+        if self.is_stationary():
+            self.apply_zupt()
+        return self.velocity.copy(), self.is_stationary()
