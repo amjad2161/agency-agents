@@ -59,6 +59,7 @@ def build_app(repo: Path | None = None) -> FastAPI:
     # HTML/CSS/JS). Falls back to the embedded _CHAT_HTML constant if
     # the file is missing (developer-mode fallback).
     _chat_html_path = Path(__file__).parent / "static" / "chat.html"
+    _swarm_html_path = Path(__file__).parent / "static" / "swarm.html"
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
@@ -66,6 +67,14 @@ def build_app(repo: Path | None = None) -> FastAPI:
             return _chat_html_path.read_text(encoding="utf-8")
         except FileNotFoundError:
             return _CHAT_HTML
+
+    @app.get("/swarm", response_class=HTMLResponse)
+    def swarm_dashboard() -> str:
+        """J.A.R.V.I.S Swarm Command Center — cinematic multi-agent visualization."""
+        try:
+            return _swarm_html_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return "<h1>Swarm dashboard not found — ensure static/swarm.html exists.</h1>"
 
     @app.get("/api/version")
     def version_endpoint() -> dict[str, str]:
