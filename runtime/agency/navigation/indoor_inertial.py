@@ -1095,3 +1095,78 @@ class AckermannOdometry:
 
     def reset(self):
         self.pose = np.zeros(3)
+
+
+# ============================================================================
+# R18 — Motion Classifier (5-state IMU activity)
+# ============================================================================
+
+class MotionClassifier:
+    """Sliding-window IMU classifier — 5 motion states."""
+
+    STATES = ("stationary", "walking", "running", "vehicle", "elevator")
+    GRAVITY = 9.80665
+
+    def __init__(self, window: int = 50, fs: float = 100.0):
+        self.window = int(window)
+        self.fs = float(fs)
+        self._buffer = []
+        self._state = "stationary"
+
+    def push(self, accel, gyro):
+        a = np.asarray(accel, dtype=float).reshape(3).copy()
+        g = np.asarray(gyro, dtype=float).reshape(3).copy()
+        self._buffer.append((a, g))
+        if len(self._buffer) > self.window:
+            self._buffer.pop(0)
+
+    def features(self):
+        if len(self._buffer) < 2:
+            return np.zeros(6)
+        accel = np.stack([s[0] for s in self._buffer])
+        gyro = np.stack([s[1] for s in self._buffer])
+        a_mag = np.linalg.norm(accel, axis=1)
+        g_mag = np.linalg.norm(gyro, axis=1)
+        accel_var = float(np.var(a_mag))
+        accel_mean_norm = float(np.mean(a_mag))
+        gyro_var = float(np.var(g_mag))
+        # FFT dominant frequency in [0.5, 4] Hz
+        n = a_mag.size
+        if n >= 8:
+            spec = np.abs(np.fft.rfft(a_mag - accel_mean_norm))
+            freqs = np.fft.rfftfreq(n, d=1.0 / self.fs)
+            mask = (freqs >= 0.5) & (freqs <= 4.0)
+            if mask.any():
+                idx = int(np.argmax(spec[mask]))
+                step_freq = float(freqs[mask][idx])
+            else:
+                step_freq = 0.0
+        else:
+            step_freq = 0.0
+        vert_accel_std = float(np.std(accel[:, 2]))
+        jerk_rms = float(np.sqrt(np.mean(np.diff(a_mag) ** 2))) \
+            if a_mag.size > 1 else 0.0
+        return np.array([accel_var, accel_mean_norm, gyro_var, step_freq,
+                         vert_accel_std, jerk_rms])
+
+    def classify(self) -> str:
+        f = self.features()
+        accel_var, accel_mean_norm, gyro_var, step_freq, vert_std, _ = f
+        if accel_var < 0.01 and gyro_var < 0.001:
+            self._state = "stationary"
+        elif vert_std > 0.5 and step_freq < 0.5:
+            self._state = "elevator"
+        elif (accel_var < 0.5 and vert_std < 0.3
+              and 9.0 <= accel_mean_norm <= 11.0):
+            self._state = "vehicle"
+        elif 2.5 < step_freq <= 4.0 and accel_var > 5.0:
+            self._state = "running"
+        elif 0.5 <= step_freq <= 2.5 and 0.1 <= accel_var <= 5.0:
+            self._state = "walking"
+        else:
+            self._state = "walking"
+        return self._state
+
+    @property
+    def state(self) -> str:
+        return self._state

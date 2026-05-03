@@ -2124,3 +2124,62 @@ class HybridNavigationFilter:
     @property
     def mode(self) -> str:
         return self._mode
+
+
+# ============================================================================
+# R18 — Robust M-Estimator (Huber/Tukey reweighted KF update)
+# ============================================================================
+
+class RobustMEstimator:
+    """KF update with Huber or Tukey M-estimator reweighting."""
+
+    def __init__(self, state_dim: int = 3, obs_dim: int = 1):
+        import numpy as _np
+        self._np = _np
+        self.n = int(state_dim)
+        self.m = int(obs_dim)
+        self.x = _np.zeros(self.n)
+        self.P = _np.eye(self.n)
+        self.H = _np.zeros((self.m, self.n))
+        self.H[0, 0] = 1.0
+        self.R = _np.eye(self.m)
+
+    @staticmethod
+    def huber_weight(r: float, k: float = 1.345) -> float:
+        ar = abs(float(r))
+        return 1.0 if ar <= float(k) else float(k) / max(ar, 1e-12)
+
+    @staticmethod
+    def tukey_weight(r: float, c: float = 4.685) -> float:
+        ar = abs(float(r))
+        if ar >= float(c):
+            return 0.0
+        return (1.0 - (ar / float(c)) ** 2) ** 2
+
+    def predict(self, F, Q):
+        np = self._np
+        F = np.asarray(F, dtype=float).reshape(self.n, self.n)
+        Q = np.asarray(Q, dtype=float).reshape(self.n, self.n)
+        self.x = F @ self.x
+        self.P = F @ self.P @ F.T + Q
+
+    def robust_update(self, z, mode: str = "huber"):
+        np = self._np
+        z = np.asarray(z, dtype=float).reshape(self.m)
+        v = z - self.H @ self.x
+        sigma = np.sqrt(np.maximum(np.diag(self.R), 1e-12))
+        r_norm = v / sigma
+        if mode == "tukey":
+            weights = np.array([self.tukey_weight(r) for r in r_norm])
+        else:
+            weights = np.array([self.huber_weight(r) for r in r_norm])
+        weights = np.maximum(weights, 1e-6)
+        R_eff = self.R / weights[:, None]
+        S = self.H @ self.P @ self.H.T + R_eff
+        try:
+            K = self.P @ self.H.T @ np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            return self.x.copy()
+        self.x = self.x + K @ v
+        self.P = (np.eye(self.n) - K @ self.H) @ self.P
+        return self.x.copy()

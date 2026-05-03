@@ -1706,3 +1706,99 @@ class KeplerOrbitPropagator:
 
     def sv_velocity(self, t: float, dt: float = 0.01):
         return (self.sv_position(t + dt) - self.sv_position(t - dt)) / (2.0 * dt)
+
+
+# ============================================================================
+# R18 — PVT Solver (iterative WLS pseudorange-based PVT + DOP + ECEF→LLA)
+# ============================================================================
+
+class PVTSolver:
+    """Iterative weighted-LS Position-Velocity-Time solver."""
+
+    C = 2.998e8  # speed of light (m/s)
+    A_WGS = 6378137.0
+    F_WGS = 1.0 / 298.257223563
+    E2_WGS = 6.69437999014e-3
+
+    def __init__(self, sigma_pr: float = 3.0):
+        import numpy as _np
+        self._np = _np
+        self.sigma_pr = float(sigma_pr)
+        self._x = _np.zeros(4)
+        self._dop = _np.ones(4)
+
+    def compute_pvt(self, sv_pos, pseudoranges, n_iter: int = 10):
+        np = self._np
+        sv = np.asarray(sv_pos, dtype=float).reshape(-1, 3)
+        pr = np.asarray(pseudoranges, dtype=float).reshape(-1)
+        n = sv.shape[0]
+        if n < 4 or pr.size != n:
+            return self._x.copy()
+        x = self._x.copy()
+        for _ in range(int(n_iter)):
+            diff = sv - x[:3]
+            rho_geom = np.linalg.norm(diff, axis=1)
+            rho_hat = rho_geom + x[3]
+            delta = pr - rho_hat
+            H = np.zeros((n, 4))
+            H[:, :3] = -diff / np.maximum(rho_geom[:, None], 1e-9)
+            H[:, 3] = 1.0
+            try:
+                dx, *_ = np.linalg.lstsq(H, delta, rcond=None)
+            except np.linalg.LinAlgError:
+                break
+            x = x + dx
+            if float(np.linalg.norm(dx)) < 1e-4:
+                break
+        self._x = x
+        return x.copy()
+
+    def compute_dop(self, sv_pos):
+        np = self._np
+        sv = np.asarray(sv_pos, dtype=float).reshape(-1, 3)
+        n = sv.shape[0]
+        if n < 4:
+            self._dop = np.full(4, float("inf"))
+            return self._dop.copy()
+        diff = sv - self._x[:3]
+        rho = np.linalg.norm(diff, axis=1)
+        H = np.zeros((n, 4))
+        H[:, :3] = -diff / np.maximum(rho[:, None], 1e-9)
+        H[:, 3] = 1.0
+        try:
+            Q = np.linalg.inv(H.T @ H)
+        except np.linalg.LinAlgError:
+            self._dop = np.full(4, float("inf"))
+            return self._dop.copy()
+        gdop = math.sqrt(max(float(np.trace(Q)), 0.0))
+        pdop = math.sqrt(max(Q[0, 0] + Q[1, 1] + Q[2, 2], 0.0))
+        hdop = math.sqrt(max(Q[0, 0] + Q[1, 1], 0.0))
+        vdop = math.sqrt(max(Q[2, 2], 0.0))
+        self._dop = np.array([gdop, pdop, hdop, vdop])
+        return self._dop.copy()
+
+    def ecef_to_lla(self, xyz):
+        np = self._np
+        x, y, z = [float(v) for v in np.asarray(xyz, dtype=float).reshape(3)]
+        a = self.A_WGS
+        e2 = self.E2_WGS
+        lon = math.atan2(y, x)
+        p = math.sqrt(x * x + y * y)
+        lat = math.atan2(z, p * (1.0 - e2))
+        for _ in range(8):
+            sin_lat = math.sin(lat)
+            N = a / math.sqrt(1.0 - e2 * sin_lat * sin_lat)
+            alt = p / max(math.cos(lat), 1e-12) - N
+            new_lat = math.atan2(z, p * (1.0 - e2 * N / max(N + alt, 1e-12)))
+            if abs(new_lat - lat) < 1e-12:
+                lat = new_lat
+                break
+            lat = new_lat
+        sin_lat = math.sin(lat)
+        N = a / math.sqrt(1.0 - e2 * sin_lat * sin_lat)
+        alt = p / max(math.cos(lat), 1e-12) - N
+        return np.array([math.degrees(lat), math.degrees(lon), alt])
+
+    @property
+    def position(self):
+        return self._x[:3].copy()

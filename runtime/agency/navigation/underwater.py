@@ -1409,3 +1409,48 @@ class HydrophoneArrayLocator:
         np = self._np
         return float(np.linalg.norm(np.asarray(estimated, dtype=float)
                                     - np.asarray(true_pos, dtype=float)))
+
+
+# ============================================================================
+# R18 — Underwater Current Estimator (DVL vs INS velocity differencing)
+# ============================================================================
+
+class UnderwaterCurrentEstimator:
+    """Estimate ocean current from DVL (water-relative) - INS (earth-relative)."""
+
+    def __init__(self, alpha: float = 0.05):
+        import numpy as _np
+        self._np = _np
+        self.alpha = float(np.clip(alpha, 0.0, 1.0))
+        self._current = _np.zeros(3)
+        self._history = []
+
+    def update(self, dvl_vel_world, ins_vel_world):
+        np = self._np
+        dvl = np.asarray(dvl_vel_world, dtype=float).reshape(3)
+        ins = np.asarray(ins_vel_world, dtype=float).reshape(3)
+        diff = dvl - ins
+        self._current = (1.0 - self.alpha) * self._current + self.alpha * diff
+        self._history.append(self._current.copy())
+
+    def compensate_dvl(self, dvl_vel_body, R_body_to_world):
+        np = self._np
+        v_body = np.asarray(dvl_vel_body, dtype=float).reshape(3)
+        R = np.asarray(R_body_to_world, dtype=float).reshape(3, 3)
+        return R @ v_body - self._current
+
+    def current_magnitude(self) -> float:
+        np = self._np
+        return float(np.linalg.norm(self._current))
+
+    def current_direction_deg(self) -> float:
+        n_comp = float(self._current[0])
+        e_comp = float(self._current[1])
+        # Compass convention: N = 0°, E = 90°
+        deg = math.degrees(math.atan2(e_comp, n_comp))
+        return float(deg % 360.0)
+
+    def reset(self):
+        np = self._np
+        self._current = np.zeros(3)
+        self._history.clear()

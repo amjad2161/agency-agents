@@ -835,3 +835,9 @@ from ._r16_slam import GraphSLAM  # noqa: E402,F401
 # R17 — re-export ICPScanMatcher
 # ============================================================================
 from ._r17_slam import ICPScanMatcher  # noqa: E402,F401
+
+
+# ============================================================================
+# R18 — re-export MonteCarloLocalization
+# ============================================================================
+from ._r18_slam import MonteCarloLocalization  # noqa: E402,F401
