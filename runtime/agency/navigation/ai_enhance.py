@@ -1835,3 +1835,100 @@ class TemporalConvOdometry:
         self.W_out -= lr * dW_out
         self.b_out -= lr * db_out
         return loss
+
+
+# ============================================================================
+# R10 — Online Bayesian Position Filter (Gaussian-mixture belief)
+# ============================================================================
+
+class OnlineBayesianPosFilter:
+    """Online Gaussian-mixture position filter (K=5 components).
+
+    Maintains a fixed-cardinality mixture; predict convolves each component
+    with motion noise, update reweights by measurement likelihood, and
+    resample merges low-weight components into their nearest neighbour.
+    """
+
+    def __init__(self, n_components: int = 5, dim: int = 2,
+                 init_spread: float = 5.0, seed: int = 0):
+        self.n = int(n_components)
+        self.dim = int(dim)
+        rng = np.random.default_rng(int(seed))
+        self.means = rng.normal(0.0, float(init_spread), (self.n, self.dim))
+        self.covs = np.tile(np.eye(self.dim) * 1.0, (self.n, 1, 1))
+        self.weights = np.full(self.n, 1.0 / self.n)
+
+    def predict(self, motion_delta, motion_sigma: float):
+        delta = np.asarray(motion_delta, dtype=float).reshape(self.dim)
+        Q = (float(motion_sigma) ** 2) * np.eye(self.dim)
+        self.means = self.means + delta
+        self.covs = self.covs + Q
+
+    def update(self, measurement, meas_sigma: float):
+        z = np.asarray(measurement, dtype=float).reshape(self.dim)
+        R = (float(meas_sigma) ** 2) * np.eye(self.dim)
+        new_w = np.zeros_like(self.weights)
+        for k in range(self.n):
+            S = self.covs[k] + R
+            try:
+                S_inv = np.linalg.inv(S)
+            except np.linalg.LinAlgError:
+                S_inv = np.linalg.pinv(S)
+            d = z - self.means[k]
+            quad = float(d @ S_inv @ d)
+            det_S = max(float(np.linalg.det(S)), 1e-12)
+            like = math.exp(-0.5 * quad) / math.sqrt((2 * math.pi) ** self.dim
+                                                      * det_S)
+            new_w[k] = self.weights[k] * like
+            # Kalman update of component
+            K = self.covs[k] @ S_inv
+            self.means[k] = self.means[k] + K @ d
+            self.covs[k] = (np.eye(self.dim) - K) @ self.covs[k]
+        total = float(np.sum(new_w))
+        if total > 0.0:
+            self.weights = new_w / total
+        else:
+            self.weights = np.full(self.n, 1.0 / self.n)
+
+    def get_position_estimate(self):
+        """Weighted mean and total covariance (mixture moment matching)."""
+        mean = np.sum(self.weights[:, None] * self.means, axis=0)
+        cov = np.zeros((self.dim, self.dim))
+        for k in range(self.n):
+            d = (self.means[k] - mean).reshape(-1, 1)
+            cov = cov + self.weights[k] * (self.covs[k] + d @ d.T)
+        return (mean, cov)
+
+    def resample_components(self):
+        """Merge any component with weight < 0.05 into its nearest neighbour."""
+        low = np.where(self.weights < 0.05)[0]
+        if low.size == 0:
+            return
+        for k in low:
+            # Nearest non-low component
+            others = [j for j in range(self.n) if j != k]
+            if not others:
+                continue
+            dists = [float(np.linalg.norm(self.means[j] - self.means[k]))
+                     for j in others]
+            j = others[int(np.argmin(dists))]
+            w_sum = self.weights[j] + self.weights[k]
+            if w_sum <= 0:
+                continue
+            new_mean = (self.weights[j] * self.means[j]
+                        + self.weights[k] * self.means[k]) / w_sum
+            d_j = (self.means[j] - new_mean).reshape(-1, 1)
+            d_k = (self.means[k] - new_mean).reshape(-1, 1)
+            new_cov = (self.weights[j] * (self.covs[j] + d_j @ d_j.T)
+                       + self.weights[k] * (self.covs[k] + d_k @ d_k.T)) / w_sum
+            self.means[j] = new_mean
+            self.covs[j] = new_cov
+            self.weights[j] = w_sum
+            # Re-init the merged component as a small-weight perturbation
+            self.weights[k] = 1e-6
+            self.means[k] = new_mean + np.ones(self.dim) * 1e-3
+            self.covs[k] = np.eye(self.dim)
+        # Renormalise
+        total = float(np.sum(self.weights))
+        if total > 0:
+            self.weights = self.weights / total

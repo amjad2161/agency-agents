@@ -765,3 +765,43 @@ class AltimeterBaroVSI:
     @property
     def crossover_freq(self) -> float:
         return 0.1
+
+
+# ============================================================================
+# R10 — Crouch / activity classifier
+# ============================================================================
+
+class CrouchDetector:
+    """Indoor human-activity classifier from accelerometer windows.
+
+    Classes: stationary, walking, running, crouching.
+    """
+
+    GRAVITY = 9.80665
+
+    def __init__(self):
+        pass
+
+    def extract_features(self, accel_window):
+        """Return (mean_magnitude, magnitude_variance, vertical_ratio).
+
+        vertical_ratio = mean(|a_z|) / mean(|a|)  (1 = pure vertical).
+        """
+        a = np.asarray(accel_window, dtype=float).reshape(-1, 3)
+        mag = np.linalg.norm(a, axis=1)
+        mean_mag = float(np.mean(mag))
+        var_mag = float(np.var(mag - self.GRAVITY))
+        denom = float(np.mean(np.abs(a))) + 1e-9
+        vert_ratio = float(np.mean(np.abs(a[:, 2])) / denom)
+        return (mean_mag, var_mag, vert_ratio)
+
+    def classify(self, accel_window) -> str:
+        _, var_mag, vert_ratio = self.extract_features(accel_window)
+        # Crouching: low-mid variance + low vertical dominance (lateral motion)
+        if var_mag < 2.0 and vert_ratio < 0.5:
+            return "crouching"
+        if var_mag < 0.1:
+            return "stationary"
+        if var_mag <= 2.0:
+            return "walking"
+        return "running"

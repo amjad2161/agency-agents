@@ -1487,3 +1487,90 @@ class DualRateKalmanFilter:
         self.x = self.x + K @ (z - H @ self.x)
         self.P = (np.eye(6) - K @ H) @ self.P
         return self.x.copy()
+
+
+# ============================================================================
+# R10 — Cubic-Hermite navigation-state interpolator
+# ============================================================================
+
+class NavStateInterpolator:
+    """Cubic-Hermite spline interpolator over (time, position, velocity) states.
+
+    States: list of dicts {"t": float, "pos": (3,), "vel": (3,)}.
+    """
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.states = []
+
+    def add_state(self, t: float, pos, vel):
+        np = self._np
+        self.states.append({
+            "t": float(t),
+            "pos": np.asarray(pos, dtype=float).reshape(-1),
+            "vel": np.asarray(vel, dtype=float).reshape(-1),
+        })
+        self.states.sort(key=lambda s: s["t"])
+
+    def interpolate(self, t_query: float):
+        """Cubic-Hermite interpolate (pos, vel) at ``t_query``."""
+        np = self._np
+        if not self.states:
+            raise ValueError("no states")
+        tq = float(t_query)
+        # Bracket with binary search (linear OK for small N)
+        if tq <= self.states[0]["t"]:
+            s = self.states[0]
+            return (s["pos"].copy(), s["vel"].copy())
+        if tq >= self.states[-1]["t"]:
+            s = self.states[-1]
+            return (s["pos"].copy(), s["vel"].copy())
+        for i in range(len(self.states) - 1):
+            if self.states[i]["t"] <= tq <= self.states[i + 1]["t"]:
+                s0, s1 = self.states[i], self.states[i + 1]
+                break
+        h = s1["t"] - s0["t"]
+        if h <= 0:
+            return (s0["pos"].copy(), s0["vel"].copy())
+        u = (tq - s0["t"]) / h
+        # Hermite basis
+        h00 = 2 * u ** 3 - 3 * u ** 2 + 1
+        h10 = u ** 3 - 2 * u ** 2 + u
+        h01 = -2 * u ** 3 + 3 * u ** 2
+        h11 = u ** 3 - u ** 2
+        pos = h00 * s0["pos"] + h10 * h * s0["vel"] \
+              + h01 * s1["pos"] + h11 * h * s1["vel"]
+        # Velocity = derivative of basis / h
+        d00 = (6 * u ** 2 - 6 * u) / h
+        d10 = (3 * u ** 2 - 4 * u + 1)
+        d01 = (-6 * u ** 2 + 6 * u) / h
+        d11 = (3 * u ** 2 - 2 * u)
+        vel = d00 * s0["pos"] + d10 * s0["vel"] \
+              + d01 * s1["pos"] + d11 * s1["vel"]
+        return (pos, vel)
+
+    def velocity_from_positions(self, states):
+        """Estimate velocities via centred finite differences."""
+        np = self._np
+        pts = list(states)
+        n = len(pts)
+        if n == 0:
+            return np.zeros((0, 3))
+        positions = np.stack([np.asarray(p["pos"], dtype=float).reshape(-1)
+                              for p in pts])
+        times = np.array([float(p["t"]) for p in pts])
+        vel = np.zeros_like(positions)
+        if n == 1:
+            return vel
+        vel[0] = (positions[1] - positions[0]) / max(times[1] - times[0], 1e-9)
+        vel[-1] = (positions[-1] - positions[-2]) \
+                  / max(times[-1] - times[-2], 1e-9)
+        for i in range(1, n - 1):
+            dt = max(times[i + 1] - times[i - 1], 1e-9)
+            vel[i] = (positions[i + 1] - positions[i - 1]) / dt
+        return vel
+
+    def clear_before(self, t: float):
+        cutoff = float(t)
+        self.states = [s for s in self.states if s["t"] >= cutoff]

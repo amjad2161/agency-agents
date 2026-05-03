@@ -1123,3 +1123,87 @@ class MultiPathMitigator:
         np = self._np
         d = np.asarray(phase_diffs, dtype=float).reshape(-1)
         return np.abs(d) > float(threshold)
+
+
+# ============================================================================
+# R10 — Receiver Autonomous Integrity Monitoring (Solution-Separation RAIM)
+# ============================================================================
+
+class ReceiverAutonomousIntegrityMonitoring:
+    """Solution-Separation RAIM (SS-RAIM) for GNSS integrity.
+
+    Computes per-satellite slope and protection levels (HPL, VPL) using
+    the geometry matrix and a per-SV UERE σ.  Issues an alert when the
+    horizontal or vertical protection level exceeds its limit.
+    """
+
+    DEFAULT_HAL = 556.0  # m, en-route alert limit
+    DEFAULT_VAL = 50.0   # m, vertical alert limit
+    K_FAULT = 5.33       # MHSS fault-mode multiplier (P_fault ≈ 1e-7 budget)
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+
+    def compute_protection_level(self, geometry_matrix, sigma_uere,
+                                 fault_prob: float = 1e-4):
+        """Return (HPL, VPL) in metres.
+
+        HPL = K · σ_pos_horiz · max_slope_h
+        VPL = K · σ_pos_vert  · max_slope_v
+        """
+        np = self._np
+        H = np.asarray(geometry_matrix, dtype=float).reshape(-1, 4) \
+            if hasattr(geometry_matrix, "shape") and geometry_matrix.shape[-1] == 4 \
+            else np.asarray(geometry_matrix, dtype=float)
+        sigma = np.asarray(sigma_uere, dtype=float).reshape(-1)
+        if H.ndim != 2 or H.shape[0] < H.shape[1]:
+            return (float("inf"), float("inf"))
+
+        # Weighted normal-equation inverse: P = (Hᵀ W H)⁻¹
+        W = np.diag(1.0 / np.maximum(sigma ** 2, 1e-12))
+        try:
+            P = np.linalg.inv(H.T @ W @ H)
+        except np.linalg.LinAlgError:
+            return (float("inf"), float("inf"))
+
+        # Position-state variances
+        sigma_h = math.sqrt(max(P[0, 0] + P[1, 1], 0.0))
+        sigma_v = math.sqrt(max(P[2, 2], 0.0))
+
+        # Per-SV slope (Brown 1992): slope_i = sqrt(s_i_h or v) / sqrt(W_ii) where
+        # s = (HᵀWH)⁻¹HᵀW; here we approximate by leverages.
+        try:
+            S = P @ H.T @ W                          # (4, n)
+            slopes_h = np.sqrt(np.maximum(S[0] ** 2 + S[1] ** 2, 0.0)) \
+                       * np.sqrt(np.maximum(np.diag(W), 1e-12))
+            slopes_v = np.sqrt(np.maximum(S[2] ** 2, 0.0)) \
+                       * np.sqrt(np.maximum(np.diag(W), 1e-12))
+            max_h = float(np.max(slopes_h))
+            max_v = float(np.max(slopes_v))
+        except Exception:
+            max_h = max_v = 1.0
+
+        # Fault-mode multiplier from chi-square approximation
+        K = self.K_FAULT * max(1.0, math.sqrt(-math.log(max(fault_prob, 1e-12))))
+        hpl = K * sigma_h * max(max_h, 1.0)
+        vpl = K * sigma_v * max(max_v, 1.0)
+        return (float(hpl), float(vpl))
+
+    def solution_separation(self, all_subsets, full_solution):
+        """Maximum element-wise separation between full and subset solutions."""
+        np = self._np
+        full = np.asarray(full_solution, dtype=float).reshape(-1)
+        max_sep = np.zeros_like(full)
+        for sub in all_subsets:
+            s = np.asarray(sub, dtype=float).reshape(-1)
+            sep = np.abs(s - full)
+            max_sep = np.maximum(max_sep, sep)
+        return max_sep
+
+    def alert(self, HPL: float, HAL: float = None, VPL: float = 0.0,
+              VAL: float = 50.0) -> bool:
+        """Return True if either protection level exceeds its alert limit."""
+        hal = float(HAL) if HAL is not None else self.DEFAULT_HAL
+        val = float(VAL)
+        return bool(float(HPL) > hal or float(VPL) > val)

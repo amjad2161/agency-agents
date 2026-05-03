@@ -1137,3 +1137,62 @@ class PressureDepthNav:
         if arr.size == 0:
             return arr
         return np.gradient(arr, float(dt))
+
+
+# ============================================================================
+# R10 — Underwater DVL (Doppler Velocity Log) Navigator
+# ============================================================================
+
+class UnderwaterDVLNavigator:
+    """4-beam Janus-configuration DVL dead-reckoning.
+
+    Beams 1–4 oriented at azimuths 0°, 90°, 180°, 270° from heading and
+    inclined ``beam_angle_deg`` from vertical (default 30°).
+    """
+
+    def __init__(self, beam_angle_deg: float = 30.0):
+        import numpy as _np
+        self._np = _np
+        self.beam_angle_deg = float(beam_angle_deg)
+
+    def compute_velocity_from_beams(self, beam_velocities,
+                                    beam_angles_deg=None):
+        """Recover body-frame (vx, vy, vz) from Janus beam radial velocities.
+
+        Janus geometry inversion:
+            vx = (b1 - b3) / (2·sin θ)
+            vy = (b2 - b4) / (2·sin θ)
+            vz = (b1 + b2 + b3 + b4) / (4·cos θ)
+        """
+        np = self._np
+        b = np.asarray(beam_velocities, dtype=float).reshape(-1)
+        if b.size < 4:
+            return np.zeros(3)
+        theta = math.radians(float(beam_angles_deg)
+                             if beam_angles_deg is not None
+                             else self.beam_angle_deg)
+        sin_t = max(math.sin(theta), 1e-9)
+        cos_t = max(math.cos(theta), 1e-9)
+        vx = (b[0] - b[2]) / (2.0 * sin_t)
+        vy = (b[1] - b[3]) / (2.0 * sin_t)
+        vz = (b[0] + b[1] + b[2] + b[3]) / (4.0 * cos_t)
+        return np.array([vx, vy, vz])
+
+    def integrate_position(self, vx: float, vy: float, vz: float,
+                           heading_rad: float, dt: float):
+        """Rotate body velocity into world frame and integrate by dt."""
+        c = math.cos(float(heading_rad))
+        s = math.sin(float(heading_rad))
+        dx = (c * vx - s * vy) * float(dt)
+        dy = (s * vx + c * vy) * float(dt)
+        dz = float(vz) * float(dt)
+        return (dx, dy, dz)
+
+    def detect_bottom_lock(self, beam_velocities,
+                           threshold: float = 20.0) -> bool:
+        """Bottom-lock when every beam radial velocity stays below threshold."""
+        np = self._np
+        b = np.asarray(beam_velocities, dtype=float).reshape(-1)
+        if b.size == 0:
+            return False
+        return bool(np.all(np.abs(b) < float(threshold)))
