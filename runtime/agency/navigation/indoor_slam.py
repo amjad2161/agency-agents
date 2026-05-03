@@ -953,3 +953,50 @@ class OfflineVectorMap:
     def total_length(self) -> float:
         return float(sum(self.segment_length(i)
                          for i in range(len(self.segments))))
+
+
+# ============================================================================
+# R25 — LiDAR Intensity Mapper (high-intensity feature extraction)
+# ============================================================================
+
+class LiDARIntensityMapper:
+    """LiDAR intensity feature extraction + scan-to-scan match counting."""
+
+    MATCH_RADIUS_M = 0.5
+
+    def __init__(self, intensity_threshold: float = 50.0):
+        self.intensity_threshold = float(intensity_threshold)
+        self._scans = []   # list of (points_xy Nx2, intensities N,)
+
+    def add_scan(self, points_xy, intensities):
+        pts = np.asarray(points_xy, dtype=float).reshape(-1, 2)
+        ints = np.asarray(intensities, dtype=float).reshape(-1)
+        self._scans.append((pts, ints))
+
+    def extract_features(self, scan_idx: int):
+        pts, ints = self._scans[int(scan_idx)]
+        mask = ints > self.intensity_threshold
+        return pts[mask]
+
+    def intensity_histogram(self, scan_idx: int, bins: int = 10):
+        _, ints = self._scans[int(scan_idx)]
+        return np.histogram(ints, bins=int(bins))
+
+    def match_scans(self, idx_a: int, idx_b: int) -> int:
+        feat_a = self.extract_features(int(idx_a))
+        feat_b = self.extract_features(int(idx_b))
+        if feat_a.shape[0] == 0 or feat_b.shape[0] == 0:
+            return 0
+        count = 0
+        for p in feat_a:
+            d = np.linalg.norm(feat_b - p, axis=1)
+            if float(d.min()) < self.MATCH_RADIUS_M:
+                count += 1
+        return int(count)
+
+    def dominant_intensity(self, scan_idx: int) -> float:
+        _, ints = self._scans[int(scan_idx)]
+        mask = ints > self.intensity_threshold
+        if mask.sum() == 0:
+            return 0.0
+        return float(ints[mask].mean())

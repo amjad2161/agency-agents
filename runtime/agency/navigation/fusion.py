@@ -2591,3 +2591,80 @@ class IteratedEKF:
         except np.linalg.LinAlgError:
             S_inv = np.linalg.pinv(S)
         return float(innov @ S_inv @ innov)
+
+
+# ============================================================================
+# R25 — Unscented RTS Smoother (UKF + backward smoother)
+# ============================================================================
+
+class UnscentedRTS:
+    """UKF sigma points + RTS backward smoother step."""
+
+    def __init__(self, dim: int, alpha: float = 1e-3, beta: float = 2.0,
+                 kappa: float = 0.0):
+        import numpy as _np
+        self._np = _np
+        self.dim = int(dim)
+        self.alpha = float(alpha)
+        self.beta = float(beta)
+        self.kappa = float(kappa)
+        self.lam = self.alpha ** 2 * (self.dim + self.kappa) - self.dim
+        n = self.dim
+        self.Wm = _np.full(2 * n + 1, 1.0 / (2.0 * (n + self.lam)))
+        self.Wc = _np.full(2 * n + 1, 1.0 / (2.0 * (n + self.lam)))
+        self.Wm[0] = self.lam / (n + self.lam)
+        self.Wc[0] = self.lam / (n + self.lam) + (1.0 - self.alpha ** 2 + self.beta)
+
+    def sigma_points(self, x, P):
+        np = self._np
+        x = np.asarray(x, dtype=float).reshape(self.dim)
+        P = np.asarray(P, dtype=float).reshape(self.dim, self.dim)
+        n = self.dim
+        try:
+            L = np.linalg.cholesky((n + self.lam) * P
+                                    + np.eye(n) * 1e-12)
+        except np.linalg.LinAlgError:
+            L = np.linalg.cholesky((n + self.lam)
+                                    * (P + np.eye(n) * 1e-6))
+        sigmas = np.zeros((2 * n + 1, n))
+        sigmas[0] = x
+        for i in range(n):
+            sigmas[i + 1] = x + L[:, i]
+            sigmas[n + i + 1] = x - L[:, i]
+        return sigmas
+
+    def predict(self, x, P, f, Q):
+        np = self._np
+        sigmas = self.sigma_points(x, P)
+        sigmas_f = np.array([np.asarray(f(s), dtype=float).reshape(self.dim)
+                             for s in sigmas])
+        x_pred = np.sum(self.Wm[:, None] * sigmas_f, axis=0)
+        P_pred = np.zeros((self.dim, self.dim))
+        Pxy = np.zeros((self.dim, self.dim))
+        for i in range(2 * self.dim + 1):
+            d = sigmas_f[i] - x_pred
+            d0 = sigmas[i] - np.asarray(x, dtype=float).reshape(self.dim)
+            P_pred += self.Wc[i] * np.outer(d, d)
+            Pxy += self.Wc[i] * np.outer(d0, d)
+        P_pred = P_pred + np.asarray(Q, dtype=float).reshape(
+            self.dim, self.dim)
+        return x_pred, P_pred, Pxy
+
+    def gain(self, P_f, P_p, Pxy):
+        np = self._np
+        try:
+            P_p_inv = np.linalg.inv(P_p)
+        except np.linalg.LinAlgError:
+            P_p_inv = np.linalg.pinv(P_p)
+        return np.asarray(Pxy, dtype=float) @ P_p_inv
+
+    def smooth_step(self, x_s_next, P_s_next, x_f, P_f, x_p, P_p, Pxy):
+        np = self._np
+        G = self.gain(P_f, P_p, Pxy)
+        x_s = np.asarray(x_f, dtype=float) + G @ (np.asarray(x_s_next, dtype=float)
+                                                  - np.asarray(x_p, dtype=float))
+        P_s = (np.asarray(P_f, dtype=float)
+               + G @ (np.asarray(P_s_next, dtype=float)
+                      - np.asarray(P_p, dtype=float)) @ G.T)
+        P_s = 0.5 * (P_s + P_s.T)
+        return x_s, P_s

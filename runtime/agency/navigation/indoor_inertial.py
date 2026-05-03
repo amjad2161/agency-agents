@@ -1278,3 +1278,47 @@ class ZUPTVelocityAider:
         if self.is_stationary():
             self.apply_zupt()
         return self.velocity.copy(), self.is_stationary()
+
+
+# ============================================================================
+# R25 — Magnetic Compass Calibration (hard/soft iron + heading)
+# ============================================================================
+
+class MagneticCompassCalibration:
+    """Magnetometer hard/soft iron calibration + tilt-free heading."""
+
+    def __init__(self):
+        self._samples = []
+        self._centre = np.zeros(3)
+        self._scale = np.ones(3)
+
+    def add_sample(self, mag_xyz):
+        self._samples.append(np.asarray(mag_xyz, dtype=float).reshape(3).copy())
+
+    def fit_ellipsoid(self):
+        if not self._samples:
+            return self._centre.copy(), self._scale.copy()
+        s = np.stack(self._samples)
+        self._centre = s.mean(axis=0)
+        self._scale = s.std(axis=0)
+        # Avoid zero scale
+        self._scale = np.where(self._scale < 1e-9, 1.0, self._scale)
+        return self._centre.copy(), self._scale.copy()
+
+    def calibrate(self, mag_xyz):
+        v = np.asarray(mag_xyz, dtype=float).reshape(3)
+        return (v - self._centre) / self._scale
+
+    def heading(self, mag_xyz) -> float:
+        c = self.calibrate(mag_xyz)
+        return float(math.atan2(c[1], c[0]))
+
+    def quality(self) -> float:
+        if not self._samples:
+            return 1.0
+        s = np.stack(self._samples)
+        std = s.std(axis=0)
+        mn = float(std.min()); mx = float(std.max())
+        if mx <= 1e-12:
+            return 1.0
+        return float(mn / mx)

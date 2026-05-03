@@ -2557,3 +2557,56 @@ class MapBasedLaneEstimator:
                              math.cos(lane["heading"])])
             return pos - lat * perp
         return pos
+
+
+# ============================================================================
+# R25 — Neural Odometry Regressor (2-layer MLP IMU-window → displacement)
+# ============================================================================
+
+class NeuralOdometryRegressor:
+    """2-layer MLP regressing displacement from IMU windows."""
+
+    def __init__(self, input_dim: int = 6, hidden: int = 32,
+                 output_dim: int = 3):
+        self.input_dim = int(input_dim)
+        self.hidden = int(hidden)
+        self.output_dim = int(output_dim)
+        rng = np.random.default_rng(42)
+        self.W1 = rng.standard_normal((self.hidden, self.input_dim)) * 0.01
+        self.b1 = np.zeros(self.hidden)
+        self.W2 = rng.standard_normal((self.output_dim, self.hidden)) * 0.01
+        self.b2 = np.zeros(self.output_dim)
+
+    def relu(self, x):
+        return np.maximum(0.0, np.asarray(x, dtype=float))
+
+    def forward(self, x):
+        x = np.asarray(x, dtype=float).reshape(-1)
+        if x.size != self.input_dim:
+            raise ValueError("input size mismatch")
+        h = self.relu(self.W1 @ x + self.b1)
+        out = self.W2 @ h + self.b2
+        return out, h
+
+    def predict_displacement(self, imu_window):
+        flat = np.asarray(imu_window, dtype=float).reshape(-1)
+        if flat.size != self.input_dim:
+            # Re-init W1/b1 to match flattened size
+            rng = np.random.default_rng(42)
+            self.input_dim = int(flat.size)
+            self.W1 = rng.standard_normal((self.hidden, self.input_dim)) * 0.01
+            self.b1 = np.zeros(self.hidden)
+        out, _ = self.forward(flat)
+        return out
+
+    def update_weights(self, grad_W2, grad_b2, lr: float = 1e-3):
+        self.W2 = self.W2 - float(lr) * np.asarray(grad_W2, dtype=float).reshape(
+            self.W2.shape)
+        self.b2 = self.b2 - float(lr) * np.asarray(grad_b2, dtype=float).reshape(
+            self.b2.shape)
+
+    def window_norm(self, imu_window):
+        w = np.asarray(imu_window, dtype=float)
+        m = w.mean(axis=0, keepdims=True)
+        s = w.std(axis=0, keepdims=True) + 1e-8
+        return (w - m) / s

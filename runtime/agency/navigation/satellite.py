@@ -2145,3 +2145,77 @@ class QZSSReceiver:
             return float(math.sqrt(max(float(np.trace(Q)), 0.0)))
         except np.linalg.LinAlgError:
             return float("inf")
+
+
+# ============================================================================
+# R25 — BeiDou (BDS) Receiver — B1C/B2A/B3I + BDSBAS
+# ============================================================================
+
+class BeiDouReceiver:
+    """BeiDou receiver with B1C/B2A/B3I signals + BDSBAS corrections."""
+
+    F_B1C = 1575.42e6
+    F_B2A = 1176.45e6
+    F_B3I = 1268.52e6
+    C = 299792458.0
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.sats = {}
+        self.sbas_corr = {}
+
+    def add_satellite(self, prn, pos_ecef, orbit_type: str = "MEO",
+                      health: bool = True):
+        np = self._np
+        if orbit_type not in ("MEO", "IGSO", "GEO"):
+            raise ValueError("orbit_type must be MEO, IGSO, or GEO")
+        self.sats[prn] = {
+            "pos_ecef": np.asarray(pos_ecef, dtype=float).reshape(3),
+            "orbit_type": str(orbit_type),
+            "health": bool(health),
+        }
+
+    def bdsbas_correction(self, prn, range_corr_m: float):
+        self.sbas_corr[prn] = float(range_corr_m)
+
+    def corrected_pseudorange(self, prn, raw_pr_m: float) -> float:
+        return float(raw_pr_m) + float(self.sbas_corr.get(prn, 0.0))
+
+    def elevation_mask(self, rx_pos, min_elevation_rad: float = 0.0873):
+        np = self._np
+        rx = np.asarray(rx_pos, dtype=float).reshape(3)
+        visible = []
+        for prn, sv in self.sats.items():
+            if not sv["health"]:
+                continue
+            diff = sv["pos_ecef"] - rx
+            rng = float(np.linalg.norm(diff)) + 1e-12
+            el = float(math.asin(max(-1.0, min(1.0, diff[2] / rng))))
+            if el >= float(min_elevation_rad):
+                visible.append(prn)
+        return visible
+
+    def iono_free_B1C_B2A(self, pr_b1c: float, pr_b2a: float) -> float:
+        f1 = self.F_B1C; f2 = self.F_B2A
+        return float((f1 ** 2 * float(pr_b1c) - f2 ** 2 * float(pr_b2a))
+                     / (f1 ** 2 - f2 ** 2))
+
+    def pdop_meo_only(self, rx_pos) -> float:
+        np = self._np
+        rx = np.asarray(rx_pos, dtype=float).reshape(3)
+        rows = []
+        for prn, sv in self.sats.items():
+            if not sv["health"] or sv["orbit_type"] != "MEO":
+                continue
+            diff = rx - sv["pos_ecef"]
+            rng = float(np.linalg.norm(diff)) + 1e-12
+            rows.append([diff[0] / rng, diff[1] / rng, diff[2] / rng, 1.0])
+        if len(rows) < 4:
+            return 999.0
+        H = np.asarray(rows, dtype=float)
+        try:
+            Q = np.linalg.inv(H.T @ H)
+            return float(math.sqrt(max(Q[0, 0] + Q[1, 1] + Q[2, 2], 0.0)))
+        except np.linalg.LinAlgError:
+            return 999.0
