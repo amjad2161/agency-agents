@@ -1170,4 +1170,195 @@ class IMMFilter:
 
 __all__ = ["EKF","UKF","ParticleFilter","SensorFusion",
            "AdaptiveEKF","RAIMResult","CHI2_3_95",
-           "PoseGraphOptimizer","FactorGraph","IMMFilter"]
+           "PoseGraphOptimizer","FactorGraph","IMMFilter",
+           "SquareRootUKF"]
+
+
+# ============================================================================
+# R7 — Square-Root Unscented Kalman Filter (numerically-stable UKF)
+# ============================================================================
+
+class SquareRootUKF:
+    """Square-root form of the Unscented Kalman Filter.
+
+    Maintains the lower-triangular Cholesky factor S of the covariance P
+    throughout (P = S · Sᵀ).  Avoids the numerical issues of recomputing
+    Cholesky factorisations from scratch every step.
+
+    State (default 6): [px, py, pz, vx, vy, vz]
+    Process model: constant-velocity (px += vx·dt, etc.)
+    Default observation model: position-only (z = [px,py,pz]).
+    """
+
+    def __init__(self, dim_x: int = 6, dim_z: int = 3,
+                 alpha: float = 1e-3, beta: float = 2.0, kappa: float = 0.0,
+                 process_noise_std: float = 0.1,
+                 measurement_noise_std: float = 1.0):
+        import numpy as _np
+        self._np = _np
+        self.dim_x = int(dim_x)
+        self.dim_z = int(dim_z)
+        self.alpha = float(alpha)
+        self.beta = float(beta)
+        self.kappa = float(kappa)
+        self.lam = self.alpha * self.alpha * (self.dim_x + self.kappa) - self.dim_x
+        self.gamma = math.sqrt(self.dim_x + self.lam)
+
+        # Sigma-point weights
+        n = self.dim_x
+        self.Wm = _np.full(2 * n + 1, 1.0 / (2.0 * (n + self.lam)))
+        self.Wc = _np.full(2 * n + 1, 1.0 / (2.0 * (n + self.lam)))
+        self.Wm[0] = self.lam / (n + self.lam)
+        self.Wc[0] = self.lam / (n + self.lam) + (1.0 - self.alpha ** 2 + self.beta)
+
+        # State + Cholesky factor of P
+        self.x = _np.zeros(n)
+        self.S = _np.eye(n)                                   # P = I initially
+        # Process / measurement noise Cholesky factors
+        self.Sq = _np.eye(n) * float(process_noise_std)
+        self.Sr = _np.eye(self.dim_z) * float(measurement_noise_std)
+        self._S_zz = _np.eye(self.dim_z)
+
+    # --- Helpers -------------------------------------------------------------
+
+    def _sigma_points(self, x, S):
+        np = self._np
+        n = self.dim_x
+        sigmas = np.zeros((2 * n + 1, n))
+        sigmas[0] = x
+        spread = self.gamma * S
+        for i in range(n):
+            sigmas[i + 1]     = x + spread[:, i]
+            sigmas[n + i + 1] = x - spread[:, i]
+        return sigmas
+
+    def _qr_update(self, A_concat):
+        """Lower-triangular Cholesky factor from QR of concatenated rows."""
+        np = self._np
+        # numpy QR returns R upper-triangular.  Take Rᵀ for lower factor.
+        _, R = np.linalg.qr(A_concat)
+        n = R.shape[1]
+        R = R[:n, :n]
+        # Force positive diagonal
+        sign_diag = np.sign(np.diag(R))
+        sign_diag[sign_diag == 0] = 1.0
+        R = R * sign_diag[:, None]
+        return R.T  # lower triangular
+
+    def _cholupdate(self, S, x, sign: float = 1.0):
+        """Rank-1 Cholesky update / downdate.
+
+        On update:    S Sᵀ + x xᵀ = S' S'ᵀ
+        On downdate:  S Sᵀ - x xᵀ = S' S'ᵀ
+        """
+        np = self._np
+        n = S.shape[0]
+        S = S.copy()
+        x = x.copy().astype(float)
+        for k in range(n):
+            r2 = S[k, k] ** 2 + sign * x[k] ** 2
+            if r2 <= 0:
+                r2 = 1e-12
+            r = math.sqrt(r2)
+            c = r / max(S[k, k], 1e-12)
+            s = x[k] / max(S[k, k], 1e-12)
+            S[k, k] = r
+            if k + 1 < n:
+                S[k + 1:, k] = (S[k + 1:, k] + sign * s * x[k + 1:]) / c
+                x[k + 1:] = c * x[k + 1:] - s * S[k + 1:, k]
+        return S
+
+    # --- Process / measurement models ---------------------------------------
+
+    def _f(self, x, dt):
+        """Constant-velocity process model."""
+        np = self._np
+        x_new = x.copy()
+        if self.dim_x >= 6:
+            x_new[0] += x[3] * dt
+            x_new[1] += x[4] * dt
+            x_new[2] += x[5] * dt
+        return x_new
+
+    def _h(self, x):
+        """Position-only observation model."""
+        return x[:self.dim_z].copy()
+
+    # --- Predict / Update ----------------------------------------------------
+
+    def predict(self, dt: float = 1.0):
+        np = self._np
+        sigmas = self._sigma_points(self.x, self.S)
+        sigmas_f = np.array([self._f(s, dt) for s in sigmas])
+
+        # Predicted mean
+        x_pred = np.sum(self.Wm[:, None] * sigmas_f, axis=0)
+
+        # Compose [sqrt(Wc[1:]) · (sigmas - mean) ; Sq] then QR
+        n = self.dim_x
+        weighted = math.sqrt(max(self.Wc[1], 1e-12)) * (sigmas_f[1:] - x_pred)
+        A = np.vstack([weighted, self.Sq.T])
+        S_pred = self._qr_update(A)
+        # Apply rank-1 update for sigma 0 (Wc[0] may be negative)
+        diff0 = sigmas_f[0] - x_pred
+        sign = 1.0 if self.Wc[0] >= 0 else -1.0
+        S_pred = self._cholupdate(S_pred, math.sqrt(abs(self.Wc[0])) * diff0,
+                                  sign=sign)
+
+        self.x = x_pred
+        self.S = S_pred
+        return self.x.copy(), self.S.copy()
+
+    def update(self, z):
+        np = self._np
+        z = np.asarray(z, dtype=float).reshape(-1)
+        if z.shape[0] != self.dim_z:
+            raise ValueError("z has wrong dimension")
+
+        sigmas = self._sigma_points(self.x, self.S)
+        Z = np.array([self._h(s) for s in sigmas])
+        z_pred = np.sum(self.Wm[:, None] * Z, axis=0)
+
+        # Innovation Cholesky S_zz via QR
+        weighted_z = math.sqrt(max(self.Wc[1], 1e-12)) * (Z[1:] - z_pred)
+        A_z = np.vstack([weighted_z, self.Sr.T])
+        S_zz = self._qr_update(A_z)
+        diff0_z = Z[0] - z_pred
+        sign_z = 1.0 if self.Wc[0] >= 0 else -1.0
+        S_zz = self._cholupdate(S_zz, math.sqrt(abs(self.Wc[0])) * diff0_z,
+                                sign=sign_z)
+        self._S_zz = S_zz
+
+        # Cross-covariance P_xz
+        P_xz = np.zeros((self.dim_x, self.dim_z))
+        for i in range(2 * self.dim_x + 1):
+            dx = sigmas[i] - self.x
+            dz = Z[i] - z_pred
+            P_xz += self.Wc[i] * np.outer(dx, dz)
+
+        # Kalman gain via two triangular solves: K = P_xz · (S_zz S_zzᵀ)⁻¹
+        # Solve S_zz · Y = P_xzᵀ then S_zzᵀ · Kᵀ = Y → K = (Y₂)ᵀ
+        try:
+            Y = np.linalg.solve(S_zz, P_xz.T)
+            K_T = np.linalg.solve(S_zz.T, Y)
+            K = K_T.T
+        except np.linalg.LinAlgError:
+            K = np.zeros((self.dim_x, self.dim_z))
+
+        self.x = self.x + K @ (z - z_pred)
+
+        # Cholesky downdate of S by columns of U = K · S_zz
+        U = K @ S_zz
+        for col in range(self.dim_z):
+            self.S = self._cholupdate(self.S, U[:, col], sign=-1.0)
+        return self.x.copy(), self.S.copy()
+
+    @property
+    def innovation_covariance(self):
+        """Cholesky factor of innovation covariance (S_zz)."""
+        return self._S_zz.copy()
+
+    @property
+    def covariance(self):
+        """Reconstructed covariance matrix P = S · Sᵀ."""
+        return self.S @ self.S.T

@@ -1525,3 +1525,152 @@ class BayesianNeuralOdometry:
         self.W2 -= lr * dW2
         self.b2 -= lr * db2
         return loss
+
+
+# ============================================================================
+# R7 — Federated Navigation Learner (decentralised on-device training)
+# ============================================================================
+
+class FederatedNavigationLearner:
+    """Federated learning for multi-agent navigation.
+
+    Edge devices train a small MLP on local position-error data and share
+    only weight gradients (not raw data). A central coordinator performs
+    Federated Averaging (FedAvg). Privacy-preserving Gaussian noise is
+    added to gradients before sharing.
+    """
+
+    def __init__(self,
+                 input_dim: int = 4,
+                 hidden_dim: int = 8,
+                 output_dim: int = 2,
+                 learning_rate: float = 0.01,
+                 privacy_noise_std: float = 0.01,
+                 seed: int = 42):
+        self.input_dim = int(input_dim)
+        self.hidden_dim = int(hidden_dim)
+        self.output_dim = int(output_dim)
+        self.lr = float(learning_rate)
+        self.privacy_noise_std = float(privacy_noise_std)
+        self._rng = np.random.default_rng(int(seed))
+
+        # He initialisation
+        self.W1 = self._rng.standard_normal((input_dim, hidden_dim)) \
+                  * math.sqrt(2.0 / input_dim)
+        self.b1 = np.zeros(hidden_dim)
+        self.W2 = self._rng.standard_normal((hidden_dim, output_dim)) \
+                  * math.sqrt(2.0 / hidden_dim)
+        self.b2 = np.zeros(output_dim)
+
+    # --- Forward / backward --------------------------------------------------
+
+    def _forward(self, X):
+        Z1 = X @ self.W1 + self.b1
+        H = np.maximum(0.0, Z1)                  # ReLU
+        Y = H @ self.W2 + self.b2
+        return Z1, H, Y
+
+    def predict(self, X):
+        X = np.asarray(X, dtype=float).reshape(-1, self.input_dim)
+        _, _, Y = self._forward(X)
+        return Y
+
+    # --- Local SGD training (returns weight delta) --------------------------
+
+    def local_train(self, data, labels, epochs: int = 3, batch_size: int = 8):
+        """Run local SGD on (data, labels). Return weight delta vs starting
+        weights, with Gaussian privacy noise added.
+        """
+        X = np.asarray(data, dtype=float).reshape(-1, self.input_dim)
+        Y_true = np.asarray(labels, dtype=float).reshape(-1, self.output_dim)
+        n = X.shape[0]
+        if n == 0:
+            return self._zero_delta()
+
+        W1_start = self.W1.copy()
+        b1_start = self.b1.copy()
+        W2_start = self.W2.copy()
+        b2_start = self.b2.copy()
+
+        for _ in range(int(epochs)):
+            perm = self._rng.permutation(n)
+            for s in range(0, n, batch_size):
+                idx = perm[s:s + batch_size]
+                Xb = X[idx]; Yb = Y_true[idx]
+                Z1, H, Y_pred = self._forward(Xb)
+                m = max(Xb.shape[0], 1)
+                # MSE loss gradient
+                dY = (Y_pred - Yb) * (2.0 / m)
+                dW2 = H.T @ dY
+                db2 = dY.sum(axis=0)
+                dH = dY @ self.W2.T
+                dZ1 = dH * (Z1 > 0).astype(float)
+                dW1 = Xb.T @ dZ1
+                db1 = dZ1.sum(axis=0)
+                self.W1 -= self.lr * dW1
+                self.b1 -= self.lr * db1
+                self.W2 -= self.lr * dW2
+                self.b2 -= self.lr * db2
+
+        # Compute delta and apply differential-privacy noise
+        delta = {
+            "W1": self.W1 - W1_start,
+            "b1": self.b1 - b1_start,
+            "W2": self.W2 - W2_start,
+            "b2": self.b2 - b2_start,
+        }
+        return self._add_privacy_noise(delta)
+
+    def _zero_delta(self):
+        return {
+            "W1": np.zeros_like(self.W1),
+            "b1": np.zeros_like(self.b1),
+            "W2": np.zeros_like(self.W2),
+            "b2": np.zeros_like(self.b2),
+        }
+
+    def _add_privacy_noise(self, delta):
+        sigma = self.privacy_noise_std
+        return {
+            k: v + self._rng.normal(0.0, sigma, size=v.shape)
+            for k, v in delta.items()
+        }
+
+    # --- Federated averaging -------------------------------------------------
+
+    @staticmethod
+    def federated_average(local_weights_list):
+        """Average a list of weight dictionaries (FedAvg).
+
+        Args:
+            local_weights_list: list of dicts with keys W1, b1, W2, b2.
+
+        Returns:
+            Single dict with averaged weights.
+        """
+        if not local_weights_list:
+            raise ValueError("local_weights_list is empty")
+        keys = local_weights_list[0].keys()
+        n = len(local_weights_list)
+        out = {}
+        for k in keys:
+            stacked = np.stack([w[k] for w in local_weights_list], axis=0)
+            out[k] = stacked.mean(axis=0)
+        return out
+
+    # --- Apply global update -------------------------------------------------
+
+    def apply_global_update(self, global_weights):
+        """Replace local weights with the federated global weights."""
+        self.W1 = np.asarray(global_weights["W1"], dtype=float).copy()
+        self.b1 = np.asarray(global_weights["b1"], dtype=float).copy()
+        self.W2 = np.asarray(global_weights["W2"], dtype=float).copy()
+        self.b2 = np.asarray(global_weights["b2"], dtype=float).copy()
+
+    def get_weights(self):
+        return {
+            "W1": self.W1.copy(),
+            "b1": self.b1.copy(),
+            "W2": self.W2.copy(),
+            "b2": self.b2.copy(),
+        }

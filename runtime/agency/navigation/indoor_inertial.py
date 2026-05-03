@@ -630,3 +630,93 @@ __all__ = [
     "IMUPreintegration",
     "WheelOdometryIntegrator",
 ]
+
+
+# ============================================================================
+# R7 — Foot-mounted IMU for high-accuracy pedestrian dead reckoning (PDR)
+# ============================================================================
+
+class FootMountedIMU:
+    """Foot-mounted IMU pedestrian dead reckoning.
+
+    Uses zero-velocity updates (ZUPT) from stance-phase detection to bound
+    drift. Stride length is estimated from the peak vertical acceleration
+    using Weinberg's empirical model.
+    """
+
+    def __init__(self,
+                 stance_accel_var_threshold: float = 0.5,
+                 stance_gyro_norm_threshold: float = 0.5,
+                 stride_constant: float = 0.41,
+                 default_height_m: float = 1.75):
+        import numpy as _np
+        self._np = _np
+        self.stance_accel_var_threshold = float(stance_accel_var_threshold)
+        self.stance_gyro_norm_threshold = float(stance_gyro_norm_threshold)
+        self.stride_constant = float(stride_constant)
+        self.default_height_m = float(default_height_m)
+        self.x = 0.0
+        self.y = 0.0
+        self._step_count = 0
+
+    # --- Stance phase detection ---------------------------------------------
+
+    def detect_stance(self, accel_window, gyro_window) -> bool:
+        """Detect stance phase via low accel variance and low gyro magnitude.
+
+        Args:
+            accel_window: (N, 3) array of accelerometer samples (m/s²)
+            gyro_window:  (N, 3) array of gyroscope samples (rad/s)
+        """
+        np = self._np
+        a = np.asarray(accel_window, dtype=float).reshape(-1, 3)
+        g = np.asarray(gyro_window, dtype=float).reshape(-1, 3)
+        if a.size == 0 or g.size == 0:
+            return False
+        a_mag = np.linalg.norm(a, axis=1)
+        accel_var = float(np.var(a_mag))
+        gyro_norm_mean = float(np.mean(np.linalg.norm(g, axis=1)))
+        return (accel_var < self.stance_accel_var_threshold and
+                gyro_norm_mean < self.stance_gyro_norm_threshold)
+
+    # --- Stride length (Weinberg model) -------------------------------------
+
+    def estimate_stride_length(self, accel_peak: float,
+                               height_m: float | None = None) -> float:
+        """Estimate stride length using Weinberg's empirical model.
+
+        L = K · ⁴√(a_max - a_min) ≈ K · √(a_peak),
+        scaled by user height for robustness.
+        """
+        h = float(height_m) if height_m is not None else self.default_height_m
+        peak = max(0.0, float(accel_peak))
+        # Stride scales with √peak; height factor provides individual scaling.
+        scale = h / 1.75
+        return float(self.stride_constant * math.sqrt(peak) * scale)
+
+    # --- Position update -----------------------------------------------------
+
+    def update_position(self, stance: bool, stride_length: float,
+                        heading_rad: float):
+        """Advance horizontal position by a stride.
+
+        During stance phase, no displacement is added (ZUPT).
+        Returns (dx, dy) added this update.
+        """
+        if stance:
+            return (0.0, 0.0)
+        L = float(stride_length)
+        dx = L * math.cos(float(heading_rad))
+        dy = L * math.sin(float(heading_rad))
+        self.x += dx
+        self.y += dy
+        self._step_count += 1
+        return (dx, dy)
+
+    @property
+    def position(self):
+        return (self.x, self.y)
+
+    @property
+    def step_count(self) -> int:
+        return self._step_count

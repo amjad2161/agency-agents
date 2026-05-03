@@ -1181,3 +1181,133 @@ try:
     __all__.append("MagnetometerSLAM")  # type: ignore[name-defined]
 except Exception:
     pass
+
+
+# ============================================================================
+# R7 — Gravity-Gradiometry Navigation (submarine INS-style backup)
+# ============================================================================
+
+class GravityGradiometry:
+    """Gravity gradient tensor navigation.
+
+    Uses Somigliana's normal-gravity formula for the WGS-84 ellipsoid and
+    finite-difference approximation of the gravity-gradient tensor (Eötvös
+    units, 1 E = 1e-9 s⁻²).  Map matching finds the closest pre-surveyed
+    tensor in a local map for position fixing.
+    """
+
+    # WGS-84 + Somigliana constants
+    GAMMA_E = 9.7803253359          # equatorial normal gravity (m/s²)
+    GAMMA_P = 9.8321849378          # polar normal gravity (m/s²)
+    K_SOM   = 0.00193185265241      # Somigliana constant
+    E2      = 6.69437999014e-3      # WGS-84 eccentricity²
+    A_WGS   = 6378137.0             # equatorial radius (m)
+    F_WGS   = 1.0 / 298.257223563   # flattening
+    M_WGS   = 0.00344978650684      # m = ω²a²b/GM
+    GM      = 3.986004418e14        # standard gravitational parameter (m³/s²)
+
+    def __init__(self, fd_step_m: float = 100.0):
+        import numpy as _np
+        self._np = _np
+        self.fd_step_m = float(fd_step_m)
+
+    # --- Normal gravity (Somigliana) ----------------------------------------
+
+    def normal_gravity(self, lat_rad: float, alt_m: float = 0.0) -> float:
+        """Normal gravity on (or above) the WGS-84 ellipsoid.
+
+        Returns the magnitude of g in m/s².
+        """
+        sin_phi = math.sin(float(lat_rad))
+        sin2 = sin_phi * sin_phi
+        denom = math.sqrt(max(1.0 - self.E2 * sin2, 1e-12))
+        gamma0 = self.GAMMA_E * (1.0 + self.K_SOM * sin2) / denom
+
+        # Free-air vertical gradient correction (Heiskanen-Moritz)
+        h = float(alt_m)
+        if abs(h) > 0:
+            gamma_h = gamma0 * (
+                1.0
+                - 2.0 / self.A_WGS * (1.0 + self.F_WGS + self.M_WGS
+                                       - 2.0 * self.F_WGS * sin2) * h
+                + (3.0 / (self.A_WGS ** 2)) * h * h
+            )
+            return float(gamma_h)
+        return float(gamma0)
+
+    # --- Gravity gradient tensor --------------------------------------------
+
+    def _g_vector_local(self, lat_rad: float, lon_rad: float, alt_m: float):
+        """Return local gravity vector in local-level (E, N, Up) frame.
+
+        Approximate: horizontal components small but non-zero from
+        latitude-dependent gradient.
+        """
+        np = self._np
+        g_mag = self.normal_gravity(lat_rad, alt_m)
+        # Down component dominates; small horizontal component from latitudinal
+        # gradient gives non-zero off-diagonal entries.
+        d_lat = 1e-5
+        g_north_grad = (self.normal_gravity(lat_rad + d_lat, alt_m)
+                        - self.normal_gravity(lat_rad - d_lat, alt_m)) \
+                       / (2.0 * d_lat * self.A_WGS)
+        # ENU-frame gravity vector (mostly -Up):
+        return np.array([0.0, g_north_grad, -g_mag])
+
+    def compute_gravity_gradient_tensor(self, lat_rad: float,
+                                        lon_rad: float,
+                                        alt_m: float):
+        """Finite-difference gravity gradient tensor in Eötvös units.
+
+        Returns a 3×3 numpy array.  Trace is theoretically zero in vacuum
+        (Laplace's equation).
+        """
+        np = self._np
+        h = self.fd_step_m
+        # Convert metres to lat/lon radians (approximate)
+        d_lat = h / self.A_WGS
+        d_lon = h / (self.A_WGS * max(math.cos(lat_rad), 1e-9))
+
+        g_xp = self._g_vector_local(lat_rad, lon_rad + d_lon, alt_m)
+        g_xn = self._g_vector_local(lat_rad, lon_rad - d_lon, alt_m)
+        g_yp = self._g_vector_local(lat_rad + d_lat, lon_rad, alt_m)
+        g_yn = self._g_vector_local(lat_rad - d_lat, lon_rad, alt_m)
+        g_zp = self._g_vector_local(lat_rad, lon_rad, alt_m + h)
+        g_zn = self._g_vector_local(lat_rad, lon_rad, alt_m - h)
+
+        T = np.zeros((3, 3))
+        T[:, 0] = (g_xp - g_xn) / (2.0 * h)
+        T[:, 1] = (g_yp - g_yn) / (2.0 * h)
+        T[:, 2] = (g_zp - g_zn) / (2.0 * h)
+        # Symmetrise (Hessian is symmetric in gravity field)
+        T = 0.5 * (T + T.T)
+        # Enforce zero trace (Laplace) by removing mean diagonal
+        trace_mean = np.trace(T) / 3.0
+        T = T - trace_mean * np.eye(3)
+        # Convert s⁻² to Eötvös (1 E = 1e-9 s⁻²)
+        return T * 1.0e9
+
+    # --- Map matching --------------------------------------------------------
+
+    def match_gradient(self, observed_tensor, map_tensors, map_positions):
+        """Return position from map closest to observed gradient tensor.
+
+        Args:
+            observed_tensor: (3,3) array
+            map_tensors:     iterable of (3,3) arrays
+            map_positions:   iterable of (lat, lon, alt) tuples
+
+        Returns:
+            best-matching position (tuple).
+        """
+        np = self._np
+        obs = np.asarray(observed_tensor, dtype=float).reshape(3, 3)
+        best_idx = 0
+        best_score = float("inf")
+        for i, T in enumerate(map_tensors):
+            T_arr = np.asarray(T, dtype=float).reshape(3, 3)
+            score = float(np.linalg.norm(T_arr - obs, ord="fro"))
+            if score < best_score:
+                best_score = score
+                best_idx = i
+        return tuple(map_positions[best_idx])

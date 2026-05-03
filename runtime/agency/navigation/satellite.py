@@ -815,3 +815,190 @@ class PPPCorrector:
         wavelength = self.SPEED_OF_LIGHT / self.CARRIER_L1_HZ
         rho -= cycles * wavelength
         return float(rho)
+
+
+# ============================================================================
+# R7 — LEO Satellite Navigation (Starlink/OneWeb-style Doppler positioning)
+# ============================================================================
+
+class LEOSatelliteNav:
+    """Low-Earth Orbit satellite navigation via Doppler frequency shifts.
+
+    Uses simplified SGP4-style two-body propagation with J2 oblateness
+    perturbation. No external dependencies — numpy only.
+
+    Reference frames: ECEF km (positions), ECEF km/s (velocities).
+    """
+
+    EARTH_MU_KM3_S2 = 398600.4418            # Earth gravitational parameter
+    EARTH_RADIUS_KM = 6378.137               # WGS84 equatorial radius
+    EARTH_J2 = 1.0826267e-3                  # J2 oblateness coefficient
+    SPEED_OF_LIGHT_KMS = 299792.458          # km/s
+    EARTH_ROT_RATE = 7.2921159e-5            # rad/s
+
+    def __init__(self, default_alt_km: float = 550.0):
+        import numpy as _np
+        self._np = _np
+        self.default_alt_km = float(default_alt_km)
+        self._receiver_estimate = _np.zeros(3)
+
+    # --- Orbit propagation ---------------------------------------------------
+
+    def propagate_orbit(self, t_seconds: float, tle_mean_motion: float,
+                        eccentricity: float, inclination_rad: float,
+                        raan_rad: float = 0.0,
+                        arg_perigee_rad: float = 0.0,
+                        mean_anomaly0_rad: float = 0.0):
+        """Propagate satellite orbit using simplified Kepler + J2.
+
+        Args:
+            t_seconds: Time since epoch (s)
+            tle_mean_motion: Mean motion (rev/day)
+            eccentricity: Orbital eccentricity (0–1)
+            inclination_rad: Inclination (rad)
+            raan_rad: Right ascension of ascending node at epoch (rad)
+            arg_perigee_rad: Argument of perigee at epoch (rad)
+            mean_anomaly0_rad: Mean anomaly at epoch (rad)
+
+        Returns:
+            ECEF position (x, y, z) in km as numpy array.
+        """
+        np = self._np
+        n_rad_s = float(tle_mean_motion) * 2.0 * math.pi / 86400.0  # rad/s
+        if n_rad_s <= 0:
+            return np.zeros(3)
+        a_km = (self.EARTH_MU_KM3_S2 / (n_rad_s * n_rad_s)) ** (1.0 / 3.0)
+        e = float(eccentricity)
+        e = max(0.0, min(0.95, e))
+        i = float(inclination_rad)
+
+        # J2 secular perturbation rates
+        d_raan_dt, d_arg_dt = self.j2_perturbation(a_km, e, i)
+        raan = float(raan_rad) + d_raan_dt * float(t_seconds)
+        argp = float(arg_perigee_rad) + d_arg_dt * float(t_seconds)
+        M = float(mean_anomaly0_rad) + n_rad_s * float(t_seconds)
+        M = M % (2.0 * math.pi)
+
+        # Solve Kepler's equation E - e·sin(E) = M (Newton iter)
+        E = M
+        for _ in range(20):
+            f = E - e * math.sin(E) - M
+            fp = 1.0 - e * math.cos(E)
+            if abs(fp) < 1e-12:
+                break
+            dE = f / fp
+            E -= dE
+            if abs(dE) < 1e-12:
+                break
+
+        # True anomaly
+        sin_nu = math.sqrt(1.0 - e * e) * math.sin(E)
+        cos_nu = math.cos(E) - e
+        nu = math.atan2(sin_nu, cos_nu)
+
+        # Distance and position in perifocal frame
+        r_km = a_km * (1.0 - e * math.cos(E))
+        x_pf = r_km * math.cos(nu)
+        y_pf = r_km * math.sin(nu)
+
+        # Rotate perifocal -> ECI -> approximate ECEF (subtract Earth rotation)
+        cos_O = math.cos(raan); sin_O = math.sin(raan)
+        cos_w = math.cos(argp); sin_w = math.sin(argp)
+        cos_i = math.cos(i);    sin_i = math.sin(i)
+
+        # Perifocal to ECI rotation matrix * (x_pf, y_pf, 0)
+        x_eci = (cos_O * cos_w - sin_O * sin_w * cos_i) * x_pf + \
+                (-cos_O * sin_w - sin_O * cos_w * cos_i) * y_pf
+        y_eci = (sin_O * cos_w + cos_O * sin_w * cos_i) * x_pf + \
+                (-sin_O * sin_w + cos_O * cos_w * cos_i) * y_pf
+        z_eci = (sin_w * sin_i) * x_pf + (cos_w * sin_i) * y_pf
+
+        # Earth rotation -> ECEF
+        theta_g = self.EARTH_ROT_RATE * float(t_seconds)
+        cos_g = math.cos(theta_g); sin_g = math.sin(theta_g)
+        x_ecef =  cos_g * x_eci + sin_g * y_eci
+        y_ecef = -sin_g * x_eci + cos_g * y_eci
+        z_ecef = z_eci
+
+        return np.array([x_ecef, y_ecef, z_ecef])
+
+    def j2_perturbation(self, a_km: float, e: float, i_rad: float):
+        """Compute J2-induced secular drift of RAAN and arg-perigee.
+
+        Returns:
+            (d_raan_dt, d_argperigee_dt) in rad/s.
+        """
+        a = float(a_km)
+        if a <= 0:
+            return (0.0, 0.0)
+        e = max(0.0, min(0.95, float(e)))
+        i = float(i_rad)
+        n = math.sqrt(self.EARTH_MU_KM3_S2 / (a ** 3))
+        p = a * (1.0 - e * e)
+        if p <= 0:
+            return (0.0, 0.0)
+        factor = -1.5 * n * self.EARTH_J2 * (self.EARTH_RADIUS_KM / p) ** 2
+        d_raan_dt = factor * math.cos(i)
+        # Arg-perigee secular rate
+        d_argp_dt = -0.5 * factor * (5.0 * math.cos(i) ** 2 - 1.0)
+        return (d_raan_dt, d_argp_dt)
+
+    # --- Doppler positioning -------------------------------------------------
+
+    def doppler_position_fix(self, freq_obs, freq_nominal, sat_positions,
+                             sat_velocities):
+        """Estimate receiver position using Doppler shifts from LEO satellites.
+
+        Args:
+            freq_obs: Array of observed carrier frequencies (Hz), shape (N,)
+            freq_nominal: Nominal carrier frequency (Hz), scalar
+            sat_positions: Satellite ECEF positions (km), shape (N, 3)
+            sat_velocities: Satellite ECEF velocities (km/s), shape (N, 3)
+
+        Returns:
+            Estimated receiver ECEF position (km) as length-3 array.
+        """
+        np = self._np
+        f_obs = np.asarray(freq_obs, dtype=float).reshape(-1)
+        f_nom = float(freq_nominal)
+        sp = np.asarray(sat_positions, dtype=float).reshape(-1, 3)
+        sv = np.asarray(sat_velocities, dtype=float).reshape(-1, 3)
+        n_sats = sp.shape[0]
+        if n_sats < 3 or f_obs.shape[0] != n_sats:
+            return np.zeros(3)
+
+        # Range-rate from Doppler:  rdot = -c * (f_obs - f_nom) / f_nom
+        rdot = -self.SPEED_OF_LIGHT_KMS * (f_obs - f_nom) / f_nom
+
+        # Iterative Gauss-Newton — start from receiver estimate or origin
+        r = self._receiver_estimate.copy()
+        if float(np.linalg.norm(r)) < 1.0:
+            r = np.array([self.EARTH_RADIUS_KM, 0.0, 0.0])
+
+        for _ in range(15):
+            # Predicted range-rate per satellite
+            los = sp - r                                           # (N,3)
+            ranges = np.linalg.norm(los, axis=1) + 1e-9
+            unit_los = los / ranges[:, None]                       # (N,3)
+            # rdot_pred = -unit_los · sat_vel  (receiver assumed stationary)
+            rdot_pred = -np.sum(unit_los * sv, axis=1)
+            residual = rdot - rdot_pred                            # (N,)
+            # Jacobian d(rdot_pred)/dr — gradient w.r.t. receiver
+            # d(unit_los)/dr is small; approximate H = sv_perp / range
+            # Use H ≈ -(I - los·losᵀ) · sv / range  (per row)
+            H = np.zeros((n_sats, 3))
+            for k in range(n_sats):
+                u = unit_los[k]
+                proj = np.eye(3) - np.outer(u, u)
+                H[k] = -(proj @ sv[k]) / ranges[k]
+            # Solve H · dr = residual (least squares)
+            try:
+                dr, *_ = np.linalg.lstsq(H, residual, rcond=None)
+            except np.linalg.LinAlgError:
+                break
+            r = r + dr
+            if float(np.linalg.norm(dr)) < 1e-6:
+                break
+
+        self._receiver_estimate = r
+        return r
