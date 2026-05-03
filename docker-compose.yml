@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  jarvis:
+    build: .
+    container_name: jarvis_brainiac
+    ports:
+      - "5000:5000"   # API server
+      - "8000:8000"   # WebSocket
+      - "8777:8777"   # VR HUD
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./.jarvis:/app/.jarvis
+    environment:
+      - JARVIS_MODE=production
+      - AGENCY_TRUST_MODE=ON_MY_MACHINE
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+    networks:
+      - jarvis_net
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: jarvis_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - jarvis_net
+    profiles:
+      - with-llm
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: jarvis_chroma
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - jarvis_net
+    profiles:
+      - with-memory
+
+networks:
+  jarvis_net:
+    driver: bridge
+
+volumes:
+  ollama_data:
+  chroma_data:

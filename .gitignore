@@ -78,3 +78,15 @@ integrations/qwen/agents/
 integrations/kimi/*/
 !integrations/openclaw/README.md
 !integrations/kimi/README.md
+
+# auto-improvement logs (do not track)
+.jarvis_brainiac/CANARY.txt
+.jarvis_brainiac/improvement_log.jsonl
+.jarvis_brainiac/memory/
+.jarvis_brainiac/last_run_report.md
+.jarvis_brainiac/proposed/
+archive/
+*.zip
+*.bundle
+data/cache/
+knowledge_base/embeddings/

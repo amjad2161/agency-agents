@@ -1,0 +1,244 @@
+{
+  "session_id": "e917ef85-3733-483d-bd58-628907438e1a",
+  "topic": "Software architecture review",
+  "created_at": "2026-04-28T16:13:03Z",
+  "agents": {
+    "engineer_1": {
+      "persona_type": "engineer",
+      "role": "lead",
+      "joined_at": "2026-04-28T16:13:03Z"
+    },
+    "lawyer_1": {
+      "persona_type": "lawyer",
+      "role": "reviewer",
+      "joined_at": "2026-04-28T16:13:03Z"
+    },
+    "analyst_1": {
+      "persona_type": "analyst",
+      "role": "contributor",
+      "joined_at": "2026-04-28T16:13:03Z"
+    }
+  },
+  "shared_context": {
+    "architecture_choice": "microservices",
+    "team_size": 5
+  },
+  "messages": [
+    {
+      "msg_id": "eea1ba24-be99-4baf-b4d0-4b88181d057f",
+      "from_agent": "system",
+      "to_agent": "all",
+      "content": "Agent 'engineer_1' (engineer) has joined as lead.",
+      "msg_type": "feedback",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": null
+    },
+    {
+      "msg_id": "ffd1e49d-a6c5-4da4-b2e2-03bbfbde8148",
+      "from_agent": "system",
+      "to_agent": "all",
+      "content": "Agent 'lawyer_1' (lawyer) has joined as reviewer.",
+      "msg_type": "feedback",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": null
+    },
+    {
+      "msg_id": "3369a753-58b2-4aa3-a2c9-c16ab3118954",
+      "from_agent": "system",
+      "to_agent": "all",
+      "content": "Agent 'analyst_1' (analyst) has joined as contributor.",
+      "msg_type": "feedback",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": null
+    },
+    {
+      "msg_id": "4eb28ae1-922f-40db-82df-ad35dadc5626",
+      "from_agent": "engineer_1",
+      "to_agent": "all",
+      "content": "I propose microservices architecture",
+      "msg_type": "proposal",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": null
+    },
+    {
+      "msg_id": "d01d0dbe-2add-4d0d-8f3f-e7793cf7e3ed",
+      "from_agent": "lawyer_1",
+      "to_agent": "all",
+      "content": "Have we assessed legal risks?",
+      "msg_type": "question",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": null
+    },
+    {
+      "msg_id": "ab910566-77b0-4ff1-8287-74f74d60e213",
+      "from_agent": "analyst_1",
+      "to_agent": "engineer_1",
+      "content": "Data supports this direction",
+      "msg_type": "feedback",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": null
+    },
+    {
+      "msg_id": "16b49ad4-29d1-4db7-a233-a5adeeeb8638",
+      "from_agent": "engineer_1",
+      "to_agent": "analyst_1",
+      "content": "Let me clarify the approach",
+      "msg_type": "answer",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": null
+    },
+    {
+      "msg_id": "be5da7f3-ca6e-48e6-89a5-c53397e5fff5",
+      "from_agent": "system",
+      "to_agent": "all",
+      "content": "Shared context updated: 'architecture_choice' = 'microservices'",
+      "msg_type": "feedback",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": {
+        "context_key": "architecture_choice",
+        "context_value": "microservices"
+      }
+    },
+    {
+      "msg_id": "c71c6823-ca9f-40f8-ab0e-84fd1e4e613d",
+      "from_agent": "system",
+      "to_agent": "all",
+      "content": "Shared context updated: 'team_size' = 5",
+      "msg_type": "feedback",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": {
+        "context_key": "team_size",
+        "context_value": 5
+      }
+    },
+    {
+      "msg_id": "dcd753c7-76d3-4513-8cc8-92aa66c28e5b",
+      "from_agent": "engineer_1",
+      "to_agent": "all",
+      "content": "I vote 'agree' on 'microservices'.",
+      "msg_type": "feedback",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": {
+        "topic": "microservices",
+        "vote": "agree"
+      }
+    },
+    {
+      "msg_id": "2c27ed8f-b9cb-40ea-b7c9-b7192aae13cf",
+      "from_agent": "analyst_1",
+      "to_agent": "all",
+      "content": "I vote 'agree' on 'microservices'.",
+      "msg_type": "feedback",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": {
+        "topic": "microservices",
+        "vote": "agree"
+      }
+    },
+    {
+      "msg_id": "8462da19-39ec-4f8a-a21f-535a0806d098",
+      "from_agent": "lawyer_1",
+      "to_agent": "all",
+      "content": "I vote 'abstain' on 'microservices'.",
+      "msg_type": "feedback",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": {
+        "topic": "microservices",
+        "vote": "abstain"
+      }
+    },
+    {
+      "msg_id": "fab3b3f1-ac93-4496-9df1-59cf7028d58a",
+      "from_agent": "system",
+      "to_agent": "all",
+      "content": "Consensus on 'microservices': reached.",
+      "msg_type": "consensus",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": {
+        "consensus_result": {
+          "consensus_reached": true,
+          "topic": "microservices",
+          "agreed_points": [
+            "Majority agrees on 'microservices' \u2014 proposal: Adopt microservices",
+            "Proposal accepted: Adopt microservices",
+            "I propose microservices architecture"
+          ],
+          "disagreements": [],
+          "vote_breakdown": {
+            "agree": 2,
+            "disagree": 0,
+            "abstain": 1
+          },
+          "strategy": "majority_vote",
+          "timestamp": "2026-04-28T16:13:03Z"
+        }
+      }
+    },
+    {
+      "msg_id": "b884bd82-c46c-4471-a38b-8c74a95357b7",
+      "from_agent": "system",
+      "to_agent": "all",
+      "content": "Conflict resolution on 'database_choice': All agents are neutral; no conflict to resolve.",
+      "msg_type": "consensus",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": {
+        "resolution_result": {
+          "resolved": true,
+          "conflict_topic": "database_choice",
+          "resolution": "All agents are neutral; no conflict to resolve.",
+          "compromises": [],
+          "agent_positions": {
+            "engineer_1": "neutral",
+            "lawyer_1": "neutral",
+            "analyst_1": "neutral"
+          },
+          "strategy": "compromise",
+          "timestamp": "2026-04-28T16:13:03Z"
+        }
+      }
+    },
+    {
+      "msg_id": "42471643-d1d9-43f0-a71f-24ed3982fc24",
+      "from_agent": "system",
+      "to_agent": "all",
+      "content": "Session closed.",
+      "msg_type": "feedback",
+      "timestamp": "2026-04-28T16:13:03Z",
+      "context": null
+    }
+  ],
+  "consensus_history": {
+    "microservices": {
+      "consensus_reached": true,
+      "topic": "microservices",
+      "agreed_points": [
+        "Majority agrees on 'microservices' \u2014 proposal: Adopt microservices",
+        "Proposal accepted: Adopt microservices",
+        "I propose microservices architecture"
+      ],
+      "disagreements": [],
+      "vote_breakdown": {
+        "agree": 2,
+        "disagree": 0,
+        "abstain": 1
+      },
+      "strategy": "majority_vote",
+      "timestamp": "2026-04-28T16:13:03Z"
+    }
+  },
+  "conflict_history": {
+    "database_choice": {
+      "resolved": true,
+      "conflict_topic": "database_choice",
+      "resolution": "All agents are neutral; no conflict to resolve.",
+      "compromises": [],
+      "agent_positions": {
+        "engineer_1": "neutral",
+        "lawyer_1": "neutral",
+        "analyst_1": "neutral"
+      },
+      "strategy": "compromise",
+      "timestamp": "2026-04-28T16:13:03Z"
+    }
+  }
+}

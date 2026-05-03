@@ -1,0 +1,101 @@
+{
+  "plan_id": "plan_aeecb815ffa0",
+  "goal": "Build a React dashboard with user auth",
+  "steps": [
+    {
+      "step_id": "step_e7a88036c1e5",
+      "description": "Requirements for: Build a React dashboard with user auth",
+      "agent_type": "analyst",
+      "estimated_minutes": 60,
+      "status": "pending",
+      "dependencies": [],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 1
+    },
+    {
+      "step_id": "step_5a8ec0b69930",
+      "description": "Design for: Build a React dashboard with user auth",
+      "agent_type": "architect",
+      "estimated_minutes": 90,
+      "status": "pending",
+      "dependencies": [
+        "step_e7a88036c1e5"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 2
+    },
+    {
+      "step_id": "step_b25288dff3b9",
+      "description": "Implementation for: Build a React dashboard with user auth",
+      "agent_type": "developer",
+      "estimated_minutes": 180,
+      "status": "pending",
+      "dependencies": [
+        "step_5a8ec0b69930"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 2
+    },
+    {
+      "step_id": "step_9d703fa394d0",
+      "description": "Testing for: Build a React dashboard with user auth",
+      "agent_type": "qa_engineer",
+      "estimated_minutes": 120,
+      "status": "pending",
+      "dependencies": [
+        "step_b25288dff3b9"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 3
+    },
+    {
+      "step_id": "step_e70ee7cc5225",
+      "description": "Deployment for: Build a React dashboard with user auth",
+      "agent_type": "devops",
+      "estimated_minutes": 60,
+      "status": "pending",
+      "dependencies": [
+        "step_9d703fa394d0"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 3
+    }
+  ],
+  "estimated_duration_minutes": 510,
+  "required_agents": [
+    "analyst",
+    "architect",
+    "developer",
+    "qa_engineer",
+    "devops"
+  ],
+  "dependencies": {
+    "step_e7a88036c1e5": [],
+    "step_5a8ec0b69930": [
+      "step_e7a88036c1e5"
+    ],
+    "step_b25288dff3b9": [
+      "step_5a8ec0b69930"
+    ],
+    "step_9d703fa394d0": [
+      "step_b25288dff3b9"
+    ],
+    "step_e70ee7cc5225": [
+      "step_9d703fa394d0"
+    ]
+  },
+  "status": "draft",
+  "created_at": "2026-04-29T06:39:06.243592+00:00",
+  "started_at": null,
+  "completed_at": null,
+  "metadata": {
+    "template": "software_project",
+    "constraints": {},
+    "version": "1.0"
+  }
+}
