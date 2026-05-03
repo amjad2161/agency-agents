@@ -1,0 +1,13 @@
+{
+  "_doc": "Static placeholder. Real values are written by `python omega.py verify` at runtime, which evaluates G1..G10 against the LIVE multi-root registry (personas resolve dynamically, runtime compiles checked in place).",
+  "_to_run":  "python omega.py verify",
+  "_expected_at_first_run": {
+    "G1_compile":     {"pass": true,  "note": "all runtime/agency/*.py compile"},
+    "G2_registry":    {"pass": true,  "expected_count": "≥ 340"},
+    "G4_import":      {"pass": true,  "module": "omega",  "version": "1.0.0-omega"},
+    "G7_unique":      {"pass": true,  "expected_count": "≥ 340"},
+    "G8_provenance":  {"pass": true,  "expected_entries": "≥ 340"},
+    "G9_godskill":    {"pass": true,  "tiers": 7},
+    "G10_manifest":   {"pass": true,  "launchers": [true, true, true]}
+  }
+}

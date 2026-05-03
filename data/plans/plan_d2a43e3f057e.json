@@ -1,0 +1,101 @@
+{
+  "plan_id": "plan_d2a43e3f057e",
+  "goal": "Write a research paper",
+  "steps": [
+    {
+      "step_id": "step_7b21e8a498df",
+      "description": "Analysis for: Write a research paper",
+      "agent_type": "analyst",
+      "estimated_minutes": 120,
+      "status": "pending",
+      "dependencies": [],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 1
+    },
+    {
+      "step_id": "step_fa087dad20ee",
+      "description": "Planning for: Write a research paper",
+      "agent_type": "planner",
+      "estimated_minutes": 60,
+      "status": "pending",
+      "dependencies": [
+        "step_7b21e8a498df"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 2
+    },
+    {
+      "step_id": "step_a70cc474a98d",
+      "description": "Execution for: Write a research paper",
+      "agent_type": "executor",
+      "estimated_minutes": 60,
+      "status": "pending",
+      "dependencies": [
+        "step_fa087dad20ee"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 2
+    },
+    {
+      "step_id": "step_0cc338ede1bd",
+      "description": "Verification for: Write a research paper",
+      "agent_type": "verifier",
+      "estimated_minutes": 60,
+      "status": "pending",
+      "dependencies": [
+        "step_a70cc474a98d"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 3
+    },
+    {
+      "step_id": "step_a3a7dfb7032e",
+      "description": "Reporting for: Write a research paper",
+      "agent_type": "reporter",
+      "estimated_minutes": 60,
+      "status": "pending",
+      "dependencies": [
+        "step_0cc338ede1bd"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 3
+    }
+  ],
+  "estimated_duration_minutes": 360,
+  "required_agents": [
+    "analyst",
+    "planner",
+    "executor",
+    "verifier",
+    "reporter"
+  ],
+  "dependencies": {
+    "step_7b21e8a498df": [],
+    "step_fa087dad20ee": [
+      "step_7b21e8a498df"
+    ],
+    "step_a70cc474a98d": [
+      "step_fa087dad20ee"
+    ],
+    "step_0cc338ede1bd": [
+      "step_a70cc474a98d"
+    ],
+    "step_a3a7dfb7032e": [
+      "step_0cc338ede1bd"
+    ]
+  },
+  "status": "draft",
+  "created_at": "2026-04-28T21:59:15.291240+00:00",
+  "started_at": null,
+  "completed_at": null,
+  "metadata": {
+    "template": null,
+    "constraints": {},
+    "version": "1.0"
+  }
+}
