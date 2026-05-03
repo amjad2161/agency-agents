@@ -1207,3 +1207,98 @@ class ReceiverAutonomousIntegrityMonitoring:
         hal = float(HAL) if HAL is not None else self.DEFAULT_HAL
         val = float(VAL)
         return bool(float(HPL) > hal or float(VPL) > val)
+
+
+# ============================================================================
+# R11 — Ionospheric Storm Detector (ROTI + 8-param Klobuchar)
+# ============================================================================
+
+class IonosphericStormDetector:
+    """ROTI-based ionospheric scintillation/storm detection + Klobuchar.
+
+    ROTI (Rate Of TEC Index) = std(ΔTEC/Δt) over a sliding window.
+    Klobuchar 8-coefficient broadcast iono model returns L1 group delay (m).
+    """
+
+    SPEED_OF_LIGHT = 299792458.0  # m/s
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+
+    def compute_roti(self, phase_diff_series, dt: float = 30.0) -> float:
+        """ROTI in TECu/min from carrier-phase TEC differences.
+
+        Args:
+            phase_diff_series: array of TEC differences (TECu)
+            dt: sampling interval (s)
+        """
+        np = self._np
+        d = np.asarray(phase_diff_series, dtype=float).reshape(-1)
+        if d.size < 2:
+            return 0.0
+        rate = d / float(dt)             # TECu/s
+        return float(np.std(rate) * 60.0)  # TECu/min
+
+    def detect_storm(self, roti: float, threshold: float = 0.5) -> bool:
+        return float(roti) > float(threshold)
+
+    def klobuchar_correction(self, alpha, beta, elevation_deg: float,
+                             azimuth_deg: float, lat_rad: float,
+                             lon_rad: float, gps_time_s: float = 43200.0
+                             ) -> float:
+        """8-parameter Klobuchar L1 ionospheric delay (m)."""
+        a = list(alpha)
+        b = list(beta)
+        E = float(elevation_deg) / 180.0          # semi-circles
+        A = float(azimuth_deg) * math.pi / 180.0  # rad
+        phi_u = float(lat_rad) / math.pi          # semi-circles
+        lam_u = float(lon_rad) / math.pi          # semi-circles
+
+        # Earth-centred angle (semi-circles)
+        psi = 0.0137 / (E + 0.11) - 0.022
+
+        # Sub-ionospheric latitude (semi-circles)
+        phi_i = phi_u + psi * math.cos(A)
+        if phi_i > 0.416:
+            phi_i = 0.416
+        elif phi_i < -0.416:
+            phi_i = -0.416
+
+        # Sub-ionospheric longitude (semi-circles)
+        lam_i = lam_u + psi * math.sin(A) / math.cos(phi_i * math.pi)
+
+        # Geomagnetic latitude (semi-circles)
+        phi_m = phi_i + 0.064 * math.cos((lam_i - 1.617) * math.pi)
+
+        # Local time (sec)
+        t = (43200.0 * lam_i + float(gps_time_s)) % 86400.0
+        if t < 0:
+            t += 86400.0
+
+        # Amplitude AMP and period PER
+        AMP = sum(a[n] * (phi_m ** n) for n in range(4))
+        if AMP < 0:
+            AMP = 0.0
+        PER = sum(b[n] * (phi_m ** n) for n in range(4))
+        if PER < 72000.0:
+            PER = 72000.0
+
+        # Phase x (rad)
+        x = 2.0 * math.pi * (t - 50400.0) / PER
+
+        # Slant factor (obliquity)
+        F = 1.0 + 16.0 * (0.53 - E) ** 3
+
+        if abs(x) < 1.57:
+            iono_time = F * (5.0e-9 + AMP * (1.0 - (x ** 2) / 2.0
+                                              + (x ** 4) / 24.0))
+        else:
+            iono_time = F * 5.0e-9
+
+        return float(iono_time * self.SPEED_OF_LIGHT)
+
+    def storm_scale_factor(self, kp_index: float) -> float:
+        """Iono-error inflation factor as a function of Kp geomagnetic index."""
+        s = 1.0 + 0.1 * (float(kp_index) - 3.0)
+        return float(max(1.0, min(2.5, s)))

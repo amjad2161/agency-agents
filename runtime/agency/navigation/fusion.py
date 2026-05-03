@@ -1574,3 +1574,81 @@ class NavStateInterpolator:
     def clear_before(self, t: float):
         cutoff = float(t)
         self.states = [s for s in self.states if s["t"] >= cutoff]
+
+
+# ============================================================================
+# R11 — Information Filter (dual of Kalman in information space)
+# ============================================================================
+
+class InformationFilter:
+    """Information-form Kalman filter.
+
+    State: information vector y = P⁻¹ x  and  information matrix Y = P⁻¹.
+    Measurement updates are simple additions in information space, which
+    makes multi-sensor fusion trivial via :py:meth:`merge`.
+    """
+
+    def __init__(self, dim: int = 6):
+        import numpy as _np
+        self._np = _np
+        self.dim = int(dim)
+        self.y = _np.zeros(self.dim)
+        self.Y = _np.eye(self.dim) * 1e-3   # large initial covariance
+
+    def predict(self, F, Q):
+        """Information-space prediction step.
+
+        P_pred = F P Fᵀ + Q
+        Y_pred = (F P Fᵀ + Q)⁻¹  (computed via covariance form for stability)
+        """
+        np = self._np
+        F = np.asarray(F, dtype=float).reshape(self.dim, self.dim)
+        Q = np.asarray(Q, dtype=float).reshape(self.dim, self.dim)
+        # Recover covariance form
+        try:
+            P = np.linalg.inv(self.Y)
+        except np.linalg.LinAlgError:
+            P = np.linalg.pinv(self.Y)
+        x = P @ self.y
+        # Joseph-form predict in covariance space
+        P_pred = F @ P @ F.T + Q
+        x_pred = F @ x
+        # Convert back
+        try:
+            self.Y = np.linalg.inv(P_pred)
+        except np.linalg.LinAlgError:
+            self.Y = np.linalg.pinv(P_pred)
+        self.y = self.Y @ x_pred
+
+    def update(self, H, R, z):
+        """Linear measurement update in information space."""
+        np = self._np
+        H = np.asarray(H, dtype=float).reshape(-1, self.dim)
+        R = np.asarray(R, dtype=float).reshape(H.shape[0], H.shape[0])
+        z = np.asarray(z, dtype=float).reshape(-1)
+        try:
+            R_inv = np.linalg.inv(R)
+        except np.linalg.LinAlgError:
+            R_inv = np.linalg.pinv(R)
+        self.Y = self.Y + H.T @ R_inv @ H
+        self.y = self.y + H.T @ R_inv @ z
+
+    def get_state(self):
+        np = self._np
+        try:
+            P = np.linalg.inv(self.Y)
+        except np.linalg.LinAlgError:
+            P = np.linalg.pinv(self.Y)
+        x = P @ self.y
+        return (x, P)
+
+    def merge(self, other):
+        """Sensor-fusion merge: add information matrices and vectors."""
+        if not isinstance(other, InformationFilter):
+            raise TypeError("merge target must be InformationFilter")
+        if other.dim != self.dim:
+            raise ValueError("dimension mismatch")
+        merged = InformationFilter(dim=self.dim)
+        merged.Y = self.Y + other.Y
+        merged.y = self.y + other.y
+        return merged

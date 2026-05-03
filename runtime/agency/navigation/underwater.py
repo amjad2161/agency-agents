@@ -1196,3 +1196,77 @@ class UnderwaterDVLNavigator:
         if b.size == 0:
             return False
         return bool(np.all(np.abs(b) < float(threshold)))
+
+
+# ============================================================================
+# R11 — Tidal Current Compensator (sinusoid fit + drift estimation)
+# ============================================================================
+
+class TidalCurrentCompensator:
+    """Harmonic tidal-current model fit and compensation."""
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+
+    def fit_tidal_model(self, time_series, velocity_series):
+        """Fit v(t) = A·sin(2π·t/T + φ) via grid search over T then linear LS.
+
+        Returns (A, T, phi) — A in m/s, T in seconds, phi in radians.
+        """
+        np = self._np
+        t = np.asarray(time_series, dtype=float).reshape(-1)
+        v = np.asarray(velocity_series, dtype=float).reshape(-1)
+        if t.size < 4:
+            return (0.0, 1.0, 0.0)
+        span = max(float(t.max() - t.min()), 1e-9)
+        # Period candidates: a logarithmic sweep around the typical tidal range
+        candidates = np.linspace(span / 8.0, span * 2.0, 32)
+        candidates = candidates[candidates > 1e-3]
+        best = None
+        for T in candidates:
+            omega = 2.0 * math.pi / float(T)
+            X = np.column_stack([np.sin(omega * t), np.cos(omega * t)])
+            try:
+                coeff, *_ = np.linalg.lstsq(X, v, rcond=None)
+            except np.linalg.LinAlgError:
+                continue
+            v_hat = X @ coeff
+            sse = float(np.sum((v - v_hat) ** 2))
+            if best is None or sse < best[0]:
+                best = (sse, float(T), coeff)
+        if best is None:
+            return (0.0, 1.0, 0.0)
+        _, T_best, coeff = best
+        a_sin, b_cos = float(coeff[0]), float(coeff[1])
+        A = math.sqrt(a_sin * a_sin + b_cos * b_cos)
+        phi = math.atan2(b_cos, a_sin)
+        return (A, T_best, phi)
+
+    def predict_current(self, t: float, A: float, T: float, phi: float):
+        """Return tidal current as (vx, vy) (vx component used; vy = 0)."""
+        omega = 2.0 * math.pi / max(float(T), 1e-9)
+        v = float(A) * math.sin(omega * float(t) + float(phi))
+        return (v, 0.0)
+
+    def compensate(self, measured_vel, t: float, A: float, T: float,
+                   phi: float):
+        """Subtract predicted tidal current from a measured velocity vector."""
+        np = self._np
+        v_meas = np.asarray(measured_vel, dtype=float).reshape(-1)
+        cx, cy = self.predict_current(t, A, T, phi)
+        out = v_meas.copy()
+        out[0] -= cx
+        if v_meas.size > 1:
+            out[1] -= cy
+        return out
+
+    def estimate_drift(self, positions, times):
+        """Return mean (Δx, Δy) drift between consecutive samples."""
+        np = self._np
+        P = np.asarray(positions, dtype=float).reshape(-1, 2)
+        t = np.asarray(times, dtype=float).reshape(-1)
+        if P.shape[0] < 2:
+            return np.zeros(2)
+        dP = np.diff(P, axis=0)
+        return np.mean(dP, axis=0)

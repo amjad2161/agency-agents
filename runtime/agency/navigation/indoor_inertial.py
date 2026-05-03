@@ -805,3 +805,59 @@ class CrouchDetector:
         if var_mag <= 2.0:
             return "walking"
         return "running"
+
+
+# ============================================================================
+# R11 — Elevator / multi-floor motion detector
+# ============================================================================
+
+class ElevatorDetector:
+    """Detects elevator and door-jolt signatures for multi-floor indoor nav."""
+
+    GRAVITY = 9.80665
+    ACCEL_THRESHOLD = 0.5    # m/s² — sustained vertical accel for elevator
+    BARO_RATE_THRESH = 0.3   # m/s — sustained altitude rate during elevator
+
+    def __init__(self):
+        self.accel_z_buf = []
+        self.baro_buf = []
+        self.t_buf = []
+
+    def update(self, accel_z: float, baro_alt: float, dt: float):
+        self.accel_z_buf.append(float(accel_z))
+        self.baro_buf.append(float(baro_alt))
+        self.t_buf.append(float(dt))
+        # Keep only the last 200 samples
+        if len(self.accel_z_buf) > 200:
+            self.accel_z_buf = self.accel_z_buf[-200:]
+            self.baro_buf = self.baro_buf[-200:]
+            self.t_buf = self.t_buf[-200:]
+
+    def detect_elevator(self, window: int = 20) -> bool:
+        if len(self.accel_z_buf) < window:
+            return False
+        a = np.asarray(self.accel_z_buf[-window:], dtype=float) - self.GRAVITY
+        b = np.asarray(self.baro_buf[-window:], dtype=float)
+        if b.size < 2:
+            return False
+        baro_rate = (b[-1] - b[0]) / max(np.sum(self.t_buf[-window:]), 1e-9)
+        return (float(np.mean(np.abs(a))) > self.ACCEL_THRESHOLD
+                and abs(float(baro_rate)) > self.BARO_RATE_THRESH)
+
+    def estimate_floor(self, alt_m: float, floor_height: float = 3.0) -> int:
+        return int(round(float(alt_m) / float(floor_height)))
+
+    def detect_door_open(self, accel_window) -> bool:
+        """Door-jolt: peak >2g spike followed by sub-0.1g quiet zone."""
+        a = np.asarray(accel_window, dtype=float).reshape(-1, 3)
+        if a.shape[0] < 4:
+            return False
+        mag = np.linalg.norm(a, axis=1) - self.GRAVITY
+        peak_idx = int(np.argmax(np.abs(mag)))
+        if abs(mag[peak_idx]) < 2.0 * self.GRAVITY:
+            return False
+        # Quiet window after the peak
+        tail = mag[peak_idx + 1:]
+        if tail.size == 0:
+            return False
+        return float(np.mean(np.abs(tail))) < 0.1 * self.GRAVITY

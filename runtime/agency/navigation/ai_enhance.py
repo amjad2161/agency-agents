@@ -1932,3 +1932,91 @@ class OnlineBayesianPosFilter:
         total = float(np.sum(self.weights))
         if total > 0:
             self.weights = self.weights / total
+
+
+# ============================================================================
+# R11 — Adaptive Map Matcher (HMM Viterbi over road segments)
+# ============================================================================
+
+class AdaptiveMapMatcher:
+    """HMM-based map matching: emission = N(d_to_seg, σ); transition by adjacency."""
+
+    EMISSION_SIGMA = 5.0     # m
+    P_ADJACENT = 0.8
+    P_NON_ADJ = 0.01
+
+    def __init__(self):
+        self.segments = {}    # seg_id -> (start_pt, end_pt)
+
+    def add_segment(self, seg_id, start_pt, end_pt):
+        self.segments[seg_id] = (
+            np.asarray(start_pt, dtype=float).reshape(2),
+            np.asarray(end_pt, dtype=float).reshape(2),
+        )
+
+    @staticmethod
+    def point_to_segment_dist(point, seg_start, seg_end) -> float:
+        """Perpendicular distance from a point to a 2-D line segment."""
+        p = np.asarray(point, dtype=float).reshape(2)
+        a = np.asarray(seg_start, dtype=float).reshape(2)
+        b = np.asarray(seg_end, dtype=float).reshape(2)
+        ab = b - a
+        denom = float(ab @ ab)
+        if denom < 1e-12:
+            return float(np.linalg.norm(p - a))
+        t = float(np.clip((p - a) @ ab / denom, 0.0, 1.0))
+        proj = a + t * ab
+        return float(np.linalg.norm(p - proj))
+
+    def _emission_logprob(self, point, seg_id) -> float:
+        a, b = self.segments[seg_id]
+        d = self.point_to_segment_dist(point, a, b)
+        return -0.5 * (d / self.EMISSION_SIGMA) ** 2
+
+    def _is_adjacent(self, s1, s2) -> bool:
+        a1, b1 = self.segments[s1]
+        a2, b2 = self.segments[s2]
+        for p in (a1, b1):
+            for q in (a2, b2):
+                if float(np.linalg.norm(p - q)) < 1e-3:
+                    return True
+        return False
+
+    def _trans_logprob(self, s_from, s_to) -> float:
+        if s_from == s_to or self._is_adjacent(s_from, s_to):
+            return math.log(self.P_ADJACENT)
+        return math.log(self.P_NON_ADJ)
+
+    def viterbi(self, observations):
+        """Most-likely sequence of segment IDs for a list of 2-D observations."""
+        if not self.segments or not observations:
+            return []
+        seg_ids = list(self.segments.keys())
+        n_states = len(seg_ids)
+        T = len(observations)
+        dp = np.full((T, n_states), -np.inf)
+        back = np.zeros((T, n_states), dtype=int)
+        # Init
+        for j, s in enumerate(seg_ids):
+            dp[0, j] = self._emission_logprob(observations[0], s)
+        # Recursion
+        for t in range(1, T):
+            for j, s_to in enumerate(seg_ids):
+                e = self._emission_logprob(observations[t], s_to)
+                best_prev = -np.inf
+                best_idx = 0
+                for i, s_from in enumerate(seg_ids):
+                    cand = dp[t - 1, i] + self._trans_logprob(s_from, s_to)
+                    if cand > best_prev:
+                        best_prev = cand
+                        best_idx = i
+                dp[t, j] = best_prev + e
+                back[t, j] = best_idx
+        # Backtrace
+        last = int(np.argmax(dp[-1]))
+        path = [seg_ids[last]]
+        for t in range(T - 1, 0, -1):
+            last = int(back[t, last])
+            path.append(seg_ids[last])
+        path.reverse()
+        return path
