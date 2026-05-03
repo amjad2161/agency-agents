@@ -1528,3 +1528,97 @@ class RadioBeaconTriangulation:
         b = self.beacons[idx]
         ang = math.degrees(math.atan2(b[0], b[1]))   # N=0°, E=90°
         return float(ang % 360.0)
+
+
+# ============================================================================
+# R21 — Radar Altimeter Navigation + Geomagnetic Anomaly Map Matching
+# ============================================================================
+
+class RadarAltimeterNav:
+    """Radar altimeter height + DEM correlation for terrain-aided positioning."""
+
+    def __init__(self, map_resolution_m: float = 1.0):
+        self.map_resolution = float(map_resolution_m)
+        self.dem_map = {}
+        self.last_alt_m = 0.0
+        self.noise_std = 0.05
+
+    def load_dem(self, grid_heights, origin_xy, resolution_m=None):
+        res = float(resolution_m) if resolution_m is not None else self.map_resolution
+        h, w = grid_heights.shape
+        for r in range(h):
+            for c in range(w):
+                ix = int(round((float(origin_xy[0]) + c * res) / res))
+                iy = int(round((float(origin_xy[1]) + r * res) / res))
+                self.dem_map[(ix, iy)] = float(grid_heights[r, c])
+
+    def measure_height(self, raw_radar_m: float) -> float:
+        self.last_alt_m = float(raw_radar_m)
+        return self.last_alt_m
+
+    def terrain_height_at(self, xy_pos):
+        x, y = float(xy_pos[0]), float(xy_pos[1])
+        ix = x / self.map_resolution
+        iy = y / self.map_resolution
+        x0 = int(math.floor(ix))
+        y0 = int(math.floor(iy))
+        dx = ix - x0; dy = iy - y0
+        h00 = self.dem_map.get((x0, y0), 0.0)
+        h10 = self.dem_map.get((x0 + 1, y0), h00)
+        h01 = self.dem_map.get((x0, y0 + 1), h00)
+        h11 = self.dem_map.get((x0 + 1, y0 + 1), h00)
+        return float(h00 * (1 - dx) * (1 - dy)
+                     + h10 * dx * (1 - dy)
+                     + h01 * (1 - dx) * dy
+                     + h11 * dx * dy)
+
+    def correlate_position(self, alt_m: float, candidate_positions):
+        best_pos = candidate_positions[0]
+        best_err = float("inf")
+        for pos in candidate_positions:
+            terrain_h = self.terrain_height_at(pos)
+            err = abs(float(alt_m) - terrain_h)
+            if err < best_err:
+                best_err = err
+                best_pos = pos
+        return best_pos, best_err
+
+    def altitude_accuracy(self, slant_range_m: float) -> float:
+        return self.noise_std + 0.001 * float(slant_range_m)
+
+
+class GeomagneticAnomalyNav:
+    """Match measured magnetic field anomaly to a stored map for underground nav."""
+
+    def __init__(self, map_resolution_m: float = 2.0):
+        self.resolution = float(map_resolution_m)
+        self.mag_map = {}
+        self.reference_field = np.array([20000.0, 0.0, 45000.0])
+
+    def load_map(self, positions, field_vectors):
+        for pos, bvec in zip(positions, field_vectors):
+            ix = int(round(float(pos[0]) / self.resolution))
+            iy = int(round(float(pos[1]) / self.resolution))
+            self.mag_map[(ix, iy)] = np.array(bvec, dtype=float)
+
+    def anomaly(self, measured_nT):
+        return np.asarray(measured_nT, dtype=float) - self.reference_field
+
+    def match_position(self, measured_nT):
+        anom = self.anomaly(measured_nT)
+        best_key = None
+        best_dist = float("inf")
+        for key, bvec in self.mag_map.items():
+            d = float(np.linalg.norm(anom - (bvec - self.reference_field)))
+            if d < best_dist:
+                best_dist = d
+                best_key = key
+        return best_key, best_dist
+
+    def position_from_key(self, key):
+        return (key[0] * self.resolution, key[1] * self.resolution)
+
+    def update_map(self, pos, measured_nT):
+        ix = int(round(float(pos[0]) / self.resolution))
+        iy = int(round(float(pos[1]) / self.resolution))
+        self.mag_map[(ix, iy)] = np.array(measured_nT, dtype=float)

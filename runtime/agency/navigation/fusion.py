@@ -2303,3 +2303,65 @@ class ConstrainedKalmanFilter:
         if self._D is None:
             return 0.0
         return float(np.linalg.norm(self._D @ self.x - self._d))
+
+
+# ============================================================================
+# R21 — Adaptive Predictive Filter (model-predictive KF with adaptive Q)
+# ============================================================================
+
+class AdaptivePredictiveFilter:
+    """Predictive Kalman propagator with horizon prediction + adaptive Q."""
+
+    def __init__(self, dim: int, horizon: int = 3):
+        import numpy as _np
+        self._np = _np
+        self.dim = int(dim)
+        self.horizon = int(horizon)
+        self.x = _np.zeros(self.dim)
+        self.P = _np.eye(self.dim)
+        self.Q = _np.eye(self.dim) * 1e-3
+        self.R = _np.eye(self.dim) * 1e-2
+        self.F = _np.eye(self.dim)
+        self.H = _np.eye(self.dim)
+        self.innovation_history = []
+
+    def predict(self, F=None, Q=None):
+        np = self._np
+        Fm = self.F if F is None else np.asarray(F, dtype=float).reshape(self.dim, self.dim)
+        Qm = self.Q if Q is None else np.asarray(Q, dtype=float).reshape(self.dim, self.dim)
+        self.x = Fm @ self.x
+        self.P = Fm @ self.P @ Fm.T + Qm
+        return self.x.copy()
+
+    def update(self, z, R=None):
+        np = self._np
+        Rm = self.R if R is None else np.asarray(R, dtype=float).reshape(self.dim, self.dim)
+        z = np.asarray(z, dtype=float).reshape(self.dim)
+        y = z - self.H @ self.x
+        S = self.H @ self.P @ self.H.T + Rm
+        try:
+            K = self.P @ self.H.T @ np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            return self.x.copy()
+        self.x = self.x + K @ y
+        self.P = (np.eye(self.dim) - K @ self.H) @ self.P
+        self.innovation_history.append(float(np.linalg.norm(y)))
+        return self.x.copy()
+
+    def predict_horizon(self, F=None):
+        np = self._np
+        Fm = self.F if F is None else np.asarray(F, dtype=float).reshape(self.dim, self.dim)
+        states = []
+        xp = self.x.copy()
+        for _ in range(self.horizon):
+            xp = Fm @ xp
+            states.append(xp.copy())
+        return states
+
+    def adaptive_Q(self, innovation_window: int = 5):
+        np = self._np
+        if len(self.innovation_history) >= innovation_window:
+            recent = self.innovation_history[-innovation_window:]
+            scale = float(np.mean(recent)) + 1e-9
+            self.Q = np.eye(self.dim) * (1e-3 * scale)
+        return self.Q.copy()

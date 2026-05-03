@@ -853,3 +853,51 @@ from ._r19_slam import LiDARSLAM  # noqa: E402,F401
 # R20 — re-export NeuralSLAM
 # ============================================================================
 from ._r20_slam import NeuralSLAM  # noqa: E402,F401
+
+
+# ============================================================================
+# R21 — Cellular Tower Positioning (RSSI trilateration from cell DB)
+# ============================================================================
+
+class CellularTowerPositioning:
+    """Offline RSSI-based positioning from a stored cell tower database."""
+
+    def __init__(self, path_loss_exp: float = 3.0,
+                 ref_rssi_dbm: float = -50.0,
+                 ref_dist_m: float = 1.0):
+        self.path_loss_exp = float(path_loss_exp)
+        self.ref_rssi = float(ref_rssi_dbm)
+        self.ref_dist = float(ref_dist_m)
+        self.tower_db = {}
+
+    def add_tower(self, cell_id, position_xyz):
+        self.tower_db[cell_id] = np.asarray(position_xyz, dtype=float)
+
+    def rssi_to_distance(self, rssi_dbm: float) -> float:
+        exp_val = (self.ref_rssi - float(rssi_dbm)) \
+                  / (10.0 * self.path_loss_exp)
+        return float(self.ref_dist * (10.0 ** exp_val))
+
+    def trilaterate(self, measurements):
+        valid = [(cid, self.rssi_to_distance(rssi))
+                 for cid, rssi in measurements if cid in self.tower_db]
+        if len(valid) < 3:
+            return None
+        t0, d0 = valid[0]
+        p0 = self.tower_db[t0]
+        A_rows = []
+        b_rows = []
+        for cid, di in valid[1:]:
+            pi = self.tower_db[cid]
+            A_rows.append(2.0 * (pi[:2] - p0[:2]))
+            b_rows.append(float(d0 ** 2 - di ** 2
+                                + np.dot(pi[:2], pi[:2])
+                                - np.dot(p0[:2], p0[:2])))
+        A = np.asarray(A_rows, dtype=float)
+        b = np.asarray(b_rows, dtype=float)
+        result, *_ = np.linalg.lstsq(A, b, rcond=None)
+        return result
+
+    def positioning_error_bound(self, n_towers: int,
+                                avg_dist_m: float) -> float:
+        return float(avg_dist_m) / max(1.0, float(n_towers) ** 0.5)

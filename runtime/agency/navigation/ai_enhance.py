@@ -2301,3 +2301,50 @@ class SceneRecognizerR20:
 
     def clear(self):
         self._database.clear()
+
+
+# ============================================================================
+# R21 — Transfer Learning Navigator (domain-shift affine adaptation)
+# ============================================================================
+
+class TransferLearningNavigator:
+    """Affine source→target feature-space adaptation for domain shift."""
+
+    def __init__(self, feature_dim: int = 6):
+        self.feature_dim = int(feature_dim)
+        self.A = np.eye(self.feature_dim)
+        self.b = np.zeros(self.feature_dim)
+        self.source_mean = np.zeros(self.feature_dim)
+        self.source_std = np.ones(self.feature_dim)
+        self.target_mean = np.zeros(self.feature_dim)
+        self.target_std = np.ones(self.feature_dim)
+
+    def fit_source(self, source_features):
+        s = np.asarray(source_features, dtype=float).reshape(
+            -1, self.feature_dim)
+        self.source_mean = np.mean(s, axis=0)
+        self.source_std = np.std(s, axis=0) + 1e-9
+
+    def fit_target(self, target_features):
+        t = np.asarray(target_features, dtype=float).reshape(
+            -1, self.feature_dim)
+        self.target_mean = np.mean(t, axis=0)
+        self.target_std = np.std(t, axis=0) + 1e-9
+
+    def compute_transform(self):
+        scale = self.target_std / self.source_std
+        self.A = np.diag(scale)
+        self.b = self.target_mean - self.A @ self.source_mean
+
+    def adapt(self, source_feature):
+        f = np.asarray(source_feature, dtype=float).reshape(self.feature_dim)
+        return self.A @ f + self.b
+
+    def domain_gap(self) -> float:
+        ratio = self.target_std / (self.source_std + 1e-9)
+        mean_diff = self.target_mean - self.source_mean
+        kl = 0.5 * float(np.sum(ratio ** 2
+                                + (mean_diff / self.target_std) ** 2
+                                - 1.0
+                                - 2.0 * np.log(ratio + 1e-9)))
+        return kl
