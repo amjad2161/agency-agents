@@ -1747,3 +1747,72 @@ class AcousticDopplerCurrentProfiler:
         return np.asarray([self.doppler_to_velocity(float(f),
                                                     float(carrier_freq_hz))
                            for f in bottom_freq_shifts], dtype=float)
+
+
+# ============================================================================
+# R26 — LBL Acoustic Positioner (Long Baseline transponder array)
+# ============================================================================
+
+class LBLAcousticPositioner:
+    """Long-Baseline acoustic positioning: trilaterate from ≥3 transponders."""
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self._transponders = {}
+        self._ranges = {}
+
+    def add_transponder(self, tid, pos_xyz):
+        np = self._np
+        self._transponders[tid] = np.asarray(pos_xyz, dtype=float).reshape(3)
+
+    def add_range(self, tid, range_m: float):
+        self._ranges[tid] = float(range_m)
+
+    def trilaterate(self):
+        np = self._np
+        ids = [t for t in self._ranges.keys() if t in self._transponders]
+        if len(ids) < 3:
+            return np.zeros(3)
+        anchors = np.stack([self._transponders[t] for t in ids])
+        ranges = np.array([self._ranges[t] for t in ids])
+        # Initial guess: anchor centroid
+        p = anchors.mean(axis=0)
+        for _ in range(5):
+            d = np.linalg.norm(anchors - p, axis=1) + 1e-9
+            H = (p - anchors) / d[:, None]            # ∂range/∂p
+            residual = ranges - d
+            try:
+                dp, *_ = np.linalg.lstsq(H, residual, rcond=None)
+            except np.linalg.LinAlgError:
+                break
+            p = p + dp
+            if float(np.linalg.norm(dp)) < 1e-6:
+                break
+        return p
+
+    def range_residuals(self, pos_xyz):
+        np = self._np
+        ids = [t for t in self._ranges.keys() if t in self._transponders]
+        if not ids:
+            return np.zeros(0)
+        p = np.asarray(pos_xyz, dtype=float).reshape(3)
+        anchors = np.stack([self._transponders[t] for t in ids])
+        ranges = np.array([self._ranges[t] for t in ids])
+        d = np.linalg.norm(anchors - p, axis=1)
+        return ranges - d
+
+    def gdop(self) -> float:
+        np = self._np
+        ids = [t for t in self._ranges.keys() if t in self._transponders]
+        if len(ids) < 3:
+            return 999.0
+        anchors = np.stack([self._transponders[t] for t in ids])
+        p = anchors.mean(axis=0)
+        d = np.linalg.norm(anchors - p, axis=1) + 1e-9
+        A = (p - anchors) / d[:, None]
+        try:
+            Q = np.linalg.inv(A.T @ A)
+            return float(math.sqrt(max(float(np.trace(Q)), 0.0)))
+        except np.linalg.LinAlgError:
+            return 999.0

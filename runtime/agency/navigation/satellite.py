@@ -2219,3 +2219,135 @@ class BeiDouReceiver:
             return float(math.sqrt(max(Q[0, 0] + Q[1, 1] + Q[2, 2], 0.0)))
         except np.linalg.LinAlgError:
             return 999.0
+
+
+# ============================================================================
+# R26 — GLONASS Receiver (FDMA, channel-dependent frequencies)
+# ============================================================================
+
+class GLONASSReceiver:
+    """GLONASS FDMA receiver — per-satellite frequency channel k ∈ [-7, 6]."""
+
+    C = 299792458.0
+    F_L1_BASE = 1602e6
+    F_L1_STEP = 562.5e3
+    F_L2_BASE = 1246e6
+    F_L2_STEP = 437.5e3
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.sats = {}   # slot -> {'k': int, 'pos_ecef': arr, 'health': bool}
+
+    def f_l1(self, k: int) -> float:
+        return float(self.F_L1_BASE + int(k) * self.F_L1_STEP)
+
+    def f_l2(self, k: int) -> float:
+        return float(self.F_L2_BASE + int(k) * self.F_L2_STEP)
+
+    def add_satellite(self, slot: int, k: int, pos_ecef,
+                      health: bool = True):
+        np = self._np
+        self.sats[int(slot)] = {
+            "k": int(k),
+            "pos_ecef": np.asarray(pos_ecef, dtype=float).reshape(3),
+            "health": bool(health),
+        }
+
+    def pseudorange_rate(self, slot: int, delta_pr_m: float,
+                         dt_s: float) -> float:
+        return float(delta_pr_m) / max(float(dt_s), 1e-9)
+
+    def iono_free_l1_l2(self, slot: int, pr_l1: float,
+                        pr_l2: float) -> float:
+        k = self.sats[int(slot)]["k"]
+        f1 = self.f_l1(k); f2 = self.f_l2(k)
+        return float((f1 ** 2 * float(pr_l1) - f2 ** 2 * float(pr_l2))
+                     / (f1 ** 2 - f2 ** 2))
+
+    def visible_slots(self, rx_pos, min_el_rad: float = 0.0873):
+        np = self._np
+        rx = np.asarray(rx_pos, dtype=float).reshape(3)
+        out = []
+        for slot, sv in self.sats.items():
+            if not sv["health"]:
+                continue
+            diff = sv["pos_ecef"] - rx
+            rng = float(np.linalg.norm(diff)) + 1e-12
+            el = float(math.asin(max(-1.0, min(1.0, diff[2] / rng))))
+            if el >= float(min_el_rad):
+                out.append(slot)
+        return out
+
+
+# ============================================================================
+# R26 — Galileo Receiver (E1/E5a/E5b/E6, CBOC chip rate)
+# ============================================================================
+
+class GalileoReceiver:
+    """Galileo receiver — E1/E5a/E5b/E6 frequencies."""
+
+    F_E1 = 1575.42e6
+    F_E5A = 1176.45e6
+    F_E5B = 1207.14e6
+    F_E6 = 1278.75e6
+    C = 299792458.0
+    CBOC_PRIMARY_HZ = 1.023e6
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.sats = {}
+
+    def add_satellite(self, svid, pos_ecef, health: bool = True):
+        np = self._np
+        self.sats[svid] = {
+            "pos_ecef": np.asarray(pos_ecef, dtype=float).reshape(3),
+            "health": bool(health),
+        }
+
+    def iono_free_E1_E5a(self, pr_e1: float, pr_e5a: float) -> float:
+        f1, f2 = self.F_E1, self.F_E5A
+        return float((f1 ** 2 * float(pr_e1) - f2 ** 2 * float(pr_e5a))
+                     / (f1 ** 2 - f2 ** 2))
+
+    def iono_free_E1_E5b(self, pr_e1: float, pr_e5b: float) -> float:
+        f1, f2 = self.F_E1, self.F_E5B
+        return float((f1 ** 2 * float(pr_e1) - f2 ** 2 * float(pr_e5b))
+                     / (f1 ** 2 - f2 ** 2))
+
+    def cboc_code_freq(self) -> float:
+        return float(self.CBOC_PRIMARY_HZ)
+
+    def elevation_mask(self, rx_pos, min_el_rad: float = 0.0873):
+        np = self._np
+        rx = np.asarray(rx_pos, dtype=float).reshape(3)
+        out = []
+        for svid, sv in self.sats.items():
+            if not sv["health"]:
+                continue
+            diff = sv["pos_ecef"] - rx
+            rng = float(np.linalg.norm(diff)) + 1e-12
+            el = float(math.asin(max(-1.0, min(1.0, diff[2] / rng))))
+            if el >= float(min_el_rad):
+                out.append(svid)
+        return out
+
+    def pdop(self, rx_pos) -> float:
+        np = self._np
+        rx = np.asarray(rx_pos, dtype=float).reshape(3)
+        rows = []
+        for svid, sv in self.sats.items():
+            if not sv["health"]:
+                continue
+            diff = rx - sv["pos_ecef"]
+            rng = float(np.linalg.norm(diff)) + 1e-12
+            rows.append([diff[0] / rng, diff[1] / rng, diff[2] / rng, 1.0])
+        if len(rows) < 4:
+            return 999.0
+        H = np.asarray(rows, dtype=float)
+        try:
+            Q = np.linalg.inv(H.T @ H)
+            return float(math.sqrt(max(Q[0, 0] + Q[1, 1] + Q[2, 2], 0.0)))
+        except np.linalg.LinAlgError:
+            return 999.0

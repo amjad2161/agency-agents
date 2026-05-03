@@ -2668,3 +2668,52 @@ class UnscentedRTS:
                       - np.asarray(P_p, dtype=float)) @ G.T)
         P_s = 0.5 * (P_s + P_s.T)
         return x_s, P_s
+
+
+# ============================================================================
+# R26 — RTK Processor (double-difference, ambiguity resolution, baseline LS)
+# ============================================================================
+
+class RTKProcessor:
+    """Carrier-phase RTK: DD, float/int ambiguity, baseline LS, fix RMS."""
+
+    LAMBDA_L1 = 299792458.0 / 1575.42e6
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+
+    def double_difference(self, pr_ref: float, pr_rover: float,
+                          pr_ref2: float, pr_rover2: float) -> float:
+        return float((float(pr_rover) - float(pr_ref))
+                     - (float(pr_rover2) - float(pr_ref2)))
+
+    def float_ambiguity(self, dd_phase: float, dd_code: float) -> float:
+        return float(float(dd_phase) - float(dd_code) / self.LAMBDA_L1)
+
+    def integer_ambiguity(self, n_float: float) -> int:
+        return int(round(float(n_float)))
+
+    def baseline_from_dd(self, dd_ranges, sat_unit_vecs):
+        np = self._np
+        b = np.asarray(dd_ranges, dtype=float).reshape(-1)
+        H = np.asarray(sat_unit_vecs, dtype=float).reshape(-1, 3)
+        if H.shape[0] != b.size or H.shape[0] < 3:
+            return np.zeros(3)
+        try:
+            x, *_ = np.linalg.lstsq(H, b, rcond=None)
+        except np.linalg.LinAlgError:
+            return np.zeros(3)
+        return x
+
+    def position_fix(self, ref_pos_ecef, baseline):
+        np = self._np
+        return (np.asarray(ref_pos_ecef, dtype=float).reshape(3)
+                + np.asarray(baseline, dtype=float).reshape(3))
+
+    def fixed_solution_rms(self, residuals) -> float:
+        np = self._np
+        r = np.asarray(residuals, dtype=float).reshape(-1)
+        if r.size == 0:
+            return 0.0
+        return float(math.sqrt(float(np.mean(r ** 2))))

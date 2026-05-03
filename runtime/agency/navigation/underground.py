@@ -1622,3 +1622,70 @@ class GeomagneticAnomalyNav:
         ix = int(round(float(pos[0]) / self.resolution))
         iy = int(round(float(pos[1]) / self.resolution))
         self.mag_map[(ix, iy)] = np.array(measured_nT, dtype=float)
+
+
+# ============================================================================
+# R26 — Celestial Navigator (sun/star almanac, equatorial→NED, fix pair)
+# ============================================================================
+
+class CelestialNavigatorR26:
+    """Simplified celestial navigation: body LOS, altitude, azimuth, fix pair.
+
+    R26 variant — separate from tier4 CelestialNavigator (different API).
+    """
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self._bodies = []   # list of (name, ra_rad, dec_rad)
+
+    def add_body(self, name: str, ra_rad: float, dec_rad: float):
+        self._bodies.append((str(name), float(ra_rad), float(dec_rad)))
+
+    def body_los(self, ra_rad: float, dec_rad: float,
+                 lat_rad: float, lon_rad: float, gst_rad: float):
+        """Unit LOS vector to body in NED frame."""
+        np = self._np
+        H = float(gst_rad) + float(lon_rad) - float(ra_rad)
+        sin_dec = math.sin(float(dec_rad)); cos_dec = math.cos(float(dec_rad))
+        sin_lat = math.sin(float(lat_rad)); cos_lat = math.cos(float(lat_rad))
+        cos_H = math.cos(H); sin_H = math.sin(H)
+        # ENU: east, north, up
+        east = -cos_dec * sin_H
+        north = sin_dec * cos_lat - cos_dec * sin_lat * cos_H
+        up = sin_dec * sin_lat + cos_dec * cos_lat * cos_H
+        # NED: north, east, down
+        return np.array([north, east, -up])
+
+    def altitude(self, ra_rad: float, dec_rad: float,
+                 lat_rad: float, lon_rad: float, gst_rad: float) -> float:
+        np = self._np
+        los = self.body_los(ra_rad, dec_rad, lat_rad, lon_rad, gst_rad)
+        # Altitude = arcsin(up) = arcsin(-down)
+        return float(math.asin(max(-1.0, min(1.0, -float(los[2])))))
+
+    def azimuth(self, ra_rad: float, dec_rad: float,
+                lat_rad: float, lon_rad: float, gst_rad: float) -> float:
+        los = self.body_los(ra_rad, dec_rad, lat_rad, lon_rad, gst_rad)
+        # Azimuth: atan2(East, North), result in [-π, π]
+        return float(math.atan2(float(los[1]), float(los[0])))
+
+    def best_pair_for_fix(self, lat_rad: float, lon_rad: float,
+                          gst_rad: float):
+        np = self._np
+        if len(self._bodies) < 2:
+            return None
+        loses = []
+        for name, ra, dec in self._bodies:
+            v = self.body_los(ra, dec, lat_rad, lon_rad, gst_rad)
+            loses.append((name, v))
+        best_pair = None
+        best_orth = -1.0
+        for i in range(len(loses)):
+            for j in range(i + 1, len(loses)):
+                v_i = loses[i][1]; v_j = loses[j][1]
+                cross = float(np.linalg.norm(np.cross(v_i, v_j)))
+                if cross > best_orth:
+                    best_orth = cross
+                    best_pair = (loses[i][0], loses[j][0])
+        return best_pair
