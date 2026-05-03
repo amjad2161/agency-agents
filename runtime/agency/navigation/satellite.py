@@ -1499,3 +1499,55 @@ class CarrierPhaseAmbiguityResolution:
     @property
     def is_fixed(self) -> bool:
         return self._fixed
+
+
+# ============================================================================
+# R15 — GNSS Doppler Velocity Estimator
+# ============================================================================
+
+class GNSSDopplerVelocity:
+    """Receiver velocity from carrier-Doppler measurements."""
+
+    def __init__(self, freq_l1: float = 1575.42e6, c: float = 2.998e8):
+        import numpy as _np
+        self._np = _np
+        self.lambda_l1 = float(c) / float(freq_l1)
+        self.c = float(c)
+        self._last_vel = _np.zeros(3)
+
+    def doppler_to_pseudorange_rate(self, doppler_hz):
+        np = self._np
+        d = np.asarray(doppler_hz, dtype=float).reshape(-1)
+        return -d * self.lambda_l1
+
+    def estimate_velocity(self, doppler_hz, sv_los):
+        """3-state WLS velocity from Doppler observations."""
+        np = self._np
+        rate = self.doppler_to_pseudorange_rate(doppler_hz)
+        H = -np.asarray(sv_los, dtype=float).reshape(-1, 3)
+        if H.shape[0] < 3:
+            return self._last_vel.copy()
+        try:
+            v, *_ = np.linalg.lstsq(H, rate, rcond=None)
+        except np.linalg.LinAlgError:
+            return self._last_vel.copy()
+        self._last_vel = v
+        return v
+
+    def receiver_clock_drift(self, doppler_hz, sv_los) -> float:
+        """4-state solve for [vx, vy, vz, clock_drift_m_s]."""
+        np = self._np
+        rate = self.doppler_to_pseudorange_rate(doppler_hz)
+        L = np.asarray(sv_los, dtype=float).reshape(-1, 3)
+        H = np.hstack([-L, np.ones((L.shape[0], 1))])
+        if H.shape[0] < 4:
+            return 0.0
+        try:
+            sol, *_ = np.linalg.lstsq(H, rate, rcond=None)
+        except np.linalg.LinAlgError:
+            return 0.0
+        return float(sol[3])
+
+    def speed(self) -> float:
+        np = self._np
+        return float(np.linalg.norm(self._last_vel))

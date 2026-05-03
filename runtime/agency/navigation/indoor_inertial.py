@@ -927,3 +927,78 @@ class GaitPhaseEstimator:
                                    height_m: float) -> float:
         """Grieve linear step-length model: L = 0.35·h + 0.01·cadence."""
         return float(0.35 * float(height_m) + 0.01 * float(cadence_spm))
+
+
+# ============================================================================
+# R15 — Strapdown INS (NED frame, quaternion attitude)
+# ============================================================================
+
+class StrapdownINS:
+    """Full 6-DOF strapdown INS in NED frame.
+
+    State: position (3,), velocity (3,) NED, attitude quaternion (4,) [w,x,y,z].
+    """
+
+    def __init__(self, g: float = 9.80665):
+        self.g = float(g)
+        self.pos = np.zeros(3)
+        self.vel = np.zeros(3)
+        self.q = np.array([1.0, 0.0, 0.0, 0.0])
+
+    @staticmethod
+    def _quat_mult(q1, q2):
+        w1, x1, y1, z1 = q1
+        w2, x2, y2, z2 = q2
+        return np.array([
+            w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+            w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+            w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+            w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+        ])
+
+    def _quat_norm(self):
+        n = float(np.linalg.norm(self.q))
+        if n > 0:
+            self.q = self.q / n
+
+    def _rot_matrix(self):
+        w, x, y, z = self.q
+        return np.array([
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ])
+
+    def propagate(self, accel_body, gyro_body, dt: float):
+        a = np.asarray(accel_body, dtype=float).reshape(3)
+        w = np.asarray(gyro_body, dtype=float).reshape(3)
+        dt = float(dt)
+        # First-order quaternion update: q̇ = 0.5 · q · [0, ω]
+        omega = np.array([0.0, w[0], w[1], w[2]])
+        dq = 0.5 * self._quat_mult(self.q, omega) * dt
+        self.q = self.q + dq
+        self._quat_norm()
+        # Rotate body accel into NED, subtract gravity (NED z = +g down)
+        R = self._rot_matrix()
+        a_ned = R @ a - np.array([0.0, 0.0, self.g])
+        # Integrate (RK1)
+        self.vel = self.vel + a_ned * dt
+        self.pos = self.pos + self.vel * dt
+
+    def reset(self, pos=None, vel=None, q=None):
+        if pos is not None:
+            self.pos = np.asarray(pos, dtype=float).reshape(3).copy()
+        if vel is not None:
+            self.vel = np.asarray(vel, dtype=float).reshape(3).copy()
+        if q is not None:
+            self.q = np.asarray(q, dtype=float).reshape(4).copy()
+            self._quat_norm()
+
+    def euler_angles(self):
+        """Return [roll, pitch, yaw] in degrees."""
+        w, x, y, z = self.q
+        roll = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
+        sinp = max(-1.0, min(1.0, 2 * (w * y - z * x)))
+        pitch = math.asin(sinp)
+        yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+        return np.degrees(np.array([roll, pitch, yaw]))

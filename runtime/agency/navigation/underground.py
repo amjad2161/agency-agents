@@ -1367,3 +1367,93 @@ class InertialTerrainFollowing:
             return np.zeros_like(a)
         grad = np.gradient(a, float(dx))
         return np.degrees(np.arctan(grad))
+
+
+# ============================================================================
+# R15 — Terrain-Aided Navigation (DEM map matching)
+# ============================================================================
+
+class TerrainAidedNavigation:
+    """DEM-based terrain-aided navigation with bilinear elevation lookup."""
+
+    def __init__(self, dem, resolution: float = 10.0):
+        import numpy as _np
+        self._np = _np
+        self.dem = _np.asarray(dem, dtype=float).copy()
+        if self.dem.ndim != 2:
+            raise ValueError("dem must be 2-D")
+        self.resolution = float(resolution)
+        self._pos = _np.array([self.dem.shape[0] // 2,
+                               self.dem.shape[1] // 2], dtype=float)
+
+    def elevation_at(self, row: float, col: float) -> float:
+        np = self._np
+        rows, cols = self.dem.shape
+        r = max(0.0, min(rows - 1.0, float(row)))
+        c = max(0.0, min(cols - 1.0, float(col)))
+        r0 = int(math.floor(r)); r1 = min(r0 + 1, rows - 1)
+        c0 = int(math.floor(c)); c1 = min(c0 + 1, cols - 1)
+        dr = r - r0; dc = c - c0
+        e00 = self.dem[r0, c0]; e01 = self.dem[r0, c1]
+        e10 = self.dem[r1, c0]; e11 = self.dem[r1, c1]
+        return float((1 - dr) * ((1 - dc) * e00 + dc * e01)
+                     + dr * ((1 - dc) * e10 + dc * e11))
+
+    def gradient_at(self, row: float, col: float):
+        np = self._np
+        e0 = self.elevation_at(row - 1.0, col)
+        e1 = self.elevation_at(row + 1.0, col)
+        e2 = self.elevation_at(row, col - 1.0)
+        e3 = self.elevation_at(row, col + 1.0)
+        return np.array([(e1 - e0) / 2.0, (e3 - e2) / 2.0])
+
+    def match_profile(self, measured_elevations, heading_deg: float,
+                      n_points: int = 5):
+        """Search a small window around current pos for best correlation."""
+        np = self._np
+        meas = np.asarray(measured_elevations, dtype=float).reshape(-1)
+        n = max(1, int(n_points))
+        h = math.radians(float(heading_deg))
+        dr_step = math.cos(h)
+        dc_step = math.sin(h)
+        rows, cols = self.dem.shape
+        best_score = -np.inf
+        best_pos = self._pos.copy()
+        # Search a 5×5 cell window
+        for dr_off in range(-2, 3):
+            for dc_off in range(-2, 3):
+                profile = []
+                for k in range(n):
+                    r = self._pos[0] + dr_off + k * dr_step
+                    c = self._pos[1] + dc_off + k * dc_step
+                    profile.append(self.elevation_at(r, c))
+                p = np.array(profile)
+                m = meas[:n] if meas.size >= n else np.pad(
+                    meas, (0, n - meas.size), constant_values=meas[-1])
+                pa = p - p.mean()
+                ma = m - m.mean()
+                score = float(np.sum(pa * ma))
+                if score > best_score:
+                    best_score = score
+                    best_pos = np.array([self._pos[0] + dr_off,
+                                         self._pos[1] + dc_off],
+                                        dtype=float)
+        return best_pos
+
+    def update_position(self, inertial_pos, measured_alt: float):
+        """Blend inertial position with elevation-error correction."""
+        np = self._np
+        ip = np.asarray(inertial_pos, dtype=float).reshape(2)
+        dem_alt = self.elevation_at(ip[0], ip[1])
+        err = float(measured_alt) - dem_alt
+        grad = self.gradient_at(ip[0], ip[1])
+        denom = float(grad @ grad) + 1e-9
+        # Step toward truth along gradient direction (Newton-style)
+        step = (err / denom) * grad
+        corrected = ip + 0.1 * step
+        self._pos = corrected
+        return corrected
+
+    @property
+    def position(self):
+        return self._pos.copy()

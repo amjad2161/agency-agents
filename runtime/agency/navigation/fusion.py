@@ -1933,3 +1933,47 @@ class CovarianceIntersectionFilter:
         x_a = self.x.copy()
         P_a = self.P.copy()
         return self.fuse(x_a, P_a, x_new, P_new)
+
+
+# ============================================================================
+# R15 — Rauch-Tung-Striebel backward smoother
+# ============================================================================
+
+class RTSSmoother:
+    """Backward RTS smoother for offline trajectory refinement."""
+
+    def __init__(self, state_dim: int = 3):
+        import numpy as _np
+        self._np = _np
+        self.state_dim = int(state_dim)
+
+    def smoother_gain(self, P_filtered, F, P_pred):
+        np = self._np
+        Pf = np.asarray(P_filtered, dtype=float)
+        Ft = np.asarray(F, dtype=float).T
+        Pp = np.asarray(P_pred, dtype=float)
+        try:
+            P_pred_inv = np.linalg.inv(Pp)
+        except np.linalg.LinAlgError:
+            P_pred_inv = np.linalg.pinv(Pp)
+        return Pf @ Ft @ P_pred_inv
+
+    def smooth(self, xs, Ps, xs_pred, Ps_pred, Fs):
+        np = self._np
+        xs = np.asarray(xs, dtype=float)
+        Ps = np.asarray(Ps, dtype=float)
+        xs_pred = np.asarray(xs_pred, dtype=float)
+        Ps_pred = np.asarray(Ps_pred, dtype=float)
+        Fs = np.asarray(Fs, dtype=float)
+        T = xs.shape[0]
+        xs_smooth = xs.copy()
+        Ps_smooth = Ps.copy()
+        if T <= 1:
+            return (xs_smooth, Ps_smooth)
+        for t in range(T - 2, -1, -1):
+            G = self.smoother_gain(Ps[t], Fs[t + 1], Ps_pred[t + 1])
+            xs_smooth[t] = xs[t] + G @ (xs_smooth[t + 1] - xs_pred[t + 1])
+            Ps_smooth[t] = Ps[t] + G @ (Ps_smooth[t + 1] - Ps_pred[t + 1]) @ G.T
+            # Symmetrise to fight numerical drift
+            Ps_smooth[t] = 0.5 * (Ps_smooth[t] + Ps_smooth[t].T)
+        return (xs_smooth, Ps_smooth)
