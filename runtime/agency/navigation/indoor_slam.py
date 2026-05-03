@@ -1006,3 +1006,9 @@ class LiDARIntensityMapper:
 # R27 — re-export PoseGraphSLAM
 # ============================================================================
 from ._r27_slam import PoseGraphSLAM  # noqa: E402,F401
+
+
+# ============================================================================
+# R28 — re-export WiFiRTTPositioner + BLEBeaconPositioner
+# ============================================================================
+from ._r28_slam import WiFiRTTPositioner, BLEBeaconPositioner  # noqa: E402,F401

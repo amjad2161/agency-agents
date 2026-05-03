@@ -1322,3 +1322,9 @@ class MagneticCompassCalibration:
         if mx <= 1e-12:
             return 1.0
         return float(mn / mx)
+
+
+# ============================================================================
+# R28 — re-export PedestrianDeadReckoning + UWBTwoWayRanging
+# ============================================================================
+from ._r28_inertial import PedestrianDeadReckoning, UWBTwoWayRanging  # noqa: E402,F401

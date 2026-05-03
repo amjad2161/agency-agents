@@ -1816,3 +1816,69 @@ class LBLAcousticPositioner:
             return float(math.sqrt(max(float(np.trace(Q)), 0.0)))
         except np.linalg.LinAlgError:
             return 999.0
+
+
+# ============================================================================
+# R28 — Short-Baseline Acoustic Positioner (SBL)
+# ============================================================================
+
+class SBLAcousticPositioner:
+    """Short-baseline acoustic positioning from hull-mounted transducers."""
+
+    SOUND_SPEED_M_S = 1500.0
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self._transducers = {}      # tid -> offset_xyz (relative to vessel)
+        self._tdoa = []              # list of (ref, other, dt_s)
+
+    def add_transducer(self, tid, offset_xyz):
+        np = self._np
+        self._transducers[tid] = np.asarray(offset_xyz, dtype=float).reshape(3)
+
+    def tdoa(self, tid_ref, tid_other, dt_s: float) -> float:
+        return float(self.SOUND_SPEED_M_S) * float(dt_s)
+
+    def add_tdoa(self, tid_ref, tid_other, dt_s: float):
+        self._tdoa.append((tid_ref, tid_other, float(dt_s)))
+
+    def locate(self):
+        np = self._np
+        valid = [(r, o, dt) for (r, o, dt) in self._tdoa
+                 if r in self._transducers and o in self._transducers]
+        if len(valid) < 1:
+            return np.zeros(3)
+        p = np.array([0.0, 0.0, 10.0])
+        for _ in range(5):
+            residuals = []
+            J = []
+            for r, o, dt in valid:
+                td_meas = self.tdoa(r, o, dt)
+                t_r = self._transducers[r]; t_o = self._transducers[o]
+                d_r = float(np.linalg.norm(p - t_r)) + 1e-9
+                d_o = float(np.linalg.norm(p - t_o)) + 1e-9
+                residuals.append(td_meas - (d_o - d_r))
+                grad_r = (p - t_r) / d_r
+                grad_o = (p - t_o) / d_o
+                J.append((grad_o - grad_r).tolist())
+            J = np.asarray(J, dtype=float)
+            r = np.asarray(residuals, dtype=float)
+            try:
+                dp, *_ = np.linalg.lstsq(J, r, rcond=None)
+            except np.linalg.LinAlgError:
+                break
+            p = p + dp
+            if float(np.linalg.norm(dp)) < 1e-6:
+                break
+        return p
+
+    def bearing(self, pos_xyz) -> float:
+        np = self._np
+        p = np.asarray(pos_xyz, dtype=float).reshape(3)
+        return float(math.atan2(float(p[1]), float(p[0])))
+
+    def slant_range(self, pos_xyz) -> float:
+        np = self._np
+        p = np.asarray(pos_xyz, dtype=float).reshape(3)
+        return float(np.linalg.norm(p))
