@@ -732,3 +732,82 @@ class RadioSLAM:
         except np.linalg.LinAlgError:
             return np.asarray(cur_pos, dtype=float).reshape(2)
         return p
+
+
+# ============================================================================
+# R13 — Semantic Landmark Mapper (topological indoor navigation)
+# ============================================================================
+
+class SemanticLandmarkMapper:
+    """Map of semantic landmarks (doors, elevators, stairs, rooms…)."""
+
+    CONNECT_RADIUS = 15.0  # m — topological adjacency cutoff
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.landmarks = {}    # id -> {category, position_2d, descriptor}
+
+    def add_landmark(self, lm_id, category: str, position_2d, descriptor):
+        np = self._np
+        self.landmarks[str(lm_id)] = {
+            "category": str(category),
+            "position": np.asarray(position_2d, dtype=float).reshape(2),
+            "descriptor": np.asarray(descriptor, dtype=float).reshape(-1),
+        }
+
+    def find_nearest(self, query_pos, category: str | None = None,
+                     max_dist: float = 20.0):
+        np = self._np
+        q = np.asarray(query_pos, dtype=float).reshape(2)
+        best_id = None
+        best_d = float("inf")
+        for lm_id, lm in self.landmarks.items():
+            if category is not None and lm["category"] != category:
+                continue
+            d = float(np.linalg.norm(lm["position"] - q))
+            if d < best_d and d <= float(max_dist):
+                best_d = d
+                best_id = lm_id
+        if best_id is None:
+            return (None, float("inf"))
+        return (best_id, best_d)
+
+    def recognize_landmark(self, sensor_data, vocab):
+        """Cosine-similarity BoW match against the landmark descriptors.
+
+        ``vocab`` maps category -> reference descriptor.  Returns the
+        best (category, confidence ∈ [0, 1]).
+        """
+        np = self._np
+        s = np.asarray(sensor_data, dtype=float).reshape(-1)
+        best_cat = None
+        best_score = -1.0
+        for cat, ref in vocab.items():
+            r = np.asarray(ref, dtype=float).reshape(-1)
+            denom = (float(np.linalg.norm(s)) * float(np.linalg.norm(r)))
+            if denom <= 0:
+                continue
+            cos = float(np.dot(s, r) / denom)
+            score = (cos + 1.0) / 2.0           # map to [0, 1]
+            if score > best_score:
+                best_score = score
+                best_cat = cat
+        if best_cat is None:
+            return ("unknown", 0.0)
+        return (best_cat, float(best_score))
+
+    def compute_topological_graph(self):
+        """Adjacency dict: {id: [neighbour_ids…]} within CONNECT_RADIUS."""
+        np = self._np
+        ids = list(self.landmarks.keys())
+        adj = {i: [] for i in ids}
+        for i in ids:
+            pi = self.landmarks[i]["position"]
+            for j in ids:
+                if i == j:
+                    continue
+                pj = self.landmarks[j]["position"]
+                if float(np.linalg.norm(pi - pj)) <= self.CONNECT_RADIUS:
+                    adj[i].append(j)
+        return adj

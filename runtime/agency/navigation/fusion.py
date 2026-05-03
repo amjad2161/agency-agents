@@ -1768,3 +1768,88 @@ class AsynchronousMultiSensorFusion:
         self.x = self.x + K @ (z - H @ self.x)
         self.P = (np.eye(6) - K @ H) @ self.P
         return self.x.copy()
+
+
+# ============================================================================
+# R13 — Zero-Velocity Update Filter (foot-mounted EKF with periodic ZUPT)
+# ============================================================================
+
+class ZeroVelocityUpdateFilter:
+    """9-state INS EKF with ZUPT.
+
+    State: [px, py, pz, vx, vy, vz, bx, by, bz] (position, velocity, bias).
+    """
+
+    GRAVITY = 9.80665
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.x = _np.zeros(9)
+        self.P = _np.eye(9)
+        # Process / measurement noise
+        self.Q = _np.eye(9) * 1e-3
+        self.R_zupt = _np.eye(3) * 1e-4
+
+    # --- Stationary detection -----------------------------------------------
+
+    def detect_stationary(self, accel_window, gyro_window,
+                          accel_th: float = 0.1,
+                          gyro_th: float = 0.05) -> bool:
+        np = self._np
+        a = np.asarray(accel_window, dtype=float).reshape(-1, 3)
+        g = np.asarray(gyro_window, dtype=float).reshape(-1, 3)
+        if a.size == 0 or g.size == 0:
+            return False
+        a_mag = np.linalg.norm(a, axis=1) - self.GRAVITY
+        return (float(np.std(a_mag)) < float(accel_th)
+                and float(np.mean(np.linalg.norm(g, axis=1))) < float(gyro_th))
+
+    # --- ZUPT measurement update -------------------------------------------
+
+    def apply_zupt(self, state, P):
+        """Force velocity to zero with very high confidence."""
+        np = self._np
+        x = np.asarray(state, dtype=float).reshape(9).copy()
+        P = np.asarray(P, dtype=float).reshape(9, 9).copy()
+        H = np.zeros((3, 9))
+        H[0, 3] = H[1, 4] = H[2, 5] = 1.0
+        z = np.zeros(3)
+        S = H @ P @ H.T + self.R_zupt
+        K = P @ H.T @ np.linalg.inv(S)
+        x = x + K @ (z - H @ x)
+        P = (np.eye(9) - K @ H) @ P
+        self.x = x
+        self.P = P
+        return (x, P)
+
+    # --- Propagation --------------------------------------------------------
+
+    def propagate(self, state, P, imu, dt: float):
+        np = self._np
+        x = np.asarray(state, dtype=float).reshape(9).copy()
+        P = np.asarray(P, dtype=float).reshape(9, 9).copy()
+        a = np.asarray(imu, dtype=float).reshape(3) - x[6:9]      # bias-corrected
+        # Position += vel·dt; velocity += a·dt
+        x[0:3] += x[3:6] * float(dt)
+        x[3:6] += a * float(dt)
+        F = np.eye(9)
+        F[0, 3] = F[1, 4] = F[2, 5] = float(dt)
+        F[3, 6] = F[4, 7] = F[5, 8] = -float(dt)                   # bias coupling
+        P = F @ P @ F.T + self.Q * float(dt)
+        self.x = x
+        self.P = P
+        return (x, P)
+
+    # --- One-step convenience runner ---------------------------------------
+
+    def run_step(self, imu_window, dt: float):
+        np = self._np
+        a_window = np.asarray(imu_window, dtype=float).reshape(-1, 3)
+        last = a_window[-1]
+        # Propagate using last sample
+        self.propagate(self.x, self.P, last, dt)
+        # If the window is stationary apply ZUPT
+        if self.detect_stationary(a_window, np.zeros_like(a_window)):
+            self.apply_zupt(self.x, self.P)
+        return (self.x[0:3].copy(), self.x[3:6].copy(), self.x[6:9].copy())

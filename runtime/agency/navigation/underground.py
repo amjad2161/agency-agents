@@ -1311,3 +1311,59 @@ class GravityGradiometry:
                 best_score = score
                 best_idx = i
         return tuple(map_positions[best_idx])
+
+
+# ============================================================================
+# R13 — Inertial Terrain Following (radar/laser altimeter + INS fusion)
+# ============================================================================
+
+class InertialTerrainFollowing:
+    """Terrain-aided navigation using radar altimetry + barometric INS."""
+
+    def __init__(self, tau: float = 2.0):
+        import numpy as _np
+        self._np = _np
+        self.tau = float(tau)
+        self.terrain_clearance = 0.0
+
+    def update_terrain_alt(self, radar_alt: float, baro_alt: float,
+                           dt: float) -> float:
+        """Complementary blend of high-rate radar with low-rate baro."""
+        radar = float(radar_alt)
+        baro = float(baro_alt)
+        dt = float(dt)
+        alpha = self.tau / (self.tau + dt)
+        self.terrain_clearance = alpha * radar + (1.0 - alpha) * baro
+        return float(self.terrain_clearance)
+
+    def terrain_contour_match(self, profile_observed, profile_map) -> float:
+        """1-D normalised cross-correlation argmax shift (samples)."""
+        np = self._np
+        a = np.asarray(profile_observed, dtype=float).reshape(-1)
+        b = np.asarray(profile_map, dtype=float).reshape(-1)
+        if a.size == 0 or b.size == 0:
+            return 0.0
+        a = a - float(a.mean())
+        b = b - float(b.mean())
+        corr = np.correlate(b, a, mode="full")
+        offset = int(np.argmax(corr)) - (a.size - 1)
+        return float(offset)
+
+    def update_position_from_terrain(self, current_pos, offset: float,
+                                     heading: float):
+        """Apply a contour-match offset along the heading direction."""
+        np = self._np
+        p = np.asarray(current_pos, dtype=float).reshape(2)
+        d = float(offset)
+        h = float(heading)
+        return np.array([p[0] + d * math.cos(h),
+                         p[1] + d * math.sin(h)])
+
+    def slope_estimate(self, terrain_profile, dx: float):
+        """Local slope (degrees) along the profile."""
+        np = self._np
+        a = np.asarray(terrain_profile, dtype=float).reshape(-1)
+        if a.size < 2:
+            return np.zeros_like(a)
+        grad = np.gradient(a, float(dx))
+        return np.degrees(np.arctan(grad))

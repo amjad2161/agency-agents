@@ -1362,3 +1362,58 @@ class GNSSClockSteeringLoop:
         num = float(np.sum(Ia ** 2 - Qa ** 2))
         den = float(np.sum(Ia ** 2 + Qa ** 2)) + 1e-12
         return float(num / den)
+
+
+# ============================================================================
+# R13 — Differential GNSS (DGNSS) base + rover correction broadcast
+# ============================================================================
+
+class DifferentialGNSS:
+    """DGNSS base-station-derived range corrections.
+
+    Base station with surveyed-true position computes per-SV correction
+    = true_geometric_range − measured_pseudorange.  Corrections are
+    broadcast to the rover, which subtracts them from its own
+    pseudoranges (with optional age-based extrapolation).
+    """
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+
+    def compute_corrections(self, base_pseudoranges, base_true_pos,
+                            sat_positions):
+        """Return {sv_id: ΔP_m} dict of pseudorange corrections."""
+        np = self._np
+        base_pos = np.asarray(base_true_pos, dtype=float).reshape(3)
+        out = {}
+        for sv_id, p_meas in base_pseudoranges.items():
+            sat_pos = np.asarray(sat_positions[sv_id], dtype=float).reshape(3)
+            true_range = float(np.linalg.norm(sat_pos - base_pos))
+            out[sv_id] = float(true_range - float(p_meas))
+        return out
+
+    def apply_corrections(self, rover_pseudoranges, corrections):
+        """Add the broadcast correction to each rover pseudorange."""
+        np = self._np
+        keys = list(rover_pseudoranges.keys())
+        out = np.zeros(len(keys))
+        for i, sv_id in enumerate(keys):
+            corr = float(corrections.get(sv_id, 0.0))
+            out[i] = float(rover_pseudoranges[sv_id]) + corr
+        return out
+
+    def extrapolate_correction(self, correction: float, age_s: float,
+                               correction_rate: float) -> float:
+        """Linear extrapolation: corr + rate · age."""
+        return float(correction) + float(correction_rate) * float(age_s)
+
+    def quality_flag(self, correction_age_s: float,
+                     threshold: float = 30.0) -> str:
+        """Return 'good' / 'degraded' / 'invalid' based on correction age."""
+        age = float(correction_age_s)
+        if age < float(threshold):
+            return "good"
+        if age < 2.0 * float(threshold):
+            return "degraded"
+        return "invalid"

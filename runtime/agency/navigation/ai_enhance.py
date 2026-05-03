@@ -2096,3 +2096,84 @@ class ContinualLearningNavigator:
         """Snapshot current weights and refresh Fisher importance."""
         self.fisher = self.compute_fisher_diagonal(data_loader)
         self.old_weights = {k: v.copy() for k, v in self.weights.items()}
+
+
+# ============================================================================
+# R13 — Reinforcement-Learning Path Planner (ε-greedy Q-learning grid agent)
+# ============================================================================
+
+class ReinforcementPathPlanner:
+    """Tabular Q-learning planner on a grid_size × grid_size grid.
+
+    Actions (8): N, S, E, W, NE, NW, SE, SW.
+    """
+
+    ACTIONS = (
+        ( 0,  1),    # 0 N
+        ( 0, -1),    # 1 S
+        ( 1,  0),    # 2 E
+        (-1,  0),    # 3 W
+        ( 1,  1),    # 4 NE
+        (-1,  1),    # 5 NW
+        ( 1, -1),    # 6 SE
+        (-1, -1),    # 7 SW
+    )
+
+    def __init__(self, grid_size: int = 10, seed: int = 0):
+        self.grid_size = int(grid_size)
+        self._rng = np.random.default_rng(int(seed))
+        self.Q = np.zeros((self.grid_size * self.grid_size, 8))
+
+    # --- Helpers -----------------------------------------------------------
+
+    def _state_index(self, state):
+        x, y = int(state[0]), int(state[1])
+        return x * self.grid_size + y
+
+    def _step(self, state, action_idx: int):
+        dx, dy = self.ACTIONS[int(action_idx)]
+        nx = max(0, min(self.grid_size - 1, int(state[0]) + dx))
+        ny = max(0, min(self.grid_size - 1, int(state[1]) + dy))
+        return (nx, ny)
+
+    # --- Policy ------------------------------------------------------------
+
+    def choose_action(self, state, epsilon: float = 0.1) -> int:
+        if float(self._rng.random()) < float(epsilon):
+            return int(self._rng.integers(0, 8))
+        idx = self._state_index(state)
+        return int(np.argmax(self.Q[idx]))
+
+    def update_q(self, state, action: int, reward: float, next_state,
+                 alpha: float = 0.1, gamma: float = 0.9):
+        s = self._state_index(state)
+        sp = self._state_index(next_state)
+        target = float(reward) + float(gamma) * float(np.max(self.Q[sp]))
+        self.Q[s, int(action)] += float(alpha) * (target - self.Q[s, int(action)])
+
+    def plan_path(self, start, goal, max_steps: int = 50):
+        """Train briefly online, then roll out a greedy path start→goal."""
+        gx, gy = int(goal[0]), int(goal[1])
+        # Quick on-policy learning
+        for _ in range(200):
+            state = (int(self._rng.integers(0, self.grid_size)),
+                     int(self._rng.integers(0, self.grid_size)))
+            for _ in range(int(max_steps)):
+                a = self.choose_action(state, epsilon=0.3)
+                ns = self._step(state, a)
+                d = math.hypot(ns[0] - gx, ns[1] - gy)
+                reward = 10.0 if (ns[0], ns[1]) == (gx, gy) else -d * 0.1
+                self.update_q(state, a, reward, ns)
+                state = ns
+                if (state[0], state[1]) == (gx, gy):
+                    break
+        # Greedy rollout
+        state = (int(start[0]), int(start[1]))
+        path = [state]
+        for _ in range(int(max_steps)):
+            if state == (gx, gy):
+                break
+            a = self.choose_action(state, epsilon=0.0)
+            state = self._step(state, a)
+            path.append(state)
+        return path
