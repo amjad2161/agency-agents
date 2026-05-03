@@ -2245,3 +2245,59 @@ class AttentionBasedSensorFusion:
     def update_weights(self, grad, lr: float = 1e-3):
         g = np.asarray(grad, dtype=float).reshape(self.W_O.shape)
         self.W_O = self.W_O - float(lr) * g
+
+
+# ============================================================================
+# R20 — Scene Recognizer (HOG-style histogram + cosine NN database) — R20 variant
+# ============================================================================
+
+class SceneRecognizerR20:
+    """Gradient-histogram place recognition for topological localisation (R20)."""
+
+    def __init__(self, n_bins: int = 8, cell_size: int = 4):
+        self.n_bins = int(n_bins)
+        self.cell_size = int(cell_size)
+        self._database = []
+
+    def extract_features(self, image):
+        img = np.asarray(image, dtype=float)
+        if img.ndim != 2:
+            raise ValueError("image must be 2-D grayscale")
+        # Sobel gradients via central differences
+        Gx = np.zeros_like(img)
+        Gy = np.zeros_like(img)
+        Gx[:, 1:-1] = img[:, 2:] - img[:, :-2]
+        Gy[1:-1, :] = img[2:, :] - img[:-2, :]
+        mag = np.sqrt(Gx * Gx + Gy * Gy)
+        ori = np.arctan2(Gy, Gx) % math.pi    # [0, π)
+        bins = np.linspace(0.0, math.pi, self.n_bins + 1)
+        hist = np.zeros(self.n_bins)
+        for k in range(self.n_bins):
+            mask = (ori >= bins[k]) & (ori < bins[k + 1])
+            hist[k] = float(mag[mask].sum())
+        n = float(np.linalg.norm(hist))
+        if n > 0:
+            hist = hist / n
+        return hist
+
+    def add_scene(self, image, label: str):
+        self._database.append((self.extract_features(image), str(label)))
+
+    def recognize(self, image, top_k: int = 1):
+        if not self._database:
+            return [("unknown", 0.0)]
+        q = self.extract_features(image)
+        scored = []
+        for feat, lbl in self._database:
+            denom = (float(np.linalg.norm(q)) * float(np.linalg.norm(feat))) \
+                    + 1e-12
+            cos = float(np.dot(q, feat) / denom)
+            scored.append((lbl, cos))
+        scored.sort(key=lambda t: t[1], reverse=True)
+        return scored[:int(top_k)]
+
+    def database_size(self) -> int:
+        return len(self._database)
+
+    def clear(self):
+        self._database.clear()

@@ -2240,3 +2240,66 @@ class SchmidtKalmanFilter:
 
     def estimated_state(self):
         return self.x[:self.ne].copy()
+
+
+# ============================================================================
+# R20 — Constrained Kalman Filter (linear equality constraint projection)
+# ============================================================================
+
+class ConstrainedKalmanFilter:
+    """KF + projection onto linear equality manifold D·x = d."""
+
+    def __init__(self, state_dim: int = 4):
+        import numpy as _np
+        self._np = _np
+        self.n = int(state_dim)
+        self.x = _np.zeros(self.n)
+        self.P = _np.eye(self.n)
+        self.F = _np.eye(self.n)
+        m = min(2, self.n)
+        self.H = _np.eye(m, self.n)
+        self.Q = _np.eye(self.n) * 0.01
+        self.R = _np.eye(m) * 1.0
+        self._D = None
+        self._d = None
+
+    def set_constraint(self, D, d):
+        np = self._np
+        self._D = np.asarray(D, dtype=float).reshape(-1, self.n).copy()
+        self._d = np.asarray(d, dtype=float).reshape(-1).copy()
+
+    def predict(self):
+        self.x = self.F @ self.x
+        self.P = self.F @ self.P @ self.F.T + self.Q
+
+    def update(self, z):
+        np = self._np
+        z = np.asarray(z, dtype=float).reshape(-1)
+        S = self.H @ self.P @ self.H.T + self.R
+        try:
+            K = self.P @ self.H.T @ np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            return
+        self.x = self.x + K @ (z - self.H @ self.x)
+        self.P = (np.eye(self.n) - K @ self.H) @ self.P
+
+    def project(self):
+        np = self._np
+        if self._D is None:
+            return
+        D = self._D; d = self._d
+        DPD = D @ self.P @ D.T
+        try:
+            DPD_inv = np.linalg.inv(DPD)
+        except np.linalg.LinAlgError:
+            DPD_inv = np.linalg.pinv(DPD)
+        gain = self.P @ D.T @ DPD_inv
+        self.x = self.x - gain @ (D @ self.x - d)
+        self.P = (np.eye(self.n) - gain @ D) @ self.P
+        self.P = 0.5 * (self.P + self.P.T)
+
+    def constraint_residual(self) -> float:
+        np = self._np
+        if self._D is None:
+            return 0.0
+        return float(np.linalg.norm(self._D @ self.x - self._d))

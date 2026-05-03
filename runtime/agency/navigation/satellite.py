@@ -1886,3 +1886,78 @@ class CelestialNavigator:
             R_arcmin = 1.0 / math.tan(math.radians(h + 7.31 / (h + 4.4)))
             h = h - R_arcmin / 60.0
         return float(h)
+
+
+# ============================================================================
+# R20 — GNSS Spoofing Detector (multi-indicator anti-spoofing)
+# ============================================================================
+
+class GNSSSpoofingDetector:
+    """Detect GNSS spoofing via AGC drop, C/N0 bias, position/clock jumps."""
+
+    ALERT_NONE = 0
+    ALERT_SUSPECT = 1
+    ALERT_SPOOF = 2
+
+    def __init__(self, cn0_threshold: float = 35.0,
+                 agc_drop_threshold: float = 6.0,
+                 pos_jump_m: float = 50.0):
+        import numpy as _np
+        self._np = _np
+        self.cn0_thr = float(cn0_threshold)
+        self.agc_drop = float(agc_drop_threshold)
+        self.pos_jump = float(pos_jump_m)
+        self._agc_baseline = None
+        self._last_pos = None
+        self._score = 0.0
+
+    def update_agc(self, agc_db: float) -> int:
+        if self._agc_baseline is None:
+            self._agc_baseline = float(agc_db)
+            return self.ALERT_NONE
+        drop = self._agc_baseline - float(agc_db)
+        if drop >= self.agc_drop:
+            self._score += 1.0
+            return self.ALERT_SPOOF
+        if drop >= 0.5 * self.agc_drop:
+            return self.ALERT_SUSPECT
+        return self.ALERT_NONE
+
+    def check_cn0(self, cn0_values) -> int:
+        np = self._np
+        v = np.asarray(cn0_values, dtype=float).reshape(-1)
+        if v.size == 0:
+            return self.ALERT_NONE
+        mean_cn0 = float(np.mean(v))
+        if mean_cn0 < self.cn0_thr:
+            return self.ALERT_SUSPECT
+        # Spoofing often produces uniformly very strong signals
+        if mean_cn0 > self.cn0_thr + 20.0 and float(np.std(v)) < 1.0:
+            return self.ALERT_SPOOF
+        return self.ALERT_NONE
+
+    def check_position_jump(self, new_pos_ecef) -> int:
+        np = self._np
+        p = np.asarray(new_pos_ecef, dtype=float).reshape(3)
+        if self._last_pos is None:
+            self._last_pos = p.copy()
+            return self.ALERT_NONE
+        jump = float(np.linalg.norm(p - self._last_pos))
+        self._last_pos = p.copy()
+        if jump > self.pos_jump:
+            return self.ALERT_SPOOF
+        if jump > 0.5 * self.pos_jump:
+            return self.ALERT_SUSPECT
+        return self.ALERT_NONE
+
+    def check_clock_jump(self, clock_bias_m: float, prev_bias_m: float,
+                         max_rate_m_s: float = 1000.0) -> int:
+        rate = abs(float(clock_bias_m) - float(prev_bias_m))
+        if rate > float(max_rate_m_s):
+            return self.ALERT_SPOOF
+        if rate > 0.5 * float(max_rate_m_s):
+            return self.ALERT_SUSPECT
+        return self.ALERT_NONE
+
+    def composite_alert(self, *alerts: int) -> int:
+        return max(alerts) if alerts else self.ALERT_NONE

@@ -1532,3 +1532,45 @@ class BathymetricMapper:
     @property
     def ping_count(self) -> int:
         return self._ping_count
+
+
+# ============================================================================
+# R20 — USBL (Ultra-Short Baseline) Acoustic Positioner (R20 variant)
+# ============================================================================
+
+class USBLPositionerR20:
+    """Phase-difference bearing + two-way travel-time range USBL (R20)."""
+
+    def __init__(self, array_baseline: float = 0.3,
+                 sound_speed: float = 1500.0):
+        import numpy as _np
+        self._np = _np
+        self.baseline = float(array_baseline)
+        self.c = float(sound_speed)
+
+    def phase_to_bearing(self, phase_diff_rad: float) -> float:
+        # Simplified normalised phase-to-bearing (λ = baseline)
+        arg = float(phase_diff_rad) / (2.0 * math.pi)
+        arg = max(-1.0, min(1.0, arg))
+        return float(math.asin(arg))
+
+    def twtt_to_range(self, twtt_s: float) -> float:
+        return float(twtt_s) * self.c / 2.0
+
+    def position_3d(self, slant_range: float, azimuth_rad: float,
+                    elevation_rad: float):
+        np = self._np
+        r = float(slant_range)
+        az = float(azimuth_rad)
+        el = float(elevation_rad)
+        N = r * math.cos(el) * math.cos(az)
+        E = r * math.cos(el) * math.sin(az)
+        D = r * math.sin(el)
+        return np.array([N, E, D])
+
+    def accuracy(self, slant_range: float,
+                 bearing_std_rad: float = 0.01) -> float:
+        return float(slant_range) * math.tan(float(bearing_std_rad))
+
+    def max_unambiguous_angle(self) -> float:
+        return float(math.degrees(math.asin(0.5)))   # 30°

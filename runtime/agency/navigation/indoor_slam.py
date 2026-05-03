@@ -847,3 +847,9 @@ from ._r18_slam import MonteCarloLocalization  # noqa: E402,F401
 # R19 — re-export LiDARSLAM
 # ============================================================================
 from ._r19_slam import LiDARSLAM  # noqa: E402,F401
+
+
+# ============================================================================
+# R20 — re-export NeuralSLAM
+# ============================================================================
+from ._r20_slam import NeuralSLAM  # noqa: E402,F401
