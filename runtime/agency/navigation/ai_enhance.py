@@ -2434,3 +2434,64 @@ class VisualOdometryFrontend:
         dT[1, 3] = float(translation_2d[1])
         self.pose = self.pose @ dT
         return self.pose.copy()
+
+
+# ============================================================================
+# R23 — Online Place Database (incremental similarity-gated DB)
+# ============================================================================
+
+class OnlinePlaceDatabase:
+    """Growing place-recognition database with similarity gating."""
+
+    def __init__(self, feature_dim: int, similarity_threshold: float = 0.85):
+        self.feat_dim = int(feature_dim)
+        self.threshold = float(similarity_threshold)
+        self.features = np.zeros((0, self.feat_dim))
+        self.labels = []
+
+    @staticmethod
+    def _normalize(f):
+        v = np.asarray(f, dtype=float).reshape(-1)
+        n = float(np.linalg.norm(v))
+        return v / (n + 1e-12)
+
+    def add_place(self, feature, label=None) -> bool:
+        f = self._normalize(feature)
+        if self.features.shape[0] > 0:
+            sims = self.features @ f
+            if float(np.max(sims)) >= self.threshold:
+                return False
+        self.features = (np.vstack([self.features, f[np.newaxis, :]])
+                         if self.features.shape[0] > 0
+                         else f[np.newaxis, :])
+        self.labels.append(label)
+        return True
+
+    def query(self, feature, top_k: int = 1):
+        if self.features.shape[0] == 0:
+            return []
+        f = self._normalize(feature)
+        sims = self.features @ f
+        idx = np.argsort(sims)[::-1][:int(top_k)]
+        return [(float(sims[i]), self.labels[i]) for i in idx]
+
+    def size(self) -> int:
+        return int(self.features.shape[0])
+
+    def update_feature(self, idx: int, new_feature):
+        self.features[int(idx)] = self._normalize(new_feature)
+
+    def prune(self, min_similarity: float = 0.0):
+        if self.features.shape[0] < 2:
+            return
+        keep = [True] * self.features.shape[0]
+        for i in range(self.features.shape[0]):
+            if not keep[i]:
+                continue
+            for j in range(i + 1, self.features.shape[0]):
+                if keep[j] and float(self.features[i] @ self.features[j]) \
+                        > self.threshold:
+                    keep[j] = False
+        mask = np.asarray(keep, dtype=bool)
+        self.features = self.features[mask]
+        self.labels = [l for l, k in zip(self.labels, keep) if k]

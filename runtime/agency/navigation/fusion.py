@@ -2434,3 +2434,94 @@ class TightCoupledVIO:
     def feature_depth(self, idx: int) -> float:
         rho = float(self.x[9 + int(idx)])
         return float(1.0 / rho) if abs(rho) > 1e-9 else float("inf")
+
+
+# ============================================================================
+# R23 — Covariance-Resampling Particle Filter (Musso regularised PF)
+# ============================================================================
+
+class CovarianceResamplingPF:
+    """Regularised particle filter with Gaussian KDE jittered resampling."""
+
+    def __init__(self, n_particles: int, state_dim: int,
+                 process_noise_std: float = 0.1, seed: int = 0):
+        import numpy as _np
+        self._np = _np
+        self.N = int(n_particles)
+        self.d = int(state_dim)
+        self.particles = _np.zeros((self.N, self.d))
+        self.weights = _np.ones(self.N) / self.N
+        self.q_std = float(process_noise_std)
+        self._rng = _np.random.default_rng(int(seed))
+
+    def initialize(self, mean, cov):
+        np = self._np
+        cov = np.asarray(cov, dtype=float).reshape(self.d, self.d)
+        L = np.linalg.cholesky(cov + np.eye(self.d) * 1e-12)
+        z = self._rng.standard_normal((self.N, self.d))
+        self.particles = np.asarray(mean, dtype=float) + (L @ z.T).T
+        self.weights[:] = 1.0 / self.N
+
+    def predict(self, F=None, q_std=None):
+        np = self._np
+        Fm = F if F is not None else np.eye(self.d)
+        Fm = np.asarray(Fm, dtype=float).reshape(self.d, self.d)
+        s = float(q_std) if q_std is not None else self.q_std
+        self.particles = (Fm @ self.particles.T).T \
+                         + self._rng.standard_normal((self.N, self.d)) * s
+
+    def update(self, z, H, R):
+        np = self._np
+        z = np.asarray(z, dtype=float).reshape(-1)
+        H = np.asarray(H, dtype=float).reshape(-1, self.d)
+        R = np.asarray(R, dtype=float).reshape(z.size, z.size)
+        for i in range(self.N):
+            innov = z - H @ self.particles[i]
+            S = H @ np.eye(self.d) @ H.T + R
+            sign, logdet = np.linalg.slogdet(S)
+            try:
+                S_inv = np.linalg.inv(S)
+            except np.linalg.LinAlgError:
+                S_inv = np.linalg.pinv(S)
+            mahal = float(innov @ S_inv @ innov)
+            log_w = -0.5 * (mahal + logdet)
+            self.weights[i] *= math.exp(log_w)
+        self.weights = self.weights + 1e-300
+        self.weights = self.weights / float(self.weights.sum())
+
+    def effective_n(self) -> float:
+        np = self._np
+        return float(1.0 / np.sum(self.weights ** 2))
+
+    def regularized_resample(self, h_bw=None):
+        np = self._np
+        cumsum = np.cumsum(self.weights)
+        step = 1.0 / self.N
+        r = float(self._rng.uniform(0.0, step))
+        indices = []
+        j = 0
+        for i in range(self.N):
+            threshold = r + i * step
+            while j < self.N - 1 and cumsum[j] < threshold:
+                j += 1
+            indices.append(j)
+        self.particles = self.particles[indices].copy()
+        if self.N > 1:
+            P_emp = np.cov(self.particles.T)
+            if P_emp.ndim == 0:
+                P_emp = np.array([[float(P_emp)]])
+        else:
+            P_emp = np.eye(self.d)
+        h = float(h_bw) if h_bw is not None \
+            else float(self.N ** (-1.0 / (self.d + 4)))
+        try:
+            L = np.linalg.cholesky(P_emp * h ** 2 + np.eye(self.d) * 1e-12)
+        except np.linalg.LinAlgError:
+            L = np.eye(self.d) * h
+        self.particles = self.particles + (L @ self._rng.standard_normal(
+            (self.d, self.N))).T
+        self.weights[:] = 1.0 / self.N
+
+    def estimate(self) -> float:
+        np = self._np
+        return float(np.average(self.particles[:, 0], weights=self.weights))

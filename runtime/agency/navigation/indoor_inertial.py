@@ -1170,3 +1170,50 @@ class MotionClassifier:
     @property
     def state(self) -> str:
         return self._state
+
+
+# ============================================================================
+# R23 — Wheel Encoder Odometry (differential-drive dead reckoning)
+# ============================================================================
+
+class WheelEncoderOdometry:
+    """Differential-drive dead reckoning from left/right encoder ticks."""
+
+    def __init__(self, wheel_radius_m: float, wheel_base_m: float,
+                 ticks_per_rev: float):
+        self.r = float(wheel_radius_m)
+        self.L = float(wheel_base_m)
+        self.tpr = float(ticks_per_rev)
+        self.x = 0.0
+        self.y = 0.0
+        self.theta = 0.0
+        self.total_dist = 0.0
+
+    def ticks_to_distance(self, ticks: float) -> float:
+        return float(2.0 * math.pi * self.r * (float(ticks) / self.tpr))
+
+    def update(self, left_ticks: float, right_ticks: float):
+        dl = self.ticks_to_distance(left_ticks)
+        dr = self.ticks_to_distance(right_ticks)
+        ds = (dl + dr) / 2.0
+        dtheta = (dr - dl) / max(self.L, 1e-9)
+        self.theta += dtheta
+        self.x += ds * math.cos(self.theta)
+        self.y += ds * math.sin(self.theta)
+        self.total_dist += abs(ds)
+        return np.array([self.x, self.y, self.theta])
+
+    def pose(self):
+        return np.array([self.x, self.y, self.theta])
+
+    def reset(self, x: float = 0.0, y: float = 0.0, theta: float = 0.0):
+        self.x = float(x); self.y = float(y); self.theta = float(theta)
+        self.total_dist = 0.0
+
+    def velocity_from_ticks(self, left_ticks: float, right_ticks: float,
+                            dt: float):
+        dl = self.ticks_to_distance(left_ticks)
+        dr = self.ticks_to_distance(right_ticks)
+        v_linear = (dl + dr) / (2.0 * max(float(dt), 1e-9))
+        v_angular = (dr - dl) / (self.L * max(float(dt), 1e-9))
+        return float(v_linear), float(v_angular)

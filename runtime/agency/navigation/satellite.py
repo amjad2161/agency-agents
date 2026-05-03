@@ -2011,3 +2011,68 @@ class MultiFrequencyGNSS:
         f1, f2 = self.F_L1, self.F_L2
         return float((f2 ** 2 / (f1 ** 2 - f2 ** 2))
                      * (float(P1_m) - float(P2_m)))
+
+
+# ============================================================================
+# R23 — NavIC / IRNSS Receiver Model (L5 + S-band)
+# ============================================================================
+
+class NavICReceiver:
+    """NavIC (IRNSS) receiver: pseudoranges, dual-freq iono, DOP."""
+
+    F_L5 = 1176.45e6
+    F_S = 2492.028e6
+    C = 299792458.0
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self.sats = {}
+        self.rx_pos = _np.zeros(3)
+        self.rx_clk = 0.0
+
+    def add_satellite(self, prn, pos_ecef, clock_err_m: float = 0.0):
+        np = self._np
+        self.sats[prn] = {
+            "pos_ecef": np.asarray(pos_ecef, dtype=float).reshape(3),
+            "clock_err_m": float(clock_err_m),
+        }
+
+    def pseudorange(self, prn, true_rx_pos=None) -> float:
+        np = self._np
+        p = (np.asarray(true_rx_pos, dtype=float).reshape(3)
+             if true_rx_pos is not None else self.rx_pos)
+        sv = self.sats[prn]
+        geo = float(np.linalg.norm(p - sv["pos_ecef"]))
+        return float(geo + self.rx_clk - sv["clock_err_m"])
+
+    def dual_freq_iono(self, prn, P_L5_m: float, P_S_m: float) -> float:
+        f1, f2 = self.F_L5, self.F_S
+        return float((f1 ** 2 * float(P_L5_m) - f2 ** 2 * float(P_S_m))
+                     / (f1 ** 2 - f2 ** 2))
+
+    def elevation_angle(self, prn, rx_pos=None) -> float:
+        np = self._np
+        p = (np.asarray(rx_pos, dtype=float).reshape(3)
+             if rx_pos is not None else self.rx_pos)
+        sv_pos = self.sats[prn]["pos_ecef"]
+        diff = sv_pos - p
+        rng = float(np.linalg.norm(diff)) + 1e-12
+        return float(math.asin(max(-1.0, min(1.0, diff[2] / rng))))
+
+    def dilution_of_precision(self, prn_list, rx_pos=None) -> float:
+        np = self._np
+        p = (np.asarray(rx_pos, dtype=float).reshape(3)
+             if rx_pos is not None else self.rx_pos)
+        rows = []
+        for prn in prn_list:
+            sv = self.sats[prn]["pos_ecef"]
+            diff = p - sv
+            rng = float(np.linalg.norm(diff)) + 1e-12
+            rows.append([diff[0] / rng, diff[1] / rng, diff[2] / rng, 1.0])
+        H = np.asarray(rows, dtype=float)
+        try:
+            Q = np.linalg.inv(H.T @ H)
+            return float(math.sqrt(max(Q[0, 0] + Q[1, 1] + Q[2, 2], 0.0)))
+        except np.linalg.LinAlgError:
+            return float("inf")

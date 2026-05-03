@@ -1636,3 +1636,59 @@ class UnderwaterStrapdownINS:
             else np.asarray(vel, dtype=float).reshape(3).copy()
         self.att = np.zeros(3) if att is None \
             else np.asarray(att, dtype=float).reshape(3).copy()
+
+
+# ============================================================================
+# R23 — Sonar Ray-Casting (2-D occupancy beam simulation)
+# ============================================================================
+
+class SonarRayCasting:
+    """Multi-beam sonar ray-casting on a 2-D occupancy grid."""
+
+    def __init__(self, grid, resolution_m: float = 0.5,
+                 max_range_m: float = 30.0):
+        import numpy as _np
+        self._np = _np
+        self.grid = _np.asarray(grid, dtype=bool).copy()
+        self.res = float(resolution_m)
+        self.max_range = float(max_range_m)
+        self.h, self.w = self.grid.shape
+
+    def _world_to_grid(self, x: float, y: float):
+        return int(float(x) / self.res), int(float(y) / self.res)
+
+    def cast_ray(self, origin_xy, angle_rad: float) -> float:
+        ox = float(origin_xy[0]); oy = float(origin_xy[1])
+        dx = math.cos(float(angle_rad))
+        dy = math.sin(float(angle_rad))
+        step = self.res * 0.5
+        dist = 0.0
+        while dist < self.max_range:
+            x = ox + dx * dist
+            y = oy + dy * dist
+            gx, gy = self._world_to_grid(x, y)
+            if gx < 0 or gx >= self.w or gy < 0 or gy >= self.h:
+                return self.max_range
+            if self.grid[gy, gx]:
+                return float(dist)
+            dist += step
+        return self.max_range
+
+    def scan(self, origin_xy, angles_rad):
+        np = self._np
+        return np.asarray([self.cast_ray(origin_xy, float(a))
+                           for a in angles_rad], dtype=float)
+
+    def expected_obstacle_xy(self, origin_xy, angle_rad: float,
+                             measured_range: float):
+        np = self._np
+        ox = float(origin_xy[0]); oy = float(origin_xy[1])
+        return np.array([ox + float(measured_range) * math.cos(float(angle_rad)),
+                         oy + float(measured_range) * math.sin(float(angle_rad))])
+
+    def scan_match_score(self, origin_xy, measured_ranges,
+                         angles_rad) -> float:
+        np = self._np
+        sim = self.scan(origin_xy, angles_rad)
+        diffs = np.abs(sim - np.asarray(measured_ranges, dtype=float))
+        return float(np.mean(1.0 / (1.0 + diffs)))
