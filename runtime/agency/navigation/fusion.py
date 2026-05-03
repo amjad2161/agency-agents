@@ -2031,3 +2031,96 @@ class FadingMemoryFilter:
         np = self._np
         z = np.asarray(z, dtype=float).reshape(self.m)
         return z - self.H @ self.x
+
+
+# ============================================================================
+# R17 — Hybrid Navigation Filter (EKF outdoor / Particle Filter indoor)
+# ============================================================================
+
+class HybridNavigationFilter:
+    """Mode-switching filter: EKF when outdoor (low uncertainty), PF indoor."""
+
+    def __init__(self, state_dim: int = 3, n_particles: int = 100,
+                 outdoor_threshold: float = 5.0, seed: int = 0):
+        import numpy as _np
+        self._np = _np
+        self.state_dim = int(state_dim)
+        self.n_particles = int(n_particles)
+        self.outdoor_threshold = float(outdoor_threshold)
+        self._mode = "ekf"
+        self._x_ekf = _np.zeros(self.state_dim)
+        self._P_ekf = _np.eye(self.state_dim) * 10.0
+        rng = _np.random.default_rng(int(seed))
+        self._rng = rng
+        self._particles = rng.normal(0.0, 5.0,
+                                     (self.n_particles, self.state_dim))
+        self._weights = _np.ones(self.n_particles) / self.n_particles
+
+    def select_mode(self, uncertainty: float):
+        self._mode = "ekf" if float(uncertainty) < self.outdoor_threshold \
+            else "particle"
+
+    def predict(self, F, Q):
+        np = self._np
+        F = np.asarray(F, dtype=float).reshape(self.state_dim, self.state_dim)
+        Q = np.asarray(Q, dtype=float).reshape(self.state_dim, self.state_dim)
+        if self._mode == "ekf":
+            self._x_ekf = F @ self._x_ekf
+            self._P_ekf = F @ self._P_ekf @ F.T + Q
+        else:
+            self._particles = self._particles @ F.T \
+                              + self._rng.multivariate_normal(
+                                  np.zeros(self.state_dim), Q,
+                                  size=self.n_particles)
+
+    def update(self, z, H, R):
+        np = self._np
+        z = np.asarray(z, dtype=float).reshape(-1)
+        H = np.asarray(H, dtype=float).reshape(z.size, self.state_dim)
+        R = np.asarray(R, dtype=float).reshape(z.size, z.size)
+        if self._mode == "ekf":
+            S = H @ self._P_ekf @ H.T + R
+            try:
+                K = self._P_ekf @ H.T @ np.linalg.inv(S)
+            except np.linalg.LinAlgError:
+                return
+            self._x_ekf = self._x_ekf + K @ (z - H @ self._x_ekf)
+            self._P_ekf = (np.eye(self.state_dim) - K @ H) @ self._P_ekf
+        else:
+            try:
+                R_inv = np.linalg.inv(R)
+            except np.linalg.LinAlgError:
+                R_inv = np.linalg.pinv(R)
+            innov = z[None, :] - self._particles @ H.T
+            quad = np.sum((innov @ R_inv) * innov, axis=1)
+            log_w = -0.5 * quad
+            log_w = log_w - log_w.max()
+            w = np.exp(log_w)
+            w = w / max(float(w.sum()), 1e-12)
+            self._weights = w
+            # Optional resampling when effective sample size collapses
+            ess = 1.0 / float(np.sum(w ** 2) + 1e-12)
+            if ess < 0.5 * self.n_particles:
+                idx = self._rng.choice(self.n_particles,
+                                       size=self.n_particles, p=w)
+                self._particles = self._particles[idx]
+                self._weights = np.ones(self.n_particles) / self.n_particles
+
+    def state(self):
+        np = self._np
+        if self._mode == "ekf":
+            return self._x_ekf.copy()
+        return np.sum(self._weights[:, None] * self._particles, axis=0)
+
+    def uncertainty(self) -> float:
+        np = self._np
+        if self._mode == "ekf":
+            return float(np.trace(self._P_ekf))
+        mean = self.state()
+        diff = self._particles - mean
+        var = float(np.sum(self._weights[:, None] * (diff ** 2)))
+        return var
+
+    @property
+    def mode(self) -> str:
+        return self._mode

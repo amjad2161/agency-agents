@@ -1628,3 +1628,81 @@ class AdvancedRAIM:
         if improvements[worst] > 0.5 * base_vpl:
             flags[worst] = False
         return flags
+
+
+# ============================================================================
+# R17 — Kepler Orbit Propagator (GPS broadcast ephemeris → ECEF XYZ)
+# ============================================================================
+
+class KeplerOrbitPropagator:
+    """Propagate GPS Keplerian elements to ECEF position + numeric velocity."""
+
+    MU_EARTH = 3.986004418e14
+    OMEGA_E = 7.2921151467e-5
+    A_GPS = 26559710.0
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self._eph = {}
+
+    def set_ephemeris(self, sqrt_a: float, e: float, i0: float,
+                      omega0: float, omega: float, m0: float,
+                      toe: float, delta_n: float = 0.0,
+                      idot: float = 0.0, omega_dot: float = 0.0):
+        a = float(sqrt_a) ** 2
+        self._eph = dict(a=a, e=float(e), i0=float(i0),
+                         omega0=float(omega0), omega=float(omega),
+                         m0=float(m0), toe=float(toe),
+                         delta_n=float(delta_n), idot=float(idot),
+                         omega_dot=float(omega_dot))
+
+    def eccentric_anomaly(self, M: float, tol: float = 1e-12) -> float:
+        e = float(self._eph.get("e", 0.0))
+        E = float(M)
+        for _ in range(50):
+            f = E - e * math.sin(E) - M
+            fp = 1.0 - e * math.cos(E)
+            if abs(fp) < 1e-14:
+                break
+            dE = f / fp
+            E -= dE
+            if abs(dE) < tol:
+                break
+        return float(E)
+
+    def sv_position(self, t: float):
+        np = self._np
+        if not self._eph:
+            return np.zeros(3)
+        a = self._eph["a"]; e = self._eph["e"]
+        i0 = self._eph["i0"]; idot = self._eph["idot"]
+        omega0 = self._eph["omega0"]; omega = self._eph["omega"]
+        m0 = self._eph["m0"]; toe = self._eph["toe"]
+        delta_n = self._eph["delta_n"]; omega_dot = self._eph["omega_dot"]
+
+        n0 = math.sqrt(self.MU_EARTH / (a ** 3))
+        n = n0 + delta_n
+        tk = float(t) - toe
+        M = m0 + n * tk
+        E = self.eccentric_anomaly(M)
+        sin_nu = math.sqrt(1.0 - e * e) * math.sin(E)
+        cos_nu = math.cos(E) - e
+        nu = math.atan2(sin_nu, cos_nu)
+        u = nu + omega
+        r = a * (1.0 - e * math.cos(E))
+        i = i0 + idot * tk
+        # Corrected ascending node (account for Earth rotation)
+        Omega = omega0 + (omega_dot - self.OMEGA_E) * tk - self.OMEGA_E * toe
+        # Position in orbital plane
+        x_op = r * math.cos(u)
+        y_op = r * math.sin(u)
+        cos_O = math.cos(Omega); sin_O = math.sin(Omega)
+        cos_i = math.cos(i)
+        x = x_op * cos_O - y_op * cos_i * sin_O
+        y = x_op * sin_O + y_op * cos_i * cos_O
+        z = y_op * math.sin(i)
+        return np.array([x, y, z])
+
+    def sv_velocity(self, t: float, dt: float = 0.01):
+        return (self.sv_position(t + dt) - self.sv_position(t - dt)) / (2.0 * dt)

@@ -1048,3 +1048,50 @@ class TiltCompensatedCompass:
     def declination_correct(self, heading_deg: float,
                             declination_deg: float) -> float:
         return float((float(heading_deg) + float(declination_deg)) % 360.0)
+
+
+# ============================================================================
+# R17 — Ackermann Steering Vehicle Odometry (with longitudinal slip)
+# ============================================================================
+
+class AckermannOdometry:
+    """Differential-drive approximation for Ackermann-steered ground vehicles."""
+
+    def __init__(self, wheelbase: float = 2.7, track_width: float = 1.5,
+                 wheel_radius: float = 0.33, ticks_per_rev: int = 512):
+        self.wheelbase = float(wheelbase)
+        self.track_width = float(track_width)
+        self.wheel_radius = float(wheel_radius)
+        self.ticks_per_rev = int(ticks_per_rev)
+        self._slip = 0.0
+        self.pose = np.zeros(3)
+
+    def ticks_to_distance(self, ticks: int) -> float:
+        return float(ticks) * (2.0 * math.pi * self.wheel_radius) \
+               / float(self.ticks_per_rev)
+
+    def update(self, left_ticks: int, right_ticks: int, dt: float):
+        d_l = self.ticks_to_distance(left_ticks) * (1.0 - self._slip)
+        d_r = self.ticks_to_distance(right_ticks) * (1.0 - self._slip)
+        d_c = 0.5 * (d_l + d_r)
+        d_th = (d_r - d_l) / max(self.track_width, 1e-9)
+        # Mid-point integration
+        theta_mid = self.pose[2] + 0.5 * d_th
+        self.pose = self.pose + np.array([d_c * math.cos(theta_mid),
+                                          d_c * math.sin(theta_mid),
+                                          d_th])
+        self.pose[2] = math.atan2(math.sin(self.pose[2]),
+                                  math.cos(self.pose[2]))
+        return self.pose.copy()
+
+    def set_slip(self, slip_ratio: float):
+        self._slip = float(np.clip(slip_ratio, 0.0, 0.99))
+
+    def steering_radius(self, steering_angle_rad: float) -> float:
+        a = float(steering_angle_rad)
+        if abs(a) < 1e-6:
+            return float("inf")
+        return self.wheelbase / math.tan(a)
+
+    def reset(self):
+        self.pose = np.zeros(3)

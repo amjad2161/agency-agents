@@ -1327,3 +1327,85 @@ class SoundVelocityProfile:
         if abs(sin_out) > 1.0:
             return float("nan")
         return float(math.asin(sin_out))
+
+
+# ============================================================================
+# R17 — Hydrophone Array TDOA Localiser (3-D source localisation)
+# ============================================================================
+
+class HydrophoneArrayLocator:
+    """4+ hydrophone TDOA source-position estimator (WLS + iterative)."""
+
+    def __init__(self, hydrophones, sound_speed: float = 1500.0):
+        import numpy as _np
+        self._np = _np
+        self.hydrophones = _np.asarray(hydrophones, dtype=float).copy()
+        if self.hydrophones.ndim != 2 or self.hydrophones.shape[1] != 3:
+            raise ValueError("hydrophones must have shape (n, 3)")
+        self.sound_speed = float(sound_speed)
+
+    def tdoa(self, source_pos):
+        np = self._np
+        s = np.asarray(source_pos, dtype=float).reshape(3)
+        d = np.linalg.norm(self.hydrophones - s, axis=1)
+        # TDOA relative to hydrophone 0
+        return (d[1:] - d[0]) / self.sound_speed
+
+    def _ranges_from_tdoa(self, tdoa_measured):
+        np = self._np
+        td = np.asarray(tdoa_measured, dtype=float).reshape(-1)
+        return td * self.sound_speed   # range differences relative to h0
+
+    def locate_wls(self, tdoa_measured):
+        """Spherical-LS TDOA inversion (Schau-Robinson style)."""
+        np = self._np
+        h = self.hydrophones
+        n = h.shape[0]
+        if n < 4:
+            return np.zeros(3)
+        d = self._ranges_from_tdoa(tdoa_measured)   # (n-1,)
+        h0 = h[0]
+        # Linearise:  2·(h_i − h_0)ᵀ·s + 2·d_i·R0 = ||h_i||² − ||h_0||² − d_i²
+        # Unknowns:   [sx, sy, sz, R0]
+        A = np.zeros((n - 1, 4))
+        b = np.zeros(n - 1)
+        for i in range(1, n):
+            A[i - 1, :3] = 2.0 * (h[i] - h0)
+            A[i - 1, 3] = 2.0 * d[i - 1]
+            b[i - 1] = (np.sum(h[i] * h[i]) - np.sum(h0 * h0)
+                        - d[i - 1] ** 2)
+        try:
+            sol, *_ = np.linalg.lstsq(A, b, rcond=None)
+        except np.linalg.LinAlgError:
+            return np.zeros(3)
+        return sol[:3]
+
+    def locate_iterative(self, tdoa_measured, init_pos=None,
+                         n_iter: int = 10):
+        np = self._np
+        if init_pos is None:
+            p = self.locate_wls(tdoa_measured).copy()
+        else:
+            p = np.asarray(init_pos, dtype=float).reshape(3).copy()
+        td = np.asarray(tdoa_measured, dtype=float).reshape(-1)
+        h = self.hydrophones
+        for _ in range(int(n_iter)):
+            d_pred = np.linalg.norm(h - p, axis=1)
+            tdoa_pred = (d_pred[1:] - d_pred[0]) / self.sound_speed
+            residual = td - tdoa_pred
+            # Jacobian of TDOA w.r.t. source position
+            u = (p - h) / np.maximum(d_pred[:, None], 1e-9)
+            J = (u[1:] - u[0]) / self.sound_speed
+            try:
+                dp, *_ = np.linalg.lstsq(J, residual, rcond=None)
+            except np.linalg.LinAlgError:
+                break
+            p = p + dp
+            if float(np.linalg.norm(dp)) < 1e-8:
+                break
+        return p
+
+    def position_error(self, estimated, true_pos) -> float:
+        np = self._np
+        return float(np.linalg.norm(np.asarray(estimated, dtype=float)
+                                    - np.asarray(true_pos, dtype=float)))
