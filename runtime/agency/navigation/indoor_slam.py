@@ -1000,3 +1000,9 @@ class LiDARIntensityMapper:
         if mask.sum() == 0:
             return 0.0
         return float(ints[mask].mean())
+
+
+# ============================================================================
+# R27 — re-export PoseGraphSLAM
+# ============================================================================
+from ._r27_slam import PoseGraphSLAM  # noqa: E402,F401

@@ -1689,3 +1689,160 @@ class CelestialNavigatorR26:
                     best_orth = cross
                     best_pair = (loses[i][0], loses[j][0])
         return best_pair
+
+
+# ============================================================================
+# R27 — Radio Beacon Triangulator (RSSI-based 2-D LS positioning)
+# ============================================================================
+
+class RadioBeaconTriangulator:
+    """RSSI-based 2-D triangulation from a stored beacon catalogue."""
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self._beacons = {}     # bid -> (pos_xy, freq_hz, power_dbm)
+        self._rssi = {}        # bid -> rssi_dbm
+
+    def add_beacon(self, bid, pos_xy, freq_hz: float,
+                   power_dbm: float = 20.0):
+        np = self._np
+        self._beacons[bid] = (
+            np.asarray(pos_xy, dtype=float).reshape(2),
+            float(freq_hz),
+            float(power_dbm),
+        )
+
+    def rssi_to_range(self, rssi_dbm: float, bid,
+                      path_loss_exp: float = 2.0) -> float:
+        _, _, power = self._beacons[bid]
+        exp_val = (float(power) - float(rssi_dbm)) \
+                  / (10.0 * float(path_loss_exp))
+        return float(10.0 ** exp_val)
+
+    def add_rssi(self, bid, rssi_dbm: float):
+        self._rssi[bid] = float(rssi_dbm)
+
+    def triangulate(self):
+        np = self._np
+        ids = [b for b in self._rssi if b in self._beacons]
+        if len(ids) < 3:
+            return np.zeros(2)
+        anchors = np.stack([self._beacons[b][0] for b in ids])
+        ranges = np.array([self.rssi_to_range(self._rssi[b], b) for b in ids])
+        p = anchors.mean(axis=0)
+        for _ in range(5):
+            d = np.linalg.norm(anchors - p, axis=1) + 1e-9
+            H = (p - anchors) / d[:, None]
+            residual = ranges - d
+            try:
+                dp, *_ = np.linalg.lstsq(H, residual, rcond=None)
+            except np.linalg.LinAlgError:
+                break
+            p = p + dp
+            if float(np.linalg.norm(dp)) < 1e-6:
+                break
+        return p
+
+    def range_residuals(self, pos_xy):
+        np = self._np
+        ids = [b for b in self._rssi if b in self._beacons]
+        if not ids:
+            return np.zeros(0)
+        p = np.asarray(pos_xy, dtype=float).reshape(2)
+        anchors = np.stack([self._beacons[b][0] for b in ids])
+        ranges = np.array([self.rssi_to_range(self._rssi[b], b) for b in ids])
+        d = np.linalg.norm(anchors - p, axis=1)
+        return ranges - d
+
+    def clear_measurements(self):
+        self._rssi.clear()
+
+
+# ============================================================================
+# R27 — Gravity Anomaly Navigator (DEM-style gravity map matching)
+# ============================================================================
+
+class GravityAnomalyNavigator:
+    """Match measured gravity anomalies against stored 2-D map."""
+
+    def __init__(self, grid_lat, grid_lon, gravity_map):
+        import numpy as _np
+        self._np = _np
+        self.grid_lat = _np.asarray(grid_lat, dtype=float).reshape(-1)
+        self.grid_lon = _np.asarray(grid_lon, dtype=float).reshape(-1)
+        self.gravity_map = _np.asarray(gravity_map, dtype=float)
+        if self.gravity_map.shape != (self.grid_lat.size,
+                                       self.grid_lon.size):
+            raise ValueError("gravity_map shape must be (lat, lon)")
+
+    def _cell_indices(self, lat: float, lon: float):
+        np = self._np
+        # Bracket lat/lon
+        lat_v = float(np.clip(lat, float(self.grid_lat.min()),
+                              float(self.grid_lat.max())))
+        lon_v = float(np.clip(lon, float(self.grid_lon.min()),
+                              float(self.grid_lon.max())))
+        ilat = int(np.searchsorted(self.grid_lat, lat_v) - 1)
+        ilon = int(np.searchsorted(self.grid_lon, lon_v) - 1)
+        ilat = int(np.clip(ilat, 0, self.grid_lat.size - 2))
+        ilon = int(np.clip(ilon, 0, self.grid_lon.size - 2))
+        return ilat, ilon, lat_v, lon_v
+
+    def reference_gravity(self, lat_rad: float, lon_rad: float) -> float:
+        ilat, ilon, lat_v, lon_v = self._cell_indices(float(lat_rad),
+                                                      float(lon_rad))
+        lat0 = self.grid_lat[ilat]; lat1 = self.grid_lat[ilat + 1]
+        lon0 = self.grid_lon[ilon]; lon1 = self.grid_lon[ilon + 1]
+        dlat = (lat_v - lat0) / max(lat1 - lat0, 1e-12)
+        dlon = (lon_v - lon0) / max(lon1 - lon0, 1e-12)
+        g00 = self.gravity_map[ilat, ilon]
+        g10 = self.gravity_map[ilat + 1, ilon]
+        g01 = self.gravity_map[ilat, ilon + 1]
+        g11 = self.gravity_map[ilat + 1, ilon + 1]
+        return float((1 - dlat) * ((1 - dlon) * g00 + dlon * g01)
+                     + dlat * ((1 - dlon) * g10 + dlon * g11))
+
+    def anomaly(self, measured_g: float, lat_rad: float,
+                lon_rad: float) -> float:
+        return float(measured_g) - self.reference_gravity(lat_rad, lon_rad)
+
+    def map_match(self, measured_g_sequence, candidate_positions) -> int:
+        np = self._np
+        seq = np.asarray(measured_g_sequence, dtype=float).reshape(-1)
+        best_idx = 0
+        best_score = float("inf")
+        for i, (lat, lon) in enumerate(candidate_positions):
+            errs = []
+            for g in seq:
+                anom = self.anomaly(float(g), lat, lon)
+                errs.append(anom * anom)
+            score = float(sum(errs))
+            if score < best_score:
+                best_score = score
+                best_idx = i
+        return best_idx
+
+    def gravity_gradient(self, lat_rad: float, lon_rad: float):
+        np = self._np
+        ilat, ilon, _, _ = self._cell_indices(float(lat_rad), float(lon_rad))
+        # central difference along grid
+        dlat_step = float(self.grid_lat[ilat + 1] - self.grid_lat[ilat])
+        dlon_step = float(self.grid_lon[ilon + 1] - self.grid_lon[ilon])
+        dg_dlat = (self.gravity_map[ilat + 1, ilon]
+                   - self.gravity_map[ilat, ilon]) \
+                  / max(dlat_step, 1e-12)
+        dg_dlon = (self.gravity_map[ilat, ilon + 1]
+                   - self.gravity_map[ilat, ilon]) \
+                  / max(dlon_step, 1e-12)
+        return np.array([dg_dlat, dg_dlon])
+
+    def position_update(self, pos_lat: float, pos_lon: float,
+                        measured_g: float, step_size: float = 0.01):
+        np = self._np
+        anom = self.anomaly(measured_g, pos_lat, pos_lon)
+        grad = self.gravity_gradient(pos_lat, pos_lon)
+        denom = float(grad @ grad) + 1e-9
+        # Move along gradient to reduce |anomaly|
+        return np.array([float(pos_lat) - float(step_size) * anom * grad[0] / denom,
+                         float(pos_lon) - float(step_size) * anom * grad[1] / denom])

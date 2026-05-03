@@ -2717,3 +2717,82 @@ class RTKProcessor:
         if r.size == 0:
             return 0.0
         return float(math.sqrt(float(np.mean(r ** 2))))
+
+
+# ============================================================================
+# R27 — Uncertainty Quantifier (MC propagation, KL, NEES, entropy, CI)
+# ============================================================================
+
+class UncertaintyQuantifier:
+    """Monte-Carlo uncertainty propagation + Gaussian-info diagnostics."""
+
+    def __init__(self, n_samples: int = 100, seed: int = 0):
+        import numpy as _np
+        self._np = _np
+        self.n_samples = int(n_samples)
+        self._rng = _np.random.default_rng(int(seed))
+
+    def monte_carlo_propagate(self, x_mean, x_cov, f, n=None):
+        np = self._np
+        N = int(n) if n is not None else self.n_samples
+        x_mean = np.asarray(x_mean, dtype=float).reshape(-1)
+        x_cov = np.asarray(x_cov, dtype=float).reshape(x_mean.size,
+                                                       x_mean.size)
+        L = np.linalg.cholesky(x_cov + np.eye(x_mean.size) * 1e-12)
+        z = self._rng.standard_normal((N, x_mean.size))
+        samples = x_mean + (L @ z.T).T
+        outs = np.array([np.asarray(f(s), dtype=float).reshape(-1)
+                         for s in samples])
+        out_mean = outs.mean(axis=0)
+        if outs.shape[0] > 1:
+            out_cov = np.cov(outs, rowvar=False)
+        else:
+            out_cov = np.zeros((outs.shape[1], outs.shape[1]))
+        return out_mean, out_cov
+
+    def credible_interval(self, samples, alpha: float = 0.95):
+        np = self._np
+        s = np.asarray(samples, dtype=float)
+        if s.ndim == 1:
+            s = s.reshape(-1, 1)
+        lo_pct = 100.0 * (1.0 - float(alpha)) / 2.0
+        hi_pct = 100.0 - lo_pct
+        lower = np.percentile(s, lo_pct, axis=0)
+        upper = np.percentile(s, hi_pct, axis=0)
+        return lower, upper
+
+    def entropy(self, cov) -> float:
+        np = self._np
+        cov = np.asarray(cov, dtype=float)
+        n = cov.shape[0]
+        sign, logdet = np.linalg.slogdet(cov + np.eye(n) * 1e-12)
+        return float(0.5 * (n * math.log(2.0 * math.pi * math.e) + logdet))
+
+    def kl_divergence(self, mu1, cov1, mu2, cov2) -> float:
+        np = self._np
+        mu1 = np.asarray(mu1, dtype=float).reshape(-1)
+        mu2 = np.asarray(mu2, dtype=float).reshape(-1)
+        cov1 = np.asarray(cov1, dtype=float)
+        cov2 = np.asarray(cov2, dtype=float)
+        k = mu1.size
+        try:
+            cov2_inv = np.linalg.inv(cov2)
+        except np.linalg.LinAlgError:
+            cov2_inv = np.linalg.pinv(cov2)
+        sign1, logdet1 = np.linalg.slogdet(cov1 + np.eye(k) * 1e-12)
+        sign2, logdet2 = np.linalg.slogdet(cov2 + np.eye(k) * 1e-12)
+        diff = mu2 - mu1
+        return float(0.5 * (float(np.trace(cov2_inv @ cov1))
+                            + float(diff @ cov2_inv @ diff)
+                            - k
+                            + logdet2 - logdet1))
+
+    def nees(self, error, cov) -> float:
+        np = self._np
+        e = np.asarray(error, dtype=float).reshape(-1)
+        C = np.asarray(cov, dtype=float)
+        try:
+            C_inv = np.linalg.inv(C)
+        except np.linalg.LinAlgError:
+            C_inv = np.linalg.pinv(C)
+        return float(e @ C_inv @ e)

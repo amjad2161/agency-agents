@@ -2610,3 +2610,60 @@ class NeuralOdometryRegressor:
         m = w.mean(axis=0, keepdims=True)
         s = w.std(axis=0, keepdims=True) + 1e-8
         return (w - m) / s
+
+
+# ============================================================================
+# R27 — Trajectory LSTM Predictor (1-layer LSTM cell)
+# ============================================================================
+
+class TrajectoryLSTMPredictor:
+    """Numpy LSTM cell + linear head for 3-D trajectory next-step prediction."""
+
+    def __init__(self, input_dim: int = 3, hidden_dim: int = 16,
+                 output_dim: int = 3):
+        self.input_dim = int(input_dim)
+        self.hidden_dim = int(hidden_dim)
+        self.output_dim = int(output_dim)
+        rng = np.random.default_rng(42)
+        cat_dim = self.input_dim + self.hidden_dim
+        self.Wf = rng.standard_normal((self.hidden_dim, cat_dim)) * 0.01
+        self.Wi = rng.standard_normal((self.hidden_dim, cat_dim)) * 0.01
+        self.Wg = rng.standard_normal((self.hidden_dim, cat_dim)) * 0.01
+        self.Wo = rng.standard_normal((self.hidden_dim, cat_dim)) * 0.01
+        self.bf = np.zeros(self.hidden_dim)
+        self.bi = np.zeros(self.hidden_dim)
+        self.bg = np.zeros(self.hidden_dim)
+        self.bo = np.zeros(self.hidden_dim)
+        self.Wy = rng.standard_normal((self.output_dim,
+                                       self.hidden_dim)) * 0.01
+        self.by = np.zeros(self.output_dim)
+        self.h = np.zeros(self.hidden_dim)
+        self.c = np.zeros(self.hidden_dim)
+
+    def sigmoid(self, x):
+        x = np.asarray(x, dtype=float)
+        return 1.0 / (1.0 + np.exp(-np.clip(x, -50.0, 50.0)))
+
+    def lstm_step(self, x, h, c):
+        x = np.asarray(x, dtype=float).reshape(self.input_dim)
+        h = np.asarray(h, dtype=float).reshape(self.hidden_dim)
+        c = np.asarray(c, dtype=float).reshape(self.hidden_dim)
+        z = np.concatenate([x, h])
+        f = self.sigmoid(self.Wf @ z + self.bf)
+        i = self.sigmoid(self.Wi @ z + self.bi)
+        g = np.tanh(self.Wg @ z + self.bg)
+        o = self.sigmoid(self.Wo @ z + self.bo)
+        c_new = f * c + i * g
+        h_new = o * np.tanh(c_new)
+        return h_new, c_new
+
+    def predict_next(self, pos_sequence):
+        seq = np.asarray(pos_sequence, dtype=float).reshape(-1, self.input_dim)
+        self.reset_state()
+        for k in range(seq.shape[0]):
+            self.h, self.c = self.lstm_step(seq[k], self.h, self.c)
+        return self.Wy @ self.h + self.by
+
+    def reset_state(self):
+        self.h = np.zeros(self.hidden_dim)
+        self.c = np.zeros(self.hidden_dim)
