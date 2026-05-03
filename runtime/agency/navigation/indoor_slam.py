@@ -841,3 +841,9 @@ from ._r17_slam import ICPScanMatcher  # noqa: E402,F401
 # R18 — re-export MonteCarloLocalization
 # ============================================================================
 from ._r18_slam import MonteCarloLocalization  # noqa: E402,F401
+
+
+# ============================================================================
+# R19 — re-export LiDARSLAM
+# ============================================================================
+from ._r19_slam import LiDARSLAM  # noqa: E402,F401

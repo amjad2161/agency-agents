@@ -2183,3 +2183,60 @@ class RobustMEstimator:
         self.x = self.x + K @ v
         self.P = (np.eye(self.n) - K @ self.H) @ self.P
         return self.x.copy()
+
+
+# ============================================================================
+# R19 — Schmidt-Kalman Filter (consider parameters, partial-state update)
+# ============================================================================
+
+class SchmidtKalmanFilter:
+    """Consider/Schmidt KF.
+
+    Full state x = [estimated | consider].  Only the estimated block is
+    corrected by measurements; the consider (nuisance) block contributes to
+    covariance but is left untouched.
+    """
+
+    def __init__(self, est_dim: int = 3, con_dim: int = 2):
+        import numpy as _np
+        self._np = _np
+        self.ne = int(est_dim)
+        self.nc = int(con_dim)
+        self.n = self.ne + self.nc
+        self.x = _np.zeros(self.n)
+        self.P = _np.eye(self.n)
+
+    def predict(self, F, Q):
+        np = self._np
+        F = np.asarray(F, dtype=float).reshape(self.n, self.n)
+        Q = np.asarray(Q, dtype=float).reshape(self.n, self.n)
+        self.x = F @ self.x
+        self.P = F @ self.P @ F.T + Q
+
+    def update(self, z, H_full, R):
+        np = self._np
+        z = np.asarray(z, dtype=float).reshape(-1)
+        H = np.asarray(H_full, dtype=float).reshape(z.size, self.n)
+        R = np.asarray(R, dtype=float).reshape(z.size, z.size)
+        S = H @ self.P @ H.T + R
+        try:
+            S_inv = np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            S_inv = np.linalg.pinv(S)
+        # Full Kalman gain then zero-out consider rows for state update
+        K_full = self.P @ H.T @ S_inv
+        K_S = K_full.copy()
+        K_S[self.ne:, :] = 0.0
+        innov = z - H @ self.x
+        self.x = self.x + K_S @ innov
+        I = np.eye(self.n)
+        self.P = (I - K_S @ H) @ self.P @ (I - K_S @ H).T \
+                 + K_S @ R @ K_S.T
+        self.P = 0.5 * (self.P + self.P.T)
+        return self.estimated_state()
+
+    def consider_covariance(self):
+        return self.P[self.ne:, self.ne:].copy()
+
+    def estimated_state(self):
+        return self.x[:self.ne].copy()

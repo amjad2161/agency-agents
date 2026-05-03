@@ -1454,3 +1454,81 @@ class UnderwaterCurrentEstimator:
         np = self._np
         self._current = np.zeros(3)
         self._history.clear()
+
+
+# ============================================================================
+# R19 — Bathymetric Mapper (sonar depth grid + map-matching corrections)
+# ============================================================================
+
+class BathymetricMapper:
+    """Sonar-ping bathymetric grid with map-matching offset correction."""
+
+    def __init__(self, grid_size: int = 100, resolution: float = 5.0):
+        import numpy as _np
+        self._np = _np
+        self.grid_size = int(grid_size)
+        self.resolution = float(resolution)
+        self.depth_grid = _np.full((self.grid_size, self.grid_size), _np.nan)
+        self._ping_count = 0
+
+    def _to_cell(self, x: float, y: float):
+        np = self._np
+        cx = int(float(x) / self.resolution) + self.grid_size // 2
+        cy = int(float(y) / self.resolution) + self.grid_size // 2
+        cx = int(np.clip(cx, 0, self.grid_size - 1))
+        cy = int(np.clip(cy, 0, self.grid_size - 1))
+        return cx, cy
+
+    def add_ping(self, x: float, y: float, depth: float):
+        cx, cy = self._to_cell(x, y)
+        self.depth_grid[cx, cy] = float(depth)
+        self._ping_count += 1
+
+    def depth_at(self, x: float, y: float) -> float:
+        cx, cy = self._to_cell(x, y)
+        return float(self.depth_grid[cx, cy])
+
+    def match_profile(self, positions, depths):
+        """Search ±2 cells in (x, y) for the offset minimising RMS depth error."""
+        np = self._np
+        pos = np.asarray(positions, dtype=float).reshape(-1, 2)
+        d = np.asarray(depths, dtype=float).reshape(-1)
+        n = min(pos.shape[0], d.size)
+        if n == 0:
+            return np.zeros(2)
+        best = (0, 0)
+        best_score = float("inf")
+        for dxc in range(-2, 3):
+            for dyc in range(-2, 3):
+                ox = dxc * self.resolution
+                oy = dyc * self.resolution
+                errs = []
+                for k in range(n):
+                    dpt = self.depth_at(pos[k, 0] + ox, pos[k, 1] + oy)
+                    if math.isnan(dpt):
+                        continue
+                    errs.append((dpt - d[k]) ** 2)
+                if not errs:
+                    continue
+                rms = math.sqrt(sum(errs) / len(errs))
+                if rms < best_score:
+                    best_score = rms
+                    best = (dxc, dyc)
+        return np.array([best[0] * self.resolution,
+                         best[1] * self.resolution])
+
+    def coverage_fraction(self) -> float:
+        np = self._np
+        return float(np.sum(~np.isnan(self.depth_grid))) \
+               / float(self.grid_size * self.grid_size)
+
+    def depth_stats(self):
+        np = self._np
+        valid = self.depth_grid[~np.isnan(self.depth_grid)]
+        if valid.size == 0:
+            return (0.0, 0.0)
+        return (float(np.mean(valid)), float(np.std(valid)))
+
+    @property
+    def ping_count(self) -> int:
+        return self._ping_count

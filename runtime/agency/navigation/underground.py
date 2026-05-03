@@ -1457,3 +1457,74 @@ class TerrainAidedNavigation:
     @property
     def position(self):
         return self._pos.copy()
+
+
+# ============================================================================
+# R19 — Radio-Beacon Triangulation (RSSI + TDOA, denied environments)
+# ============================================================================
+
+class RadioBeaconTriangulation:
+    """Ground-based 2-D radio beacon localisation."""
+
+    def __init__(self, beacons, freq_mhz: float = 433.0):
+        import numpy as _np
+        self._np = _np
+        self.beacons = _np.asarray(beacons, dtype=float).copy()
+        if self.beacons.ndim != 2 or self.beacons.shape[1] != 2:
+            raise ValueError("beacons must have shape (n, 2)")
+        self.freq = float(freq_mhz)
+        self._lambda = 299.792458 / float(freq_mhz)
+
+    def rssi_to_distance(self, rssi_dbm: float,
+                         tx_power_dbm: float = 20.0,
+                         n_exp: float = 2.0) -> float:
+        return float(10.0 ** ((float(tx_power_dbm) - float(rssi_dbm))
+                               / (10.0 * float(n_exp))))
+
+    def trilaterate(self, distances):
+        np = self._np
+        d = np.asarray(distances, dtype=float).reshape(-1)
+        if d.size < 3 or d.size != self.beacons.shape[0]:
+            return np.zeros(2)
+        a0 = self.beacons[0]
+        d0 = d[0]
+        A = 2.0 * (self.beacons[1:] - a0)
+        b = (np.sum(self.beacons[1:] ** 2, axis=1) - np.sum(a0 * a0)) \
+            - (d[1:] ** 2 - d0 ** 2)
+        try:
+            p, *_ = np.linalg.lstsq(A, b, rcond=None)
+        except np.linalg.LinAlgError:
+            return np.zeros(2)
+        return p
+
+    def tdoa_locate(self, tdoa_us, c: float = 2.998e8):
+        np = self._np
+        td = np.asarray(tdoa_us, dtype=float).reshape(-1) * 1e-6
+        if td.size < 2 or td.size + 1 != self.beacons.shape[0]:
+            return np.zeros(2)
+        d_diff = td * float(c)
+        b0 = self.beacons[0]
+        A = np.zeros((td.size, 3))
+        b = np.zeros(td.size)
+        for i in range(td.size):
+            bi = self.beacons[i + 1]
+            A[i, :2] = 2.0 * (bi - b0)
+            A[i, 2] = 2.0 * d_diff[i]
+            b[i] = (np.sum(bi * bi) - np.sum(b0 * b0)) - d_diff[i] ** 2
+        try:
+            sol, *_ = np.linalg.lstsq(A, b, rcond=None)
+        except np.linalg.LinAlgError:
+            return np.zeros(2)
+        return sol[:2]
+
+    def bearing_from_rssi(self, rssi_array, tx_power_dbm: float = 20.0
+                          ) -> float:
+        """Approximate bearing to the strongest beacon."""
+        np = self._np
+        r = np.asarray(rssi_array, dtype=float).reshape(-1)
+        if r.size == 0:
+            return 0.0
+        idx = int(np.argmax(r))
+        b = self.beacons[idx]
+        ang = math.degrees(math.atan2(b[0], b[1]))   # N=0°, E=90°
+        return float(ang % 360.0)

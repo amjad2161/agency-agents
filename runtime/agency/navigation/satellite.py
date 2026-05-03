@@ -1802,3 +1802,87 @@ class PVTSolver:
     @property
     def position(self):
         return self._x[:3].copy()
+
+
+# ============================================================================
+# R19 — Celestial Navigator (sun/moon/star sights, intercept method)
+# ============================================================================
+
+class CelestialNavigator:
+    """Celestial sight-reduction (Saint-Hilaire intercept method)."""
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self._fixes = []
+
+    def sun_declination(self, day_of_year: int) -> float:
+        return float(23.45 * math.sin(2.0 * math.pi
+                                       * (284 + int(day_of_year)) / 365.0))
+
+    def gha_sun(self, hour_utc: float) -> float:
+        return float((15.0 * (float(hour_utc) - 12.0) + 180.0) % 360.0)
+
+    def intercept_method(self, assumed_lat: float, assumed_lon: float,
+                         body_gha_deg: float, body_dec_deg: float,
+                         obs_altitude_deg: float):
+        lat = math.radians(float(assumed_lat))
+        lon = math.radians(float(assumed_lon))
+        gha = math.radians(float(body_gha_deg))
+        dec = math.radians(float(body_dec_deg))
+        lha = gha + lon          # west-positive longitude convention
+        sin_hc = (math.sin(lat) * math.sin(dec)
+                  + math.cos(lat) * math.cos(dec) * math.cos(lha))
+        sin_hc = max(-1.0, min(1.0, sin_hc))
+        hc = math.asin(sin_hc)
+        # Azimuth via standard ABC formula
+        sin_az = -math.cos(dec) * math.sin(lha) / max(math.cos(hc), 1e-12)
+        cos_az = ((math.sin(dec) - math.sin(lat) * sin_hc)
+                  / max(math.cos(lat) * math.cos(hc), 1e-12))
+        az_rad = math.atan2(sin_az, cos_az)
+        az_deg = float(math.degrees(az_rad) % 360.0)
+        # Intercept (positive = toward body, negative = away)
+        intercept_m = (float(obs_altitude_deg) - math.degrees(hc)) * 1852.0
+        return (float(intercept_m), az_deg)
+
+    def two_body_fix(self, lat_assumed: float, lon_assumed: float, sights):
+        """Estimate (lat, lon) from two LOPs computed via the intercept method."""
+        np = self._np
+        if len(sights) < 2:
+            return np.array([lat_assumed, lon_assumed])
+        lops = []
+        for gha, dec, obs in sights[:2]:
+            ic_m, az_deg = self.intercept_method(lat_assumed, lon_assumed,
+                                                 gha, dec, obs)
+            # 1 nautical mile (1852 m) ≈ 1 minute of arc → 1/60 degree
+            ic_deg = ic_m / 1852.0 / 60.0
+            az = math.radians(az_deg)
+            # LOP normal direction (toward body) and offset from assumed pos
+            dlat = ic_deg * math.cos(az)
+            dlon = ic_deg * math.sin(az) / max(
+                math.cos(math.radians(lat_assumed)), 1e-9)
+            n = np.array([math.cos(az),
+                          math.sin(az) / max(math.cos(math.radians(lat_assumed)), 1e-9)])
+            offset = np.array([dlat, dlon])
+            lops.append((n, offset))
+        n1, o1 = lops[0]
+        n2, o2 = lops[1]
+        # Build A·[lat,lon]ᵀ = b system from two LOPs (line normals)
+        A = np.vstack([n1, n2])
+        b = np.array([float(n1 @ o1), float(n2 @ o2)])
+        try:
+            delta = np.linalg.solve(A, b)
+        except np.linalg.LinAlgError:
+            delta = np.zeros(2)
+        return np.array([float(lat_assumed) + delta[0],
+                         float(lon_assumed) + delta[1]])
+
+    def altitude_correction(self, obs_alt_deg: float,
+                            dip_arcmin: float = 0.0,
+                            refraction: bool = True) -> float:
+        """Apply dip-of-horizon + Bennett atmospheric-refraction correction."""
+        h = float(obs_alt_deg) - float(dip_arcmin) / 60.0
+        if refraction and h > -1.0:
+            R_arcmin = 1.0 / math.tan(math.radians(h + 7.31 / (h + 4.4)))
+            h = h - R_arcmin / 60.0
+        return float(h)
