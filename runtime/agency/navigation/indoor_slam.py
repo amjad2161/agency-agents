@@ -823,3 +823,9 @@ from ._r14_slam import FastSLAM2, UltraWidebandPositioning  # noqa: E402,F401
 # R15 — re-export OccupancyGridMapper from helper module
 # ============================================================================
 from ._r15_slam import OccupancyGridMapper  # noqa: E402,F401
+
+
+# ============================================================================
+# R16 — re-export GraphSLAM from helper module
+# ============================================================================
+from ._r16_slam import GraphSLAM  # noqa: E402,F401

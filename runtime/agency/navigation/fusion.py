@@ -1977,3 +1977,57 @@ class RTSSmoother:
             # Symmetrise to fight numerical drift
             Ps_smooth[t] = 0.5 * (Ps_smooth[t] + Ps_smooth[t].T)
         return (xs_smooth, Ps_smooth)
+
+
+# ============================================================================
+# R16 — Fading-Memory Kalman Filter (β-inflated process noise)
+# ============================================================================
+
+class FadingMemoryFilter:
+    """KF with exponential fading memory via β² covariance inflation.
+
+    P_pred = β² · F · P · Fᵀ + Q   with β ≥ 1.
+    β = 1 → standard KF; larger β forgets older measurements faster.
+    """
+
+    def __init__(self, state_dim: int = 3, obs_dim: int = 1,
+                 fading_factor: float = 1.02):
+        import numpy as _np
+        self._np = _np
+        if fading_factor < 1.0:
+            raise ValueError("fading_factor must be >= 1")
+        self.n = int(state_dim)
+        self.m = int(obs_dim)
+        self.beta = float(fading_factor)
+        self.x = _np.zeros(self.n)
+        self.P = _np.eye(self.n)
+        self.F = _np.eye(self.n)
+        self.H = _np.zeros((self.m, self.n))
+        self.H[0, 0] = 1.0
+        self.Q = _np.eye(self.n) * 0.01
+        self.R = _np.eye(self.m) * 1.0
+
+    def predict(self):
+        np = self._np
+        self.x = self.F @ self.x
+        self.P = (self.beta ** 2) * self.F @ self.P @ self.F.T + self.Q
+
+    def update(self, z):
+        np = self._np
+        z = np.asarray(z, dtype=float).reshape(self.m)
+        S = self.H @ self.P @ self.H.T + self.R
+        try:
+            K = self.P @ self.H.T @ np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            return
+        self.x = self.x + K @ (z - self.H @ self.x)
+        self.P = (np.eye(self.n) - K @ self.H) @ self.P
+
+    def set_transition(self, F):
+        np = self._np
+        self.F = np.asarray(F, dtype=float).reshape(self.n, self.n).copy()
+
+    def innovation(self, z):
+        np = self._np
+        z = np.asarray(z, dtype=float).reshape(self.m)
+        return z - self.H @ self.x

@@ -1551,3 +1551,80 @@ class GNSSDopplerVelocity:
     def speed(self) -> float:
         np = self._np
         return float(np.linalg.norm(self._last_vel))
+
+
+# ============================================================================
+# R16 — Advanced RAIM (ARAIM) — multi-constellation integrity + PLs
+# ============================================================================
+
+class AdvancedRAIM:
+    """ARAIM-style integrity monitor with HPL/VPL + leave-one-out subset test."""
+
+    K_FA_DEFAULT = 6.18  # ≈ Φ⁻¹(1 − 1e-7 / 2)
+
+    def __init__(self, p_fa: float = 1e-7, p_md: float = 1e-3,
+                 sigma_uere: float = 1.5):
+        import numpy as _np
+        self._np = _np
+        self.p_fa = float(p_fa)
+        self.p_md = float(p_md)
+        self.sigma_uere = float(sigma_uere)
+
+    def geometry_matrix(self, sv_az, sv_el):
+        np = self._np
+        az = np.asarray(sv_az, dtype=float).reshape(-1)
+        el = np.asarray(sv_el, dtype=float).reshape(-1)
+        n = az.size
+        H = np.zeros((n, 4))
+        H[:, 0] = -np.cos(el) * np.sin(az)
+        H[:, 1] = -np.cos(el) * np.cos(az)
+        H[:, 2] = -np.sin(el)
+        H[:, 3] = 1.0
+        return H
+
+    def _k_fa(self) -> float:
+        # Conservative inverse-Q approximation for small p_fa
+        p = max(self.p_fa, 1e-15)
+        if p <= 1e-7:
+            return self.K_FA_DEFAULT
+        return float(math.sqrt(-2.0 * math.log(p * 2.0 * math.pi)))
+
+    def protection_level(self, sv_az, sv_el):
+        np = self._np
+        H = self.geometry_matrix(sv_az, sv_el)
+        n = H.shape[0]
+        if n < 4:
+            return (float("inf"), float("inf"))
+        W = np.eye(n) / max(self.sigma_uere ** 2, 1e-12)
+        try:
+            Q = np.linalg.inv(H.T @ W @ H)
+        except np.linalg.LinAlgError:
+            return (float("inf"), float("inf"))
+        k = self._k_fa()
+        hpl = k * math.sqrt(max(Q[0, 0] + Q[1, 1], 0.0))
+        vpl = k * math.sqrt(max(Q[2, 2], 0.0))
+        return (float(hpl), float(vpl))
+
+    def check_alert_limits(self, hpl: float, vpl: float,
+                           hal: float = 40.0, val: float = 50.0) -> bool:
+        return float(hpl) <= float(hal) and float(vpl) <= float(val)
+
+    def subset_test(self, sv_az, sv_el):
+        """Flag SV whose removal most improves VPL (leave-one-out test)."""
+        np = self._np
+        az = np.asarray(sv_az, dtype=float).reshape(-1)
+        el = np.asarray(sv_el, dtype=float).reshape(-1)
+        n = az.size
+        if n < 5:
+            return np.ones(n, dtype=bool)
+        _, base_vpl = self.protection_level(az, el)
+        flags = np.ones(n, dtype=bool)
+        improvements = np.zeros(n)
+        for i in range(n):
+            mask = np.ones(n, dtype=bool); mask[i] = False
+            _, vpl_sub = self.protection_level(az[mask], el[mask])
+            improvements[i] = base_vpl - vpl_sub
+        worst = int(np.argmax(improvements))
+        if improvements[worst] > 0.5 * base_vpl:
+            flags[worst] = False
+        return flags

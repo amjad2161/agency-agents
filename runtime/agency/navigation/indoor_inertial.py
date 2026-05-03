@@ -1002,3 +1002,49 @@ class StrapdownINS:
         pitch = math.asin(sinp)
         yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
         return np.degrees(np.array([roll, pitch, yaw]))
+
+
+# ============================================================================
+# R16 — Tilt-Compensated Compass (hard/soft iron + tilt correction)
+# ============================================================================
+
+class TiltCompensatedCompass:
+    """Magnetometer calibration + accelerometer-based tilt-compensated heading."""
+
+    def __init__(self):
+        self._hard_iron = np.zeros(3)
+        self._soft_iron = np.eye(3)
+        self._calibrated = False
+
+    def calibrate(self, mag_samples):
+        m = np.asarray(mag_samples, dtype=float).reshape(-1, 3)
+        if m.shape[0] < 6:
+            return
+        mins = m.min(axis=0)
+        maxs = m.max(axis=0)
+        self._hard_iron = (mins + maxs) / 2.0
+        ranges = (maxs - mins) / 2.0
+        ranges = np.where(ranges < 1e-9, 1.0, ranges)
+        avg_radius = float(np.mean(ranges))
+        self._soft_iron = np.diag(avg_radius / ranges)
+        self._calibrated = True
+
+    def correct(self, raw_mag):
+        v = np.asarray(raw_mag, dtype=float).reshape(3)
+        return self._soft_iron @ (v - self._hard_iron)
+
+    def heading(self, mag_corrected, accel) -> float:
+        m = np.asarray(mag_corrected, dtype=float).reshape(3)
+        a = np.asarray(accel, dtype=float).reshape(3)
+        roll = math.atan2(a[1], a[2])
+        pitch = math.atan2(-a[0], math.sqrt(a[1] ** 2 + a[2] ** 2))
+        Bx = (m[0] * math.cos(pitch)
+              + m[1] * math.sin(roll) * math.sin(pitch)
+              + m[2] * math.cos(roll) * math.sin(pitch))
+        By = m[1] * math.cos(roll) - m[2] * math.sin(roll)
+        h = math.degrees(math.atan2(-By, Bx))
+        return float(h % 360.0)
+
+    def declination_correct(self, heading_deg: float,
+                            declination_deg: float) -> float:
+        return float((float(heading_deg) + float(declination_deg)) % 360.0)

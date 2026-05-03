@@ -1270,3 +1270,60 @@ class TidalCurrentCompensator:
             return np.zeros(2)
         dP = np.diff(P, axis=0)
         return np.mean(dP, axis=0)
+
+
+# ============================================================================
+# R16 — Sound Velocity Profile (Mackenzie 1981 + ray refraction)
+# ============================================================================
+
+class SoundVelocityProfile:
+    """Depth-dependent sound velocity + Snell ray refraction."""
+
+    def __init__(self):
+        import numpy as _np
+        self._np = _np
+        self._depths = _np.array([0.0, 100.0, 500.0, 1000.0, 2000.0, 4000.0])
+        self._temps = _np.array([25.0, 20.0, 10.0, 5.0, 2.0, 2.0])
+        self._sals = _np.array([35.0, 35.0, 35.0, 35.0, 35.0, 35.0])
+
+    def mackenzie(self, T: float, S: float, D: float) -> float:
+        T = float(T); S = float(S); D = float(D)
+        c = (1448.96
+             + 4.591 * T
+             - 5.304e-2 * T * T
+             + 2.374e-4 * T ** 3
+             + 1.340 * (S - 35.0)
+             + 1.630e-2 * D
+             + 1.675e-7 * D * D
+             - 1.025e-2 * T * (S - 35.0)
+             - 7.139e-13 * T * D ** 3)
+        return float(c)
+
+    def profile_at_depth(self, depth: float) -> float:
+        np = self._np
+        T = float(np.interp(float(depth), self._depths, self._temps))
+        S = float(np.interp(float(depth), self._depths, self._sals))
+        return self.mackenzie(T, S, float(depth))
+
+    def average_velocity(self, d_min: float = 0.0,
+                         d_max: float = 100.0) -> float:
+        np = self._np
+        depths = np.linspace(float(d_min), float(d_max), 11)
+        speeds = np.array([self.profile_at_depth(float(d)) for d in depths])
+        denom = max(float(d_max - d_min), 1e-9)
+        return float(np.trapezoid(speeds, depths) / denom) \
+            if hasattr(np, "trapezoid") else \
+            float(np.trapz(speeds, depths) / denom)
+
+    def tof_to_range(self, tof: float, avg_speed: float | None = None
+                     ) -> float:
+        if avg_speed is None:
+            avg_speed = self.average_velocity()
+        return float(tof) * float(avg_speed)
+
+    def snell_refraction(self, angle_in: float, c1: float, c2: float
+                         ) -> float:
+        sin_out = math.sin(float(angle_in)) * float(c2) / max(float(c1), 1e-12)
+        if abs(sin_out) > 1.0:
+            return float("nan")
+        return float(math.asin(sin_out))
