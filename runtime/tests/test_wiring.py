@@ -28,7 +28,7 @@ def test_run_shell_uses_supervisor_timeout(tmp_path: Path, monkeypatch):
     ctx.timeout_s = 1  # 1 second cap
 
     res = _run_shell(
-        {"command": f"{sys.executable} -c 'import time; time.sleep(30)'"},
+        {"command": f'"{sys.executable}" -c \'import time; time.sleep(30)\''},
         ctx,
     )
     assert res.is_error
@@ -47,7 +47,7 @@ def test_run_shell_clean_exit_unchanged(tmp_path: Path, monkeypatch):
     ctx = ToolContext.from_env(workdir=tmp_path)
 
     res = _run_shell(
-        {"command": f"{sys.executable} -c 'print(\"hello\")'"},
+        {"command": f'"{sys.executable}" -c \'print("hello")\''},
         ctx,
     )
     assert not res.is_error

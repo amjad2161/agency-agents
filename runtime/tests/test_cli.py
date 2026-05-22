@@ -87,7 +87,7 @@ def test_init_scaffolds_new_persona(runner, no_api_key, tmp_path):
     assert result.exit_code == 0, result.output
     created = tmp_path / "specialized" / "rocket-scientist.md"
     assert created.exists()
-    text = created.read_text()
+    text = created.read_text(encoding="utf-8")
     assert "name: Rocket Scientist" in text
     assert "🚀" in text
     assert "Builds rockets" in text
