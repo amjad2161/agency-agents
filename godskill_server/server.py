@@ -3,7 +3,7 @@ GODSKILL Navigation Server — http://127.0.0.1:8765
 Serves the 145-class navigation system via REST API.
 """
 from __future__ import annotations
-import os, sys
+import os, sys, json
 from pathlib import Path
 
 AGENCY = Path(__file__).parent.parent
@@ -12,7 +12,23 @@ sys.path.insert(0, str(AGENCY))
 
 from flask import Flask, jsonify, request
 
-app = Flask('godskill')
+app = Flask('godskill', static_folder=str(AGENCY / 'dashboard'), static_url_path='')
+
+try:
+    import JARVIS_SUPREME
+except ImportError:
+    JARVIS_SUPREME = None
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+    return response
+
+@app.route('/')
+def index():
+    return app.send_static_file('index.html')
 
 
 @app.route('/api/health')
@@ -74,6 +90,24 @@ def run_command():
         pass
     original = str(body.get('message', '')).strip()
     msg = original.lower()
+
+    # Shell commands execution if starts with !
+    if original.startswith('!'):
+        cmd = original[1:].strip()
+        if os.environ.get("ALLOW_ALL") == "1" or os.environ.get("JARVIS_PERM_LEVEL") == "GOD":
+            import subprocess
+            try:
+                res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15)
+                out = res.stdout if res.stdout else ""
+                err = res.stderr if res.stderr else ""
+                text_out = out + err
+                if not text_out.strip():
+                    text_out = f"[Command executed with exit code {res.returncode}]"
+                return jsonify({'text': text_out})
+            except Exception as e:
+                return jsonify({'text': f"Error executing command: {e}"})
+        else:
+            return jsonify({'text': "Error: Shell commands blocked (Permissions restriction)"})
 
     if any(k in msg for k in ('health', 'status', 'online', 'alive', 'ping')):
         return jsonify({'text': (
@@ -172,6 +206,40 @@ def run_command():
             'Deep learning radio maps  Scene recognition (ResNet/ViT)\n'
             'Neural SLAM  LSTM trajectory prediction  Uncertainty quant'
         )})
+
+    # Fallback to Ollama / local LLM chat if supreme resolves it
+    if JARVIS_SUPREME:
+        backend = JARVIS_SUPREME.detect_llm_backend()
+        if backend.get("available") and backend.get("backend") == "ollama":
+            import urllib.request
+            model = os.environ.get("OLLAMA_MODEL")
+            if not model:
+                models = backend.get("models", [])
+                model = models[0] if models else "llama3"
+            
+            payload = json.dumps({
+                "model": model,
+                "messages": [{"role": "user", "content": original}],
+                "stream": False
+            }).encode()
+            
+            req = urllib.request.Request(
+                backend["url"].replace("/api/tags", "/api/chat"),
+                data=payload, headers={"Content-Type": "application/json"}
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    resp = json.loads(r.read())
+                    ans = resp.get("message", {}).get("content", "[no response]")
+                    return jsonify({'text': ans})
+            except Exception as e:
+                return jsonify({'text': f"Ollama error: {e}"})
+
+    return jsonify({'text': (
+        'JARVIS received: "{}"\n\n'
+        'I am GODSKILL Navigation (145 classes, 7 positioning tiers).\n'
+        'Try: health / nav / classes / satellite / indoor / fusion / ai / help'
+    ).format(original)})
 
     return jsonify({'text': (
         'JARVIS received: "{}"\n\n'
