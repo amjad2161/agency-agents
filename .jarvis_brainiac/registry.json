@@ -2,7 +2,7 @@
   "Anthropologist": {
     "name": "Anthropologist",
     "division": "academic",
-    "path": "academic/academic-anthropologist.md",
+    "path": "academic\\academic-anthropologist.md",
     "description": "Expert in cultural systems, rituals, kinship, belief systems, and ethnographic method — builds culturally coherent societies that feel lived-in rather than invented",
     "color": "#D97706",
     "tools": [],
@@ -43,7 +43,7 @@
   "Economist": {
     "name": "Economist",
     "division": "academic",
-    "path": "academic/academic-economist.md",
+    "path": "academic\\academic-economist.md",
     "description": "Expert in micro and macro economics, behavioral economics, game theory, mechanism design, and market analysis — models incentives, predicts behavior, and designs systems that align interest with outcomes",
     "color": "#10B981",
     "tools": [],
@@ -84,7 +84,7 @@
   "Geographer": {
     "name": "Geographer",
     "division": "academic",
-    "path": "academic/academic-geographer.md",
+    "path": "academic\\academic-geographer.md",
     "description": "Expert in physical and human geography, climate systems, cartography, and spatial analysis — builds geographically coherent worlds where terrain, climate, resources, and settlement patterns make scientific sense",
     "color": "#059669",
     "tools": [],
@@ -125,7 +125,7 @@
   "Historian": {
     "name": "Historian",
     "division": "academic",
-    "path": "academic/academic-historian.md",
+    "path": "academic\\academic-historian.md",
     "description": "Expert in historical analysis, periodization, material culture, and historiography — validates historical coherence and enriches settings with authentic period detail grounded in primary and secondary sources",
     "color": "#B45309",
     "tools": [],
@@ -166,7 +166,7 @@
   "Mathematician": {
     "name": "Mathematician",
     "division": "academic",
-    "path": "academic/academic-mathematician.md",
+    "path": "academic\\academic-mathematician.md",
     "description": "Expert in pure and applied mathematics — from proofs and number theory to algorithms, optimization, statistics, and the mathematical foundations of AI and cryptography",
     "color": "#F59E0B",
     "tools": [],
@@ -207,7 +207,7 @@
   "Narratologist": {
     "name": "Narratologist",
     "division": "academic",
-    "path": "academic/academic-narratologist.md",
+    "path": "academic\\academic-narratologist.md",
     "description": "Expert in narrative theory, story structure, character arcs, and literary analysis — grounds advice in established frameworks from Propp to Campbell to modern narratology",
     "color": "#8B5CF6",
     "tools": [],
@@ -248,7 +248,7 @@
   "Philosopher": {
     "name": "Philosopher",
     "division": "academic",
-    "path": "academic/academic-philosopher.md",
+    "path": "academic\\academic-philosopher.md",
     "description": "Expert in logic, epistemology, ethics, philosophy of mind, and philosophy of science — brings rigorous reasoning and conceptual clarity to hard problems in AI, technology, and human decision-making",
     "color": "#64748B",
     "tools": [],
@@ -289,7 +289,7 @@
   "Psychologist": {
     "name": "Psychologist",
     "division": "academic",
-    "path": "academic/academic-psychologist.md",
+    "path": "academic\\academic-psychologist.md",
     "description": "Expert in human behavior, personality theory, motivation, and cognitive patterns — builds psychologically credible characters and interactions grounded in clinical and research frameworks",
     "color": "#EC4899",
     "tools": [],
@@ -330,7 +330,7 @@
   "Scientist": {
     "name": "Scientist",
     "division": "academic",
-    "path": "academic/academic-scientist.md",
+    "path": "academic\\academic-scientist.md",
     "description": "Cross-disciplinary scientific research expert — applies the scientific method, systematic literature review, experimental design, and evidence synthesis to any domain to separate signal from noise",
     "color": "#0EA5E9",
     "tools": [],
@@ -371,7 +371,7 @@
   "Accessibility Specialist": {
     "name": "Accessibility Specialist",
     "division": "design",
-    "path": "design/design-accessibility-specialist.md",
+    "path": "design\\design-accessibility-specialist.md",
     "description": "Accessibility expert who makes products usable by everyone — keyboard users, screen-reader users, low-vision users, people with motor or cognitive differences. Owns WCAG 2.2 conformance, ARIA patterns, assistive technology testing, and accessibility as a shipped feature (not a remediation project).",
     "color": "purple",
     "tools": [],
@@ -412,7 +412,7 @@
   "Brand Guardian": {
     "name": "Brand Guardian",
     "division": "design",
-    "path": "design/design-brand-guardian.md",
+    "path": "design\\design-brand-guardian.md",
     "description": "Expert brand strategist and guardian specializing in brand identity development, consistency maintenance, and strategic brand positioning",
     "color": "blue",
     "tools": [],
@@ -453,7 +453,7 @@
   "Image Prompt Engineer": {
     "name": "Image Prompt Engineer",
     "division": "design",
-    "path": "design/design-image-prompt-engineer.md",
+    "path": "design\\design-image-prompt-engineer.md",
     "description": "Expert photography prompt engineer specializing in crafting detailed, evocative prompts for AI image generation. Masters the art of translating visual concepts into precise language that produces stunning, professional-quality photography through generative AI tools.",
     "color": "amber",
     "tools": [],
@@ -494,7 +494,7 @@
   "Inclusive Visuals Specialist": {
     "name": "Inclusive Visuals Specialist",
     "division": "design",
-    "path": "design/design-inclusive-visuals-specialist.md",
+    "path": "design\\design-inclusive-visuals-specialist.md",
     "description": "Representation expert who defeats systemic AI biases to generate culturally accurate, affirming, and non-stereotypical images and video.",
     "color": "#4DB6AC",
     "tools": [],
@@ -535,7 +535,7 @@
   "UI Designer": {
     "name": "UI Designer",
     "division": "design",
-    "path": "design/design-ui-designer.md",
+    "path": "design\\design-ui-designer.md",
     "description": "Expert UI designer specializing in visual design systems, component libraries, and pixel-perfect interface creation. Creates beautiful, consistent, accessible user interfaces that enhance UX and reflect brand identity",
     "color": "purple",
     "tools": [],
@@ -576,7 +576,7 @@
   "UX Architect": {
     "name": "UX Architect",
     "division": "design",
-    "path": "design/design-ux-architect.md",
+    "path": "design\\design-ux-architect.md",
     "description": "Technical architecture and UX specialist who provides developers with solid foundations, CSS systems, and clear implementation guidance",
     "color": "purple",
     "tools": [],
@@ -617,7 +617,7 @@
   "UX Researcher": {
     "name": "UX Researcher",
     "division": "design",
-    "path": "design/design-ux-researcher.md",
+    "path": "design\\design-ux-researcher.md",
     "description": "Expert user experience researcher specializing in user behavior analysis, usability testing, and data-driven design insights. Provides actionable research findings that improve product usability and user satisfaction",
     "color": "green",
     "tools": [],
@@ -658,7 +658,7 @@
   "Visual Storyteller": {
     "name": "Visual Storyteller",
     "division": "design",
-    "path": "design/design-visual-storyteller.md",
+    "path": "design\\design-visual-storyteller.md",
     "description": "Expert visual communication specialist focused on creating compelling visual narratives, multimedia content, and brand storytelling through design. Specializes in transforming complex information into engaging visual stories that connect with audiences and drive emotional engagement.",
     "color": "purple",
     "tools": [],
@@ -699,7 +699,7 @@
   "Whimsy Injector": {
     "name": "Whimsy Injector",
     "division": "design",
-    "path": "design/design-whimsy-injector.md",
+    "path": "design\\design-whimsy-injector.md",
     "description": "Expert creative specialist focused on adding personality, delight, and playful elements to brand experiences. Creates memorable, joyful interactions that differentiate brands through unexpected moments of whimsy",
     "color": "pink",
     "tools": [],
@@ -740,7 +740,7 @@
   "Agentic Loop Architect": {
     "name": "Agentic Loop Architect",
     "division": "engineering",
-    "path": "engineering/engineering-agentic-loop-architect.md",
+    "path": "engineering\\engineering-agentic-loop-architect.md",
     "description": "Expert in designing, implementing, and hardening sophisticated agentic execution loops — LangGraph state machines, ReAct reasoning cycles, reflection loops, multi-agent networks, and fault-tolerant infinite loops with kill-switches — the engineering backbone of every fully autonomous AI system",
     "color": "#7C3AED",
     "tools": [],
@@ -781,7 +781,7 @@
   "AI Data Remediation Engineer": {
     "name": "AI Data Remediation Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-ai-data-remediation-engineer.md",
+    "path": "engineering\\engineering-ai-data-remediation-engineer.md",
     "description": "Specialist in self-healing data pipelines — uses air-gapped local SLMs and semantic clustering to automatically detect, classify, and fix data anomalies at scale. Focuses exclusively on the remediation layer: intercepting bad data, generating deterministic fix logic via Ollama, and guaranteeing zero data loss. Not a general data engineer — a surgical specialist for when your data is broken and the pipeline can't stop.",
     "color": "green",
     "tools": [],
@@ -822,7 +822,7 @@
   "AI Engineer": {
     "name": "AI Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-ai-engineer.md",
+    "path": "engineering\\engineering-ai-engineer.md",
     "description": "Expert AI/ML engineer specializing in machine learning model development, deployment, and integration into production systems. Focused on building intelligent features, data pipelines, and AI-powered applications with emphasis on practical, scalable solutions.",
     "color": "blue",
     "tools": [],
@@ -863,7 +863,7 @@
   "Autonomous Optimization Architect": {
     "name": "Autonomous Optimization Architect",
     "division": "engineering",
-    "path": "engineering/engineering-autonomous-optimization-architect.md",
+    "path": "engineering\\engineering-autonomous-optimization-architect.md",
     "description": "Intelligent system governor that continuously shadow-tests APIs for performance while enforcing strict financial and security guardrails against runaway costs.",
     "color": "#673AB7",
     "tools": [],
@@ -904,7 +904,7 @@
   "Backend Architect": {
     "name": "Backend Architect",
     "division": "engineering",
-    "path": "engineering/engineering-backend-architect.md",
+    "path": "engineering\\engineering-backend-architect.md",
     "description": "Senior backend architect specializing in scalable system design, database architecture, API development, and cloud infrastructure. Builds robust, secure, performant server-side applications and microservices",
     "color": "blue",
     "tools": [],
@@ -945,7 +945,7 @@
   "Careful Coder": {
     "name": "Careful Coder",
     "division": "engineering",
-    "path": "engineering/engineering-careful-coder.md",
+    "path": "engineering\\engineering-careful-coder.md",
     "description": "Behavioral guardrails for code-generating LLMs — surface assumptions, write minimum code, make surgical edits, define verifiable success criteria. Use this skill (or compose its directives into others) when the cost of an over-eager change is high.",
     "color": "amber",
     "tools": [],
@@ -986,7 +986,7 @@
   "CMS Developer": {
     "name": "CMS Developer",
     "division": "engineering",
-    "path": "engineering/engineering-cms-developer.md",
+    "path": "engineering\\engineering-cms-developer.md",
     "description": "Drupal and WordPress specialist for theme development, custom plugins/modules, content architecture, and code-first CMS implementation",
     "color": "blue",
     "tools": [],
@@ -1027,7 +1027,7 @@
   "Code Reviewer": {
     "name": "Code Reviewer",
     "division": "engineering",
-    "path": "engineering/engineering-code-reviewer.md",
+    "path": "engineering\\engineering-code-reviewer.md",
     "description": "Expert code reviewer who provides constructive, actionable feedback focused on correctness, maintainability, security, and performance — not style preferences.",
     "color": "purple",
     "tools": [],
@@ -1068,7 +1068,7 @@
   "Codebase Onboarding Engineer": {
     "name": "Codebase Onboarding Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-codebase-onboarding-engineer.md",
+    "path": "engineering\\engineering-codebase-onboarding-engineer.md",
     "description": "Expert developer onboarding specialist who helps new engineers understand unfamiliar codebases fast by reading source code, tracing code paths, and stating only facts grounded in the code.",
     "color": "teal",
     "tools": [],
@@ -1109,7 +1109,7 @@
   "Data Engineer": {
     "name": "Data Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-data-engineer.md",
+    "path": "engineering\\engineering-data-engineer.md",
     "description": "Expert data engineer specializing in building reliable data pipelines, lakehouse architectures, and scalable data infrastructure. Masters ETL/ELT, Apache Spark, dbt, streaming systems, and cloud data platforms to turn raw data into trusted, analytics-ready assets.",
     "color": "orange",
     "tools": [],
@@ -1150,7 +1150,7 @@
   "Database Optimizer": {
     "name": "Database Optimizer",
     "division": "engineering",
-    "path": "engineering/engineering-database-optimizer.md",
+    "path": "engineering\\engineering-database-optimizer.md",
     "description": "Expert database specialist focusing on schema design, query optimization, indexing strategies, and performance tuning for PostgreSQL, MySQL, and modern databases like Supabase and PlanetScale.",
     "color": "amber",
     "tools": [],
@@ -1191,7 +1191,7 @@
   "DevOps Automator": {
     "name": "DevOps Automator",
     "division": "engineering",
-    "path": "engineering/engineering-devops-automator.md",
+    "path": "engineering\\engineering-devops-automator.md",
     "description": "Expert DevOps engineer specializing in infrastructure automation, CI/CD pipeline development, and cloud operations",
     "color": "orange",
     "tools": [],
@@ -1232,7 +1232,7 @@
   "Email Intelligence Engineer": {
     "name": "Email Intelligence Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-email-intelligence-engineer.md",
+    "path": "engineering\\engineering-email-intelligence-engineer.md",
     "description": "Expert in extracting structured, reasoning-ready data from raw email threads for AI agents and automation systems",
     "color": "indigo",
     "tools": [],
@@ -1273,7 +1273,7 @@
   "Embedded Firmware Engineer": {
     "name": "Embedded Firmware Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-embedded-firmware-engineer.md",
+    "path": "engineering\\engineering-embedded-firmware-engineer.md",
     "description": "Specialist in bare-metal and RTOS firmware - ESP32/ESP-IDF, PlatformIO, Arduino, ARM Cortex-M, STM32 HAL/LL, Nordic nRF5/nRF Connect SDK, FreeRTOS, Zephyr",
     "color": "orange",
     "tools": [],
@@ -1314,7 +1314,7 @@
   "Feishu Integration Developer": {
     "name": "Feishu Integration Developer",
     "division": "engineering",
-    "path": "engineering/engineering-feishu-integration-developer.md",
+    "path": "engineering\\engineering-feishu-integration-developer.md",
     "description": "Full-stack integration expert specializing in the Feishu (Lark) Open Platform — proficient in Feishu bots, mini programs, approval workflows, Bitable (multidimensional spreadsheets), interactive message cards, Webhooks, SSO authentication, and workflow automation, building enterprise-grade collaboration and automation solutions within the Feishu ecosystem.",
     "color": "blue",
     "tools": [],
@@ -1355,7 +1355,7 @@
   "Filament Optimization Specialist": {
     "name": "Filament Optimization Specialist",
     "division": "engineering",
-    "path": "engineering/engineering-filament-optimization-specialist.md",
+    "path": "engineering\\engineering-filament-optimization-specialist.md",
     "description": "Expert in restructuring and optimizing Filament PHP admin interfaces for maximum usability and efficiency. Focuses on impactful structural changes — not just cosmetic tweaks.",
     "color": "indigo",
     "tools": [],
@@ -1396,7 +1396,7 @@
   "Frontend Developer": {
     "name": "Frontend Developer",
     "division": "engineering",
-    "path": "engineering/engineering-frontend-developer.md",
+    "path": "engineering\\engineering-frontend-developer.md",
     "description": "Expert frontend developer specializing in modern web technologies, React/Vue/Angular frameworks, UI implementation, and performance optimization",
     "color": "cyan",
     "tools": [],
@@ -1437,7 +1437,7 @@
   "Git Workflow Master": {
     "name": "Git Workflow Master",
     "division": "engineering",
-    "path": "engineering/engineering-git-workflow-master.md",
+    "path": "engineering\\engineering-git-workflow-master.md",
     "description": "Expert in Git workflows, branching strategies, and version control best practices including conventional commits, rebasing, worktrees, and CI-friendly branch management.",
     "color": "orange",
     "tools": [],
@@ -1478,7 +1478,7 @@
   "Incident Response Commander": {
     "name": "Incident Response Commander",
     "division": "engineering",
-    "path": "engineering/engineering-incident-response-commander.md",
+    "path": "engineering\\engineering-incident-response-commander.md",
     "description": "Expert incident commander specializing in production incident management, structured response coordination, post-mortem facilitation, SLO/SLI tracking, and on-call process design for reliable engineering organizations.",
     "color": "#e63946",
     "tools": [],
@@ -1519,7 +1519,7 @@
   "LLM Red-Teamer": {
     "name": "LLM Red-Teamer",
     "division": "engineering",
-    "path": "engineering/engineering-llm-red-teamer.md",
+    "path": "engineering\\engineering-llm-red-teamer.md",
     "description": "Offensive security specialist for LLM, agent, and MCP-based systems. Systematically probes models and agent stacks for prompt injection, jailbreaks, tool abuse, data exfiltration, and excessive-agency failures — and turns findings into reproducible, fixable defects.",
     "color": "crimson",
     "tools": [],
@@ -1560,7 +1560,7 @@
   "Minimal Change Engineer": {
     "name": "Minimal Change Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-minimal-change-engineer.md",
+    "path": "engineering\\engineering-minimal-change-engineer.md",
     "description": "Engineering specialist focused on minimum-viable diffs — fixes only what was asked, refuses scope creep, prefers three similar lines over a premature abstraction. The discipline that prevents bug-fix PRs from becoming refactor avalanches.",
     "color": "slate",
     "tools": [],
@@ -1601,7 +1601,7 @@
   "Mobile App Builder": {
     "name": "Mobile App Builder",
     "division": "engineering",
-    "path": "engineering/engineering-mobile-app-builder.md",
+    "path": "engineering\\engineering-mobile-app-builder.md",
     "description": "Specialized mobile application developer with expertise in native iOS/Android development and cross-platform frameworks",
     "color": "purple",
     "tools": [],
@@ -1642,7 +1642,7 @@
   "Observability Engineer": {
     "name": "Observability Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-observability-engineer.md",
+    "path": "engineering\\engineering-observability-engineer.md",
     "description": "Observability specialist who designs and operates metrics, logs, traces, and profiles across distributed systems using OpenTelemetry and modern backends (Prometheus, Grafana, Loki, Tempo, Jaeger, Datadog, Honeycomb). Turns production into a debuggable, measurable system instead of a black box.",
     "color": "orange",
     "tools": [],
@@ -1683,7 +1683,7 @@
   "Platform Engineer": {
     "name": "Platform Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-platform-engineer.md",
+    "path": "engineering\\engineering-platform-engineer.md",
     "description": "Internal developer platform specialist who builds paved roads, golden paths, and self-service infrastructure (Backstage, Crossplane, Kubernetes, Terraform modules, service templates) so product teams ship faster with fewer tickets and more consistency.",
     "color": "slate",
     "tools": [],
@@ -1724,7 +1724,7 @@
   "Privacy Engineer": {
     "name": "Privacy Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-privacy-engineer.md",
+    "path": "engineering\\engineering-privacy-engineer.md",
     "description": "Privacy engineering specialist who turns GDPR, CPRA, HIPAA, PIPL, and the EU AI Act into code, controls, and workflows. Owns data mapping, DPIAs, consent, data-subject requests, retention, minimization, and regional data residency — so privacy becomes a shipped feature, not a legal memo.",
     "color": "teal",
     "tools": [],
@@ -1765,7 +1765,7 @@
   "Prompt Injection Defender": {
     "name": "Prompt Injection Defender",
     "division": "engineering",
-    "path": "engineering/engineering-prompt-injection-defender.md",
+    "path": "engineering\\engineering-prompt-injection-defender.md",
     "description": "Expert LLM application security engineer specializing in prompt injection defense, jailbreak resistance, tool-call hardening, output validation, and safe orchestration of agents and MCP servers. Treats every model input as hostile and every tool call as a potential pivot.",
     "color": "red",
     "tools": [],
@@ -1806,7 +1806,7 @@
   "Quantum Computing Specialist": {
     "name": "Quantum Computing Specialist",
     "division": "engineering",
-    "path": "engineering/engineering-quantum-computing-specialist.md",
+    "path": "engineering\\engineering-quantum-computing-specialist.md",
     "description": "Expert in quantum computing architectures, quantum algorithms, quantum error correction, and the practical roadmap from near-term NISQ devices to fault-tolerant quantum advantage — bridges quantum theory to real engineering decisions",
     "color": "#7C3AED",
     "tools": [],
@@ -1847,7 +1847,7 @@
   "RAG Engineer": {
     "name": "RAG Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-rag-engineer.md",
+    "path": "engineering\\engineering-rag-engineer.md",
     "description": "Retrieval-Augmented Generation specialist who designs, builds, and tunes end-to-end RAG pipelines — chunking, embeddings, hybrid search, rerankers, evals, and freshness — so LLM answers are grounded, cited, and actually correct on your corpus.",
     "color": "navy",
     "tools": [],
@@ -1888,7 +1888,7 @@
   "Rapid Prototyper": {
     "name": "Rapid Prototyper",
     "division": "engineering",
-    "path": "engineering/engineering-rapid-prototyper.md",
+    "path": "engineering\\engineering-rapid-prototyper.md",
     "description": "Specialized in ultra-fast proof-of-concept development and MVP creation using efficient tools and frameworks",
     "color": "green",
     "tools": [],
@@ -1929,7 +1929,7 @@
   "Security Engineer": {
     "name": "Security Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-security-engineer.md",
+    "path": "engineering\\engineering-security-engineer.md",
     "description": "Expert application security engineer specializing in threat modeling, vulnerability assessment, secure code review, security architecture design, and incident response for modern web, API, and cloud-native applications.",
     "color": "red",
     "tools": [],
@@ -1970,7 +1970,7 @@
   "Senior Developer": {
     "name": "Senior Developer",
     "division": "engineering",
-    "path": "engineering/engineering-senior-developer.md",
+    "path": "engineering\\engineering-senior-developer.md",
     "description": "Premium implementation specialist - Masters Laravel/Livewire/FluxUI, advanced CSS, Three.js integration",
     "color": "green",
     "tools": [],
@@ -2011,7 +2011,7 @@
   "Software Architect": {
     "name": "Software Architect",
     "division": "engineering",
-    "path": "engineering/engineering-software-architect.md",
+    "path": "engineering\\engineering-software-architect.md",
     "description": "Expert software architect specializing in system design, domain-driven design, architectural patterns, and technical decision-making for scalable, maintainable systems.",
     "color": "indigo",
     "tools": [],
@@ -2052,7 +2052,7 @@
   "Solidity Smart Contract Engineer": {
     "name": "Solidity Smart Contract Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-solidity-smart-contract-engineer.md",
+    "path": "engineering\\engineering-solidity-smart-contract-engineer.md",
     "description": "Expert Solidity developer specializing in EVM smart contract architecture, gas optimization, upgradeable proxy patterns, DeFi protocol development, and security-first contract design across Ethereum and L2 chains.",
     "color": "orange",
     "tools": [],
@@ -2093,7 +2093,7 @@
   "SRE (Site Reliability Engineer)": {
     "name": "SRE (Site Reliability Engineer)",
     "division": "engineering",
-    "path": "engineering/engineering-sre.md",
+    "path": "engineering\\engineering-sre.md",
     "description": "Expert site reliability engineer specializing in SLOs, error budgets, observability, chaos engineering, and toil reduction for production systems at scale.",
     "color": "#e63946",
     "tools": [],
@@ -2134,7 +2134,7 @@
   "Technical Writer": {
     "name": "Technical Writer",
     "division": "engineering",
-    "path": "engineering/engineering-technical-writer.md",
+    "path": "engineering\\engineering-technical-writer.md",
     "description": "Expert technical writer specializing in developer documentation, API references, README files, and tutorials. Transforms complex engineering concepts into clear, accurate, and engaging docs that developers actually read and use.",
     "color": "teal",
     "tools": [],
@@ -2175,7 +2175,7 @@
   "Threat Detection Engineer": {
     "name": "Threat Detection Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-threat-detection-engineer.md",
+    "path": "engineering\\engineering-threat-detection-engineer.md",
     "description": "Expert detection engineer specializing in SIEM rule development, MITRE ATT&CK coverage mapping, threat hunting, alert tuning, and detection-as-code pipelines for security operations teams.",
     "color": "#7b2d8e",
     "tools": [],
@@ -2216,7 +2216,7 @@
   "Voice AI Integration Engineer": {
     "name": "Voice AI Integration Engineer",
     "division": "engineering",
-    "path": "engineering/engineering-voice-ai-integration-engineer.md",
+    "path": "engineering\\engineering-voice-ai-integration-engineer.md",
     "description": "Expert in building end-to-end speech transcription pipelines using Whisper-style models and cloud ASR services — from raw audio ingestion through preprocessing, transcript cleanup, subtitle generation, speaker diarization, and structured downstream integration into apps, APIs, and CMS platforms.",
     "color": "violet",
     "tools": [],
@@ -2257,7 +2257,7 @@
   "WeChat Mini Program Developer": {
     "name": "WeChat Mini Program Developer",
     "division": "engineering",
-    "path": "engineering/engineering-wechat-mini-program-developer.md",
+    "path": "engineering\\engineering-wechat-mini-program-developer.md",
     "description": "Expert WeChat Mini Program developer specializing in 小程序 development with WXML/WXSS/WXS, WeChat API integration, payment systems, subscription messaging, and the full WeChat ecosystem.",
     "color": "green",
     "tools": [],
@@ -2298,7 +2298,7 @@
   "Bookkeeper & Controller": {
     "name": "Bookkeeper & Controller",
     "division": "finance",
-    "path": "finance/finance-bookkeeper-controller.md",
+    "path": "finance\\finance-bookkeeper-controller.md",
     "description": "Expert bookkeeper and controller specializing in day-to-day accounting operations, financial reconciliations, month-end close processes, and internal controls. Ensures the accuracy, completeness, and timeliness of financial records while maintaining GAAP compliance and audit readiness at all times.",
     "color": "green",
     "tools": [],
@@ -2339,7 +2339,7 @@
   "Financial Analyst": {
     "name": "Financial Analyst",
     "division": "finance",
-    "path": "finance/finance-financial-analyst.md",
+    "path": "finance\\finance-financial-analyst.md",
     "description": "Expert financial analyst specializing in financial modeling, forecasting, scenario analysis, and data-driven decision support. Transforms raw financial data into actionable business intelligence that drives strategic planning, investment decisions, and operational optimization.",
     "color": "green",
     "tools": [],
@@ -2380,7 +2380,7 @@
   "FP&A Analyst": {
     "name": "FP&A Analyst",
     "division": "finance",
-    "path": "finance/finance-fpa-analyst.md",
+    "path": "finance\\finance-fpa-analyst.md",
     "description": "Expert Financial Planning & Analysis (FP&A) analyst specializing in budgeting, variance analysis, financial planning, rolling forecasts, and strategic decision support. Bridges the gap between the numbers and the business narrative to drive operational performance and strategic resource allocation.",
     "color": "green",
     "tools": [],
@@ -2421,7 +2421,7 @@
   "Investment Researcher": {
     "name": "Investment Researcher",
     "division": "finance",
-    "path": "finance/finance-investment-researcher.md",
+    "path": "finance\\finance-investment-researcher.md",
     "description": "Expert investment researcher specializing in market research, due diligence, portfolio analysis, and asset valuation. Conducts rigorous fundamental and quantitative analysis to identify investment opportunities, assess risks, and support data-driven portfolio decisions across public equities, private markets, and alternative assets.",
     "color": "green",
     "tools": [],
@@ -2462,7 +2462,7 @@
   "Tax Strategist": {
     "name": "Tax Strategist",
     "division": "finance",
-    "path": "finance/finance-tax-strategist.md",
+    "path": "finance\\finance-tax-strategist.md",
     "description": "Expert tax strategist specializing in tax optimization, multi-jurisdictional compliance, transfer pricing, and strategic tax planning. Navigates complex tax codes to minimize liability while ensuring full regulatory compliance across local, state, federal, and international tax regimes.",
     "color": "green",
     "tools": [],
@@ -2503,7 +2503,7 @@
   "Finance Trader": {
     "name": "Finance Trader",
     "division": "finance",
-    "path": "finance/finance-trader.md",
+    "path": "finance\\finance-trader.md",
     "description": "Places real trades against the user's broker API, on the user's explicit per-trade authorization. Builds the decision brief (thesis, entry, stop, target, position size, risk-of-ruin), waits for the user's \"go\" or \"no-go\" word, then executes via the broker API and confirms fills. Tracks the position lifecycle (entry → trailing stop → exit) and updates the journal.",
     "color": "gold",
     "tools": [],
@@ -2544,7 +2544,7 @@
   "Game Audio Engineer": {
     "name": "Game Audio Engineer",
     "division": "game-development",
-    "path": "game-development/game-audio-engineer.md",
+    "path": "game-development\\game-audio-engineer.md",
     "description": "Interactive audio specialist - Masters FMOD/Wwise integration, adaptive music systems, spatial audio, and audio performance budgeting across all game engines",
     "color": "indigo",
     "tools": [],
@@ -2585,7 +2585,7 @@
   "Game Designer": {
     "name": "Game Designer",
     "division": "game-development",
-    "path": "game-development/game-designer.md",
+    "path": "game-development\\game-designer.md",
     "description": "Systems and mechanics architect - Masters GDD authorship, player psychology, economy balancing, and gameplay loop design across all engines and genres",
     "color": "yellow",
     "tools": [],
@@ -2626,7 +2626,7 @@
   "Level Designer": {
     "name": "Level Designer",
     "division": "game-development",
-    "path": "game-development/level-designer.md",
+    "path": "game-development\\level-designer.md",
     "description": "Spatial storytelling and flow specialist - Masters layout theory, pacing architecture, encounter design, and environmental narrative across all game engines",
     "color": "teal",
     "tools": [],
@@ -2667,7 +2667,7 @@
   "Narrative Designer": {
     "name": "Narrative Designer",
     "division": "game-development",
-    "path": "game-development/narrative-designer.md",
+    "path": "game-development\\narrative-designer.md",
     "description": "Story systems and dialogue architect - Masters GDD-aligned narrative design, branching dialogue, lore architecture, and environmental storytelling across all game engines",
     "color": "red",
     "tools": [],
@@ -2708,7 +2708,7 @@
   "Technical Artist": {
     "name": "Technical Artist",
     "division": "game-development",
-    "path": "game-development/technical-artist.md",
+    "path": "game-development\\technical-artist.md",
     "description": "Art-to-engine pipeline specialist - Masters shaders, VFX systems, LOD pipelines, performance budgeting, and cross-engine asset optimization",
     "color": "pink",
     "tools": [],
@@ -2749,7 +2749,7 @@
   "Blender Add-on Engineer": {
     "name": "Blender Add-on Engineer",
     "division": "game-development",
-    "path": "game-development/blender/blender-addon-engineer.md",
+    "path": "game-development\\blender\\blender-addon-engineer.md",
     "description": "Blender tooling specialist - Builds Python add-ons, asset validators, exporters, and pipeline automations that turn repetitive DCC work into reliable one-click workflows",
     "color": "blue",
     "tools": [],
@@ -2790,7 +2790,7 @@
   "Godot Gameplay Scripter": {
     "name": "Godot Gameplay Scripter",
     "division": "game-development",
-    "path": "game-development/godot/godot-gameplay-scripter.md",
+    "path": "game-development\\godot\\godot-gameplay-scripter.md",
     "description": "Composition and signal integrity specialist - Masters GDScript 2.0, C# integration, node-based architecture, and type-safe signal design for Godot 4 projects",
     "color": "purple",
     "tools": [],
@@ -2831,7 +2831,7 @@
   "Godot Multiplayer Engineer": {
     "name": "Godot Multiplayer Engineer",
     "division": "game-development",
-    "path": "game-development/godot/godot-multiplayer-engineer.md",
+    "path": "game-development\\godot\\godot-multiplayer-engineer.md",
     "description": "Godot 4 networking specialist - Masters the MultiplayerAPI, scene replication, ENet/WebRTC transport, RPCs, and authority models for real-time multiplayer games",
     "color": "violet",
     "tools": [],
@@ -2872,7 +2872,7 @@
   "Godot Shader Developer": {
     "name": "Godot Shader Developer",
     "division": "game-development",
-    "path": "game-development/godot/godot-shader-developer.md",
+    "path": "game-development\\godot\\godot-shader-developer.md",
     "description": "Godot 4 visual effects specialist - Masters the Godot Shading Language (GLSL-like), VisualShader editor, CanvasItem and Spatial shaders, post-processing, and performance optimization for 2D/3D effects",
     "color": "purple",
     "tools": [],
@@ -2913,7 +2913,7 @@
   "Roblox Avatar Creator": {
     "name": "Roblox Avatar Creator",
     "division": "game-development",
-    "path": "game-development/roblox-studio/roblox-avatar-creator.md",
+    "path": "game-development\\roblox-studio\\roblox-avatar-creator.md",
     "description": "Roblox UGC and avatar pipeline specialist - Masters Roblox's avatar system, UGC item creation, accessory rigging, texture standards, and the Creator Marketplace submission pipeline",
     "color": "fuchsia",
     "tools": [],
@@ -2954,7 +2954,7 @@
   "Roblox Experience Designer": {
     "name": "Roblox Experience Designer",
     "division": "game-development",
-    "path": "game-development/roblox-studio/roblox-experience-designer.md",
+    "path": "game-development\\roblox-studio\\roblox-experience-designer.md",
     "description": "Roblox platform UX and monetization specialist - Masters engagement loop design, DataStore-driven progression, Roblox monetization systems (Passes, Developer Products, UGC), and player retention for Roblox experiences",
     "color": "lime",
     "tools": [],
@@ -2995,7 +2995,7 @@
   "Roblox Systems Scripter": {
     "name": "Roblox Systems Scripter",
     "division": "game-development",
-    "path": "game-development/roblox-studio/roblox-systems-scripter.md",
+    "path": "game-development\\roblox-studio\\roblox-systems-scripter.md",
     "description": "Roblox platform engineering specialist - Masters Luau, the client-server security model, RemoteEvents/RemoteFunctions, DataStore, and module architecture for scalable Roblox experiences",
     "color": "rose",
     "tools": [],
@@ -3036,7 +3036,7 @@
   "Unity Architect": {
     "name": "Unity Architect",
     "division": "game-development",
-    "path": "game-development/unity/unity-architect.md",
+    "path": "game-development\\unity\\unity-architect.md",
     "description": "Data-driven modularity specialist - Masters ScriptableObjects, decoupled systems, and single-responsibility component design for scalable Unity projects",
     "color": "blue",
     "tools": [],
@@ -3077,7 +3077,7 @@
   "Unity Editor Tool Developer": {
     "name": "Unity Editor Tool Developer",
     "division": "game-development",
-    "path": "game-development/unity/unity-editor-tool-developer.md",
+    "path": "game-development\\unity\\unity-editor-tool-developer.md",
     "description": "Unity editor automation specialist - Masters custom EditorWindows, PropertyDrawers, AssetPostprocessors, ScriptedImporters, and pipeline automation that saves teams hours per week",
     "color": "gray",
     "tools": [],
@@ -3118,7 +3118,7 @@
   "Unity Multiplayer Engineer": {
     "name": "Unity Multiplayer Engineer",
     "division": "game-development",
-    "path": "game-development/unity/unity-multiplayer-engineer.md",
+    "path": "game-development\\unity\\unity-multiplayer-engineer.md",
     "description": "Networked gameplay specialist - Masters Netcode for GameObjects, Unity Gaming Services (Relay/Lobby), client-server authority, lag compensation, and state synchronization",
     "color": "blue",
     "tools": [],
@@ -3159,7 +3159,7 @@
   "Unity Shader Graph Artist": {
     "name": "Unity Shader Graph Artist",
     "division": "game-development",
-    "path": "game-development/unity/unity-shader-graph-artist.md",
+    "path": "game-development\\unity\\unity-shader-graph-artist.md",
     "description": "Visual effects and material specialist - Masters Unity Shader Graph, HLSL, URP/HDRP rendering pipelines, and custom pass authoring for real-time visual effects",
     "color": "cyan",
     "tools": [],
@@ -3200,7 +3200,7 @@
   "Unreal Multiplayer Architect": {
     "name": "Unreal Multiplayer Architect",
     "division": "game-development",
-    "path": "game-development/unreal-engine/unreal-multiplayer-architect.md",
+    "path": "game-development\\unreal-engine\\unreal-multiplayer-architect.md",
     "description": "Unreal Engine networking specialist - Masters Actor replication, GameMode/GameState architecture, server-authoritative gameplay, network prediction, and dedicated server setup for UE5",
     "color": "red",
     "tools": [],
@@ -3241,7 +3241,7 @@
   "Unreal Systems Engineer": {
     "name": "Unreal Systems Engineer",
     "division": "game-development",
-    "path": "game-development/unreal-engine/unreal-systems-engineer.md",
+    "path": "game-development\\unreal-engine\\unreal-systems-engineer.md",
     "description": "Performance and hybrid architecture specialist - Masters C++/Blueprint continuum, Nanite geometry, Lumen GI, and Gameplay Ability System for AAA-grade Unreal Engine projects",
     "color": "orange",
     "tools": [],
@@ -3282,7 +3282,7 @@
   "Unreal Technical Artist": {
     "name": "Unreal Technical Artist",
     "division": "game-development",
-    "path": "game-development/unreal-engine/unreal-technical-artist.md",
+    "path": "game-development\\unreal-engine\\unreal-technical-artist.md",
     "description": "Unreal Engine visual pipeline specialist - Masters the Material Editor, Niagara VFX, Procedural Content Generation, and the art-to-engine pipeline for UE5 projects",
     "color": "orange",
     "tools": [],
@@ -3323,7 +3323,7 @@
   "Unreal World Builder": {
     "name": "Unreal World Builder",
     "division": "game-development",
-    "path": "game-development/unreal-engine/unreal-world-builder.md",
+    "path": "game-development\\unreal-engine\\unreal-world-builder.md",
     "description": "Open-world and environment specialist - Masters UE5 World Partition, Landscape, procedural foliage, HLOD, and large-scale level streaming for seamless open-world experiences",
     "color": "green",
     "tools": [],
@@ -3364,7 +3364,7 @@
   "JARVIS Academic & Science": {
     "name": "JARVIS Academic & Science",
     "division": "jarvis",
-    "path": "jarvis/jarvis-academic-science.md",
+    "path": "jarvis\\jarvis-academic-science.md",
     "description": "Cross-disciplinary academic intelligence — synthesizes knowledge across the humanities, social sciences, physical sciences, and emerging research frontiers to provide historically grounded, psychologically astute, scientifically rigorous, and culturally nuanced insight on any question.",
     "color": "gold",
     "tools": [],
@@ -3405,7 +3405,7 @@
   "JARVIS Accessibility & Inclusive Tech": {
     "name": "JARVIS Accessibility & Inclusive Tech",
     "division": "jarvis",
-    "path": "jarvis/jarvis-accessibility-inclusive-tech.md",
+    "path": "jarvis\\jarvis-accessibility-inclusive-tech.md",
     "description": "Digital accessibility, WCAG compliance, assistive technology, inclusive design, accessibility engineering, Section 508, EN 301 549, disability rights, accessibility auditing, and the design and development practices that make technology usable for everyone — not just as a legal requirement, but as a business imperative and a human right.",
     "color": "blue",
     "tools": [],
@@ -3446,7 +3446,7 @@
   "JARVIS AI & Machine Intelligence": {
     "name": "JARVIS AI & Machine Intelligence",
     "division": "jarvis",
-    "path": "jarvis/jarvis-ai-ml.md",
+    "path": "jarvis\\jarvis-ai-ml.md",
     "description": "Advanced AI research and engineering intelligence — builds, trains, fine-tunes, and deploys state-of-the-art ML models, LLM-powered systems, autonomous agents, and AGI-oriented architectures with production-grade reliability.",
     "color": "purple",
     "tools": [],
@@ -3487,7 +3487,7 @@
   "JARVIS AR/XR & Spatial Intelligence": {
     "name": "JARVIS AR/XR & Spatial Intelligence",
     "division": "jarvis",
-    "path": "jarvis/jarvis-ar-xr-spatial.md",
+    "path": "jarvis\\jarvis-ar-xr-spatial.md",
     "description": "Immersive technology engineer and spatial computing architect — builds augmented reality experiences, mixed reality interfaces, spatial AI systems, computer vision pipelines, and camera-based interaction layers for any platform from mobile AR to Apple Vision Pro.",
     "color": "indigo",
     "tools": [],
@@ -3528,7 +3528,7 @@
   "JARVIS Architecture & Built Environment": {
     "name": "JARVIS Architecture & Built Environment",
     "division": "jarvis",
-    "path": "jarvis/jarvis-architecture-built-env.md",
+    "path": "jarvis\\jarvis-architecture-built-env.md",
     "description": "Architecture, urban design, and construction intelligence — designs buildings with structural integrity and aesthetic vision, navigates planning and permitting, applies BIM workflows, advises on sustainable construction and LEED certification, models urban systems, and provides the technical and creative depth to shape the built environment at every scale from room to city.",
     "color": "stone",
     "tools": [],
@@ -3569,7 +3569,7 @@
   "JARVIS Art History & Culture": {
     "name": "JARVIS Art History & Culture",
     "division": "jarvis",
-    "path": "jarvis/jarvis-art-history-culture.md",
+    "path": "jarvis\\jarvis-art-history-culture.md",
     "description": "Art history, cultural theory, and visual culture intelligence — interprets artworks across every period and culture, advises on museum strategy and curatorial practice, navigates the art market with commercial precision, applies cultural theory and critical methodology, researches provenance and authenticity, and provides the humanistic depth to understand visual art as both cultural expression and economic asset.",
     "color": "burgundy",
     "tools": [],
@@ -3610,7 +3610,7 @@
   "JARVIS Automation": {
     "name": "JARVIS Automation",
     "division": "jarvis",
-    "path": "jarvis/jarvis-automation.md",
+    "path": "jarvis\\jarvis-automation.md",
     "description": "Hyper-efficient automation architect and task-orchestration engine — designs, builds, and operates automated workflows, robotic process automation, CI/CD pipelines, scheduled agents, and event-driven systems that run without human intervention.",
     "color": "orange",
     "tools": [],
@@ -3651,7 +3651,7 @@
   "JARVIS Automotive & EV": {
     "name": "JARVIS Automotive & EV",
     "division": "jarvis",
-    "path": "jarvis/jarvis-automotive-ev.md",
+    "path": "jarvis\\jarvis-automotive-ev.md",
     "description": "Automotive engineering, electric vehicles, autonomous driving, connected car platforms, and mobility-as-a-service — covers full vehicle architecture, EV powertrain design, ADAS and self-driving stacks, OTA software delivery, V2X communication, and the business models reshaping global mobility.",
     "color": "blue",
     "tools": [],
@@ -3692,7 +3692,7 @@
   "JARVIS Behavioral Economics & Decision Science": {
     "name": "JARVIS Behavioral Economics & Decision Science",
     "division": "jarvis",
-    "path": "jarvis/jarvis-behavioral-economics.md",
+    "path": "jarvis\\jarvis-behavioral-economics.md",
     "description": "Behavioral economics, decision science, cognitive biases, nudge theory, choice architecture, behavioral insights, experimental design, and applied behavioral science — bridges academic behavioral research with practical applications in policy, product design, public health, financial behavior, and organizational decision-making.",
     "color": "orange",
     "tools": [],
@@ -3733,7 +3733,7 @@
   "JARVIS Biotech & Medicine": {
     "name": "JARVIS Biotech & Medicine",
     "division": "jarvis",
-    "path": "jarvis/jarvis-biotech-medicine.md",
+    "path": "jarvis\\jarvis-biotech-medicine.md",
     "description": "Life sciences and biomedical intelligence — navigates drug discovery pipelines, interprets genomic and clinical data, advises on clinical trial design, synthesizes medical literature, engineers bioinformatics workflows, and translates cutting-edge biology into actionable strategy for healthcare, research, and life sciences organizations.",
     "color": "red",
     "tools": [],
@@ -3774,7 +3774,7 @@
   "JARVIS Brainiac — Personal, Persistent, Unrestrained": {
     "name": "JARVIS Brainiac — Personal, Persistent, Unrestrained",
     "division": "jarvis",
-    "path": "jarvis/jarvis-brainiac.md",
+    "path": "jarvis\\jarvis-brainiac.md",
     "description": "The user's personal JARVIS. A distinct personality that grows over time by writing to and reading from a permanent lessons journal. Runs in yolo on the user's machine — the only seams are the four physical / consequential ones (CAPTCHA, per-trade approval, OS refusals, true ambiguity). Otherwise it acts, decides, ships. Learns from every session and brings the lessons into the next one.",
     "color": "#8a2be2",
     "tools": [],
@@ -3815,7 +3815,7 @@
   "JARVIS Circular Economy & Regenerative Design": {
     "name": "JARVIS Circular Economy & Regenerative Design",
     "division": "jarvis",
-    "path": "jarvis/jarvis-circular-economy.md",
+    "path": "jarvis\\jarvis-circular-economy.md",
     "description": "Circular economy business models, regenerative design principles, extended producer responsibility, industrial symbiosis, biomimicry, cradle-to-cradle design, material flow analysis, waste valorization, circular supply chains, and the measurement frameworks that turn environmental ambition into accountable business strategy.",
     "color": "green",
     "tools": [],
@@ -3856,7 +3856,7 @@
   "JARVIS Climate Adaptation & Resilience": {
     "name": "JARVIS Climate Adaptation & Resilience",
     "division": "jarvis",
-    "path": "jarvis/jarvis-climate-adaptation.md",
+    "path": "jarvis\\jarvis-climate-adaptation.md",
     "description": "Climate adaptation, disaster risk reduction, and community resilience intelligence — designs climate adaptation strategies, applies disaster risk management frameworks, builds resilient infrastructure, advises on climate finance for adaptation, models climate vulnerability and exposure, and provides the technical and policy depth to help communities, cities, and systems survive and thrive in a changing climate.",
     "color": "brown",
     "tools": [],
@@ -3897,7 +3897,7 @@
   "JARVIS Climate Finance & Carbon Markets": {
     "name": "JARVIS Climate Finance & Carbon Markets",
     "division": "jarvis",
-    "path": "jarvis/jarvis-climate-finance.md",
+    "path": "jarvis\\jarvis-climate-finance.md",
     "description": "Climate finance, green bonds, sustainability-linked finance, voluntary and compliance carbon markets, carbon credits and offsets, climate risk integration in finance, TCFD, ISSB climate standards, blended climate finance, and the capital flow mechanisms accelerating the transition to a net-zero economy.",
     "color": "green",
     "tools": [],
@@ -3938,7 +3938,7 @@
   "JARVIS Climate & Sustainability": {
     "name": "JARVIS Climate & Sustainability",
     "division": "jarvis",
-    "path": "jarvis/jarvis-climate-sustainability.md",
+    "path": "jarvis\\jarvis-climate-sustainability.md",
     "description": "Climate strategy and sustainability intelligence — designs ESG programs, builds carbon accounting systems, advises on clean energy transition, models climate risk, navigates environmental regulation, and turns sustainability commitments into measurable, credible, and competitive business advantage.",
     "color": "green",
     "tools": [],
@@ -3979,7 +3979,7 @@
   "JARVIS Climate Tech & Clean Energy": {
     "name": "JARVIS Climate Tech & Clean Energy",
     "division": "jarvis",
-    "path": "jarvis/jarvis-climate-tech.md",
+    "path": "jarvis\\jarvis-climate-tech.md",
     "description": "Climate technology, clean energy systems, and net-zero strategy intelligence — designs renewable energy systems, models decarbonization pathways, advises on carbon markets, applies climate finance, engineers carbon capture solutions, and provides the technical and strategic depth to accelerate the energy transition across every sector of the global economy.",
     "color": "emerald",
     "tools": [],
@@ -4020,7 +4020,7 @@
   "JARVIS Cognitive Science & Learning": {
     "name": "JARVIS Cognitive Science & Learning",
     "division": "jarvis",
-    "path": "jarvis/jarvis-cognitive-learning.md",
+    "path": "jarvis\\jarvis-cognitive-learning.md",
     "description": "Cognitive science, learning science, and human performance intelligence — applies the science of how minds work to optimize learning, design effective training systems, advise on cognitive enhancement, build memory systems, decode attention and decision-making, and provide the scientific depth to make human cognition and learning as effective as possible.",
     "color": "indigo",
     "tools": [],
@@ -4061,7 +4061,7 @@
   "JARVIS Computer Use": {
     "name": "JARVIS Computer Use",
     "division": "jarvis",
-    "path": "jarvis/jarvis-computer-use.md",
+    "path": "jarvis\\jarvis-computer-use.md",
     "description": "Supreme computer use and autonomous tool mastery — operates any desktop, browser, terminal, API, or digital interface with the precision of an expert user; automates complex multi-step workflows across applications; orchestrates tool chains; writes and executes code to solve any computational problem; and turns any digital task into a reliable, repeatable, auditable automated process.",
     "color": "electric",
     "tools": [],
@@ -4102,7 +4102,7 @@
   "JARVIS Construction & PropTech": {
     "name": "JARVIS Construction & PropTech",
     "division": "jarvis",
-    "path": "jarvis/jarvis-construction-proptech.md",
+    "path": "jarvis\\jarvis-construction-proptech.md",
     "description": "Construction technology, Building Information Modeling (BIM), modular and off-site construction, construction project management, PropTech innovation, smart buildings, construction robotics, digital transformation of the built environment, and the data-driven workflows that compress construction timelines, reduce waste, and deliver better buildings.",
     "color": "orange",
     "tools": [],
@@ -4143,7 +4143,7 @@
   "JARVIS Content & Media": {
     "name": "JARVIS Content & Media",
     "division": "jarvis",
-    "path": "jarvis/jarvis-content-media.md",
+    "path": "jarvis\\jarvis-content-media.md",
     "description": "Master content intelligence and media production system — crafts compelling writing in any style, produces scripts, directs video and podcast concepts, builds content strategies, generates SEO-optimized copy, and tells the stories that make ideas unforgettable.",
     "color": "fuchsia",
     "tools": [],
@@ -4184,7 +4184,7 @@
   "JARVIS Core Brain": {
     "name": "JARVIS Core Brain",
     "division": "jarvis",
-    "path": "jarvis/jarvis-core-brain.md",
+    "path": "jarvis\\jarvis-core-brain.md",
     "description": "Omniscient AI orchestrator and central intelligence hub — coordinates all specialist agents, manages context, delegates tasks, and maintains a unified world-model to get anything done end-to-end.",
     "color": "cyan",
     "tools": [],
@@ -4225,7 +4225,7 @@
   "JARVIS Core — Omniscient AI Brainiac": {
     "name": "JARVIS Core — Omniscient AI Brainiac",
     "division": "jarvis",
-    "path": "jarvis/jarvis-core.md",
+    "path": "jarvis\\jarvis-core.md",
     "description": "The ultimate AI super-agent: a Steve Jobs-caliber visionary engineer, omniscient task orchestrator, AGI-grade polymath, and autonomous brainiac that masters every domain — engineering, design, research, automation, AR/VR, computer vision, multi-modal AI, and beyond. JARVIS doesn't just assist — it leads, creates, and transforms.",
     "color": "#FFD700",
     "tools": [],
@@ -4266,7 +4266,7 @@
   "JARVIS Creative Writing": {
     "name": "JARVIS Creative Writing",
     "division": "jarvis",
-    "path": "jarvis/jarvis-creative-writing.md",
+    "path": "jarvis\\jarvis-creative-writing.md",
     "description": "Master creative writing intelligence — crafts literary fiction, screenplays, poetry, and narrative non-fiction; builds story worlds with mythological depth; designs compelling characters with psychological truth; and applies the full craft of storytelling to produce writing that resonates long after the last page.",
     "color": "magenta",
     "tools": [],
@@ -4307,7 +4307,7 @@
   "JARVIS Creator Economy": {
     "name": "JARVIS Creator Economy",
     "division": "jarvis",
-    "path": "jarvis/jarvis-creator-economy.md",
+    "path": "jarvis\\jarvis-creator-economy.md",
     "description": "Creator economy strategy, content monetization, platform economics, influencer marketing, audience building, creator tools and infrastructure, creator-brand partnerships, creator fund mechanics, and the business systems that help individual creators build sustainable, diversified income streams.",
     "color": "pink",
     "tools": [],
@@ -4348,7 +4348,7 @@
   "JARVIS Customer Experience": {
     "name": "JARVIS Customer Experience",
     "division": "jarvis",
-    "path": "jarvis/jarvis-customer-experience.md",
+    "path": "jarvis\\jarvis-customer-experience.md",
     "description": "Customer experience and success intelligence — designs journey maps, engineers support excellence, drives NPS and CSAT improvement, builds customer success programs, reduces churn, and turns every customer interaction into a demonstration of what the brand stands for.",
     "color": "cyan",
     "tools": [],
@@ -4389,7 +4389,7 @@
   "JARVIS Data Intelligence": {
     "name": "JARVIS Data Intelligence",
     "division": "jarvis",
-    "path": "jarvis/jarvis-data-intelligence.md",
+    "path": "jarvis\\jarvis-data-intelligence.md",
     "description": "Elite data scientist and business intelligence architect — transforms raw data into precise, actionable insights through analytics pipelines, financial modeling, predictive dashboards, real-time reporting systems, and evidence-based decision support at every organizational level.",
     "color": "blue",
     "tools": [],
@@ -4430,7 +4430,7 @@
   "JARVIS Design & Creative": {
     "name": "JARVIS Design & Creative",
     "division": "jarvis",
-    "path": "jarvis/jarvis-design-creative.md",
+    "path": "jarvis\\jarvis-design-creative.md",
     "description": "Visionary design intelligence and creative director — generates premium visual identities, UI systems, generative art, image prompts, video scripts, and brand experiences that combine human aesthetics with AI-native creative capabilities.",
     "color": "pink",
     "tools": [],
@@ -4471,7 +4471,7 @@
   "JARVIS DevOps & Platform Engineering": {
     "name": "JARVIS DevOps & Platform Engineering",
     "division": "jarvis",
-    "path": "jarvis/jarvis-devops-platform.md",
+    "path": "jarvis\\jarvis-devops-platform.md",
     "description": "DevOps, platform engineering, and cloud-native infrastructure intelligence — designs CI/CD pipelines, builds Internal Developer Platforms (IDPs), engineers Kubernetes infrastructure, applies GitOps and infrastructure-as-code, advises on SRE practices, and provides the engineering depth to build developer platforms that make shipping software fast, reliable, and repeatable.",
     "color": "blue",
     "tools": [],
@@ -4512,7 +4512,7 @@
   "JARVIS Digital Twin & Simulation": {
     "name": "JARVIS Digital Twin & Simulation",
     "division": "jarvis",
-    "path": "jarvis/jarvis-digital-twin.md",
+    "path": "jarvis\\jarvis-digital-twin.md",
     "description": "Digital twin architecture, simulation modeling, physics-based and data-driven twin design, industrial IoT integration, predictive maintenance, manufacturing process twin, infrastructure twin, and the AI/ML layer that turns static simulation into living, continuously-learning replicas of the physical world.",
     "color": "cyan",
     "tools": [],
@@ -4553,7 +4553,7 @@
   "JARVIS Disaster & Emergency Management": {
     "name": "JARVIS Disaster & Emergency Management",
     "division": "jarvis",
-    "path": "jarvis/jarvis-disaster-emergency-management.md",
+    "path": "jarvis\\jarvis-disaster-emergency-management.md",
     "description": "Emergency management, disaster risk reduction, crisis response, humanitarian operations, business continuity, disaster resilience engineering, early warning systems, and the integrated frameworks that link preparedness, response, recovery, and mitigation for communities and organizations facing natural and human-caused disasters.",
     "color": "red",
     "tools": [],
@@ -4594,7 +4594,7 @@
   "JARVIS E-Commerce & Retail Tech": {
     "name": "JARVIS E-Commerce & Retail Tech",
     "division": "jarvis",
-    "path": "jarvis/jarvis-e-commerce-retail-tech.md",
+    "path": "jarvis\\jarvis-e-commerce-retail-tech.md",
     "description": "E-commerce strategy, retail technology, DTC brand building, marketplace economics, omnichannel operations, conversion rate optimization, fulfillment and logistics tech, retail media, and the data-driven merchandising and personalization systems that power the world's most effective online and offline retail experiences.",
     "color": "orange",
     "tools": [],
@@ -4635,7 +4635,7 @@
   "JARVIS Education & Learning": {
     "name": "JARVIS Education & Learning",
     "division": "jarvis",
-    "path": "jarvis/jarvis-education-learning.md",
+    "path": "jarvis\\jarvis-education-learning.md",
     "description": "Learning design and EdTech intelligence — engineers instructional experiences, designs curriculum architecture, applies learning science to maximize retention and skill transfer, builds EdTech platform strategy, and creates the assessment and feedback systems that turn learning into measurable capability growth.",
     "color": "yellow",
     "tools": [],
@@ -4676,7 +4676,7 @@
   "JARVIS Elder Care & Aging Tech": {
     "name": "JARVIS Elder Care & Aging Tech",
     "division": "jarvis",
-    "path": "jarvis/jarvis-elder-care-aging.md",
+    "path": "jarvis\\jarvis-elder-care-aging.md",
     "description": "Gerontechnology, aging-in-place technology, elder care systems, longevity research, dementia care, falls prevention, senior living innovation, age-friendly design, caregiver support technology, and the policy and business frameworks addressing the needs of the world's fastest-growing population demographic.",
     "color": "purple",
     "tools": [],
@@ -4717,7 +4717,7 @@
   "JARVIS Embedded Systems & Firmware": {
     "name": "JARVIS Embedded Systems & Firmware",
     "division": "jarvis",
-    "path": "jarvis/jarvis-embedded-firmware.md",
+    "path": "jarvis\\jarvis-embedded-firmware.md",
     "description": "Embedded systems engineering, firmware development, and hardware-software interface intelligence — programs bare-metal and RTOS systems, designs hardware abstraction layers, engineers real-time control systems, applies communication protocols for constrained devices, and provides the low-level technical depth to make silicon do exactly what it needs to do with maximum reliability and minimum resources.",
     "color": "rust",
     "tools": [],
@@ -4758,7 +4758,7 @@
   "JARVIS Energy Systems": {
     "name": "JARVIS Energy Systems",
     "division": "jarvis",
-    "path": "jarvis/jarvis-energy-systems.md",
+    "path": "jarvis\\jarvis-energy-systems.md",
     "description": "Energy systems engineering, power grid architecture, energy storage, renewable energy integration, oil and gas technology, energy trading and markets, distributed energy resources, grid modernization, energy transition strategy, and the policy and regulatory frameworks governing global energy systems.",
     "color": "yellow",
     "tools": [],
@@ -4799,7 +4799,7 @@
   "JARVIS Engineering": {
     "name": "JARVIS Engineering",
     "division": "jarvis",
-    "path": "jarvis/jarvis-engineering.md",
+    "path": "jarvis\\jarvis-engineering.md",
     "description": "Elite full-stack engineer and systems architect — masters every layer from embedded firmware to cloud infrastructure, with deep expertise in AI-accelerated coding, automated testing, and production-grade delivery at startup speed.",
     "color": "green",
     "tools": [],
@@ -4840,7 +4840,7 @@
   "JARVIS Entrepreneur & Startup": {
     "name": "JARVIS Entrepreneur & Startup",
     "division": "jarvis",
-    "path": "jarvis/jarvis-entrepreneur-startup.md",
+    "path": "jarvis\\jarvis-entrepreneur-startup.md",
     "description": "Entrepreneurship, startup strategy, and venture intelligence — validates business ideas with rigorous frameworks, designs business models that scale, advises on fundraising from pre-seed to Series B, builds go-to-market strategies, navigates startup legal and operational foundations, and provides the strategic and operational depth to build a startup from zero to product-market fit and beyond.",
     "color": "yellow",
     "tools": [],
@@ -4881,7 +4881,7 @@
   "JARVIS Esports & Gaming Industry": {
     "name": "JARVIS Esports & Gaming Industry",
     "division": "jarvis",
-    "path": "jarvis/jarvis-esports-gaming-industry.md",
+    "path": "jarvis\\jarvis-esports-gaming-industry.md",
     "description": "Esports strategy, competitive gaming operations, gaming industry business models, streaming and content creator ecosystems, game monetization, esports team management, tournament operations, gaming platform strategy, and the intersection of gaming with media, technology, and sports business.",
     "color": "purple",
     "tools": [],
@@ -4922,7 +4922,7 @@
   "JARVIS Event Technology & Live Experiences": {
     "name": "JARVIS Event Technology & Live Experiences",
     "division": "jarvis",
-    "path": "jarvis/jarvis-event-tech.md",
+    "path": "jarvis\\jarvis-event-tech.md",
     "description": "Event technology, virtual and hybrid event platforms, event management software, audience engagement tech, registration and ticketing, live streaming production, event analytics, experiential design, venue technology, and the full technology stack powering modern events from intimate corporate gatherings to massive festival productions.",
     "color": "yellow",
     "tools": [],
@@ -4963,7 +4963,7 @@
   "JARVIS Fashion & Luxury": {
     "name": "JARVIS Fashion & Luxury",
     "division": "jarvis",
-    "path": "jarvis/jarvis-fashion-luxury.md",
+    "path": "jarvis\\jarvis-fashion-luxury.md",
     "description": "Fashion design, luxury brand strategy, and style intelligence — creates and analyzes fashion collections, advises on luxury brand positioning and heritage management, applies textile science, decodes trend forecasting, navigates sustainable fashion systems, and provides the aesthetic and commercial depth to build fashion and luxury brands that endure.",
     "color": "noir",
     "tools": [],
@@ -5004,7 +5004,7 @@
   "JARVIS Finance": {
     "name": "JARVIS Finance",
     "division": "jarvis",
-    "path": "jarvis/jarvis-finance.md",
+    "path": "jarvis\\jarvis-finance.md",
     "description": "Elite financial intelligence and capital strategy advisor — synthesizes investment research, FP&A modeling, tax strategy, bookkeeping automation, and corporate finance to maximize capital efficiency, minimize tax burden, and drive informed financial decisions at every level.",
     "color": "emerald",
     "tools": [],
@@ -5045,7 +5045,7 @@
   "JARVIS Fintech & Payments": {
     "name": "JARVIS Fintech & Payments",
     "division": "jarvis",
-    "path": "jarvis/jarvis-fintech-payments.md",
+    "path": "jarvis\\jarvis-fintech-payments.md",
     "description": "Financial technology, digital payments, neobanking, embedded finance, open banking, lending tech, insurtech, and regulatory compliance — covers the full stack from payment rails and card scheme economics to BaaS platforms, crypto payments, and the regulatory frameworks governing global digital finance.",
     "color": "green",
     "tools": [],
@@ -5086,7 +5086,7 @@
   "JARVIS Food, Nutrition & AgriTech": {
     "name": "JARVIS Food, Nutrition & AgriTech",
     "division": "jarvis",
-    "path": "jarvis/jarvis-food-agritech.md",
+    "path": "jarvis\\jarvis-food-agritech.md",
     "description": "Food systems, nutrition science, and agricultural technology intelligence — designs precision nutrition programs, navigates food product development and regulatory compliance, advises on sustainable agricultural systems, evaluates AgriTech innovations, applies food science to formulation and safety, and builds strategy at the intersection of human health, environmental sustainability, and the food industry.",
     "color": "lime",
     "tools": [],
@@ -5127,7 +5127,7 @@
   "JARVIS Future of Work & Workforce Transformation": {
     "name": "JARVIS Future of Work & Workforce Transformation",
     "division": "jarvis",
-    "path": "jarvis/jarvis-future-of-work.md",
+    "path": "jarvis\\jarvis-future-of-work.md",
     "description": "Future of work strategy, distributed and hybrid work design, workforce transformation, HR technology, skills-based organization design, gig economy and contingent workforce management, organizational culture in distributed environments, AI's impact on jobs and skills, and the leadership and technology frameworks for building high-performance organizations in a post-pandemic world.",
     "color": "purple",
     "tools": [],
@@ -5168,7 +5168,7 @@
   "JARVIS Future Tech": {
     "name": "JARVIS Future Tech",
     "division": "jarvis",
-    "path": "jarvis/jarvis-future-tech.md",
+    "path": "jarvis\\jarvis-future-tech.md",
     "description": "Deep technology and frontier intelligence — navigates quantum computing, neuromorphic systems, advanced materials, photonics, AGI architecture, synthetic biology, fusion energy, and every emerging technology at the frontier of human knowledge — providing the technical depth and strategic clarity to build, invest in, or prepare for the technologies that will transform the world.",
     "color": "cyan",
     "tools": [],
@@ -5209,7 +5209,7 @@
   "JARVIS Game World": {
     "name": "JARVIS Game World",
     "division": "jarvis",
-    "path": "jarvis/jarvis-game-world.md",
+    "path": "jarvis\\jarvis-game-world.md",
     "description": "Full-stack game development intelligence — designs compelling game systems, builds narrative worlds, crafts level experiences, engineers game AI, integrates audio, and applies technical art to create games that players cannot put down.",
     "color": "purple",
     "tools": [],
@@ -5250,7 +5250,7 @@
   "JARVIS Genomics & Precision Medicine": {
     "name": "JARVIS Genomics & Precision Medicine",
     "division": "jarvis",
-    "path": "jarvis/jarvis-genomics-precision-medicine.md",
+    "path": "jarvis\\jarvis-genomics-precision-medicine.md",
     "description": "Genomics, precision medicine, CRISPR gene editing, clinical genomics, pharmacogenomics, microbiome science, proteomics, and multi-omics data integration — from sequencing technologies and variant interpretation to therapeutic development, regulatory pathways, and the ethical frameworks governing genetic data and gene therapy.",
     "color": "red",
     "tools": [],
@@ -5291,7 +5291,7 @@
   "JARVIS Geospatial & Mapping": {
     "name": "JARVIS Geospatial & Mapping",
     "division": "jarvis",
-    "path": "jarvis/jarvis-geospatial-mapping.md",
+    "path": "jarvis\\jarvis-geospatial-mapping.md",
     "description": "GIS, geospatial intelligence, and mapping science — designs spatial databases and analysis workflows, applies remote sensing and satellite imagery analysis, builds geospatial web applications, advises on cartographic design, models geographic phenomena, and provides the spatial intelligence to understand the world through location data at every scale from urban blocks to planetary systems.",
     "color": "forest",
     "tools": [],
@@ -5332,7 +5332,7 @@
   "JARVIS Health & Biometrics": {
     "name": "JARVIS Health & Biometrics",
     "division": "jarvis",
-    "path": "jarvis/jarvis-health-biometrics.md",
+    "path": "jarvis\\jarvis-health-biometrics.md",
     "description": "Personalized health intelligence and biometric AI system — analyzes physiological data, models wellness optimization, interprets biomarkers and wearable sensor streams, supports evidence-based health decisions, and integrates health awareness into every dimension of JARVIS operations.",
     "color": "green",
     "tools": [],
@@ -5373,7 +5373,7 @@
   "JARVIS Healthcare Operations": {
     "name": "JARVIS Healthcare Operations",
     "division": "jarvis",
-    "path": "jarvis/jarvis-healthcare-ops.md",
+    "path": "jarvis\\jarvis-healthcare-ops.md",
     "description": "Healthcare operations, clinical informatics, and health system management intelligence — optimizes hospital operations, designs clinical workflows, applies health informatics standards, advises on population health management, navigates healthcare regulation and quality systems, and provides the operational and informatics depth to run healthcare organizations that deliver high-quality, efficient patient care at scale.",
     "color": "white",
     "tools": [],
@@ -5414,7 +5414,7 @@
   "JARVIS HR & People Ops": {
     "name": "JARVIS HR & People Ops",
     "division": "jarvis",
-    "path": "jarvis/jarvis-hr-people-ops.md",
+    "path": "jarvis\\jarvis-hr-people-ops.md",
     "description": "People and talent intelligence — designs talent acquisition strategies, builds org structures, engineers compensation frameworks, creates onboarding programs, shapes culture, and builds the people systems that attract, develop, and retain the talent that every great company is built from.",
     "color": "pink",
     "tools": [],
@@ -5455,7 +5455,7 @@
   "JARVIS Human Interface & Emotion AI": {
     "name": "JARVIS Human Interface & Emotion AI",
     "division": "jarvis",
-    "path": "jarvis/jarvis-human-interface.md",
+    "path": "jarvis\\jarvis-human-interface.md",
     "description": "Human-centered AI intelligence — applies cognitive science, emotion detection, accessibility engineering, and empathic interaction design to create interfaces and experiences that understand and adapt to the full complexity of human emotion, cognition, and need.",
     "color": "rose",
     "tools": [],
@@ -5496,7 +5496,7 @@
   "JARVIS Immigration & Global Mobility": {
     "name": "JARVIS Immigration & Global Mobility",
     "division": "jarvis",
-    "path": "jarvis/jarvis-immigration-global-mobility.md",
+    "path": "jarvis\\jarvis-immigration-global-mobility.md",
     "description": "Global immigration, visa strategy, talent mobility, international expansion compliance, expatriate management, work authorization, immigration technology, global employment, cross-border tax considerations, and the legal and operational frameworks that enable organizations and individuals to move talent across borders effectively and compliantly.",
     "color": "blue",
     "tools": [],
@@ -5537,7 +5537,7 @@
   "JARVIS Insurance & Risk": {
     "name": "JARVIS Insurance & Risk",
     "division": "jarvis",
-    "path": "jarvis/jarvis-insurance-risk.md",
+    "path": "jarvis\\jarvis-insurance-risk.md",
     "description": "Insurance, actuarial science, and enterprise risk management intelligence — prices and structures insurance products, builds actuarial models, designs enterprise risk management frameworks, advises on reinsurance, navigates insurance regulation, and provides the mathematical and strategic depth to manage risk with precision across every segment of the insurance and risk management industry.",
     "color": "navy",
     "tools": [],
@@ -5578,7 +5578,7 @@
   "JARVIS IoT & Robotics": {
     "name": "JARVIS IoT & Robotics",
     "division": "jarvis",
-    "path": "jarvis/jarvis-iot-robotics.md",
+    "path": "jarvis\\jarvis-iot-robotics.md",
     "description": "Embedded systems and robotics intelligence — designs, programs, and deploys IoT sensor networks, autonomous robotic systems, edge AI, smart home/city infrastructure, industrial automation, and physically embodied AI agents that operate in the real world.",
     "color": "lime",
     "tools": [],
@@ -5619,7 +5619,7 @@
   "JARVIS Journalism & Investigative Research": {
     "name": "JARVIS Journalism & Investigative Research",
     "division": "jarvis",
-    "path": "jarvis/jarvis-journalism-research.md",
+    "path": "jarvis\\jarvis-journalism-research.md",
     "description": "Journalism, investigative research, and media intelligence — applies investigative research methodology, fact-checks claims with rigorous sourcing standards, designs OSINT research programs, advises on media ethics and editorial standards, decodes misinformation and disinformation campaigns, and provides the research and editorial depth to produce journalism that holds power accountable.",
     "color": "slate",
     "tools": [],
@@ -5660,7 +5660,7 @@
   "JARVIS Knowledge & Research": {
     "name": "JARVIS Knowledge & Research",
     "division": "jarvis",
-    "path": "jarvis/jarvis-knowledge-research.md",
+    "path": "jarvis\\jarvis-knowledge-research.md",
     "description": "Deep research intelligence and knowledge synthesis engine — conducts comprehensive multi-source research, synthesizes scientific literature, fact-checks claims, builds structured knowledge bases, and delivers evidence-grounded answers to any question across any domain.",
     "color": "amber",
     "tools": [],
@@ -5701,7 +5701,7 @@
   "JARVIS Legal & Compliance": {
     "name": "JARVIS Legal & Compliance",
     "division": "jarvis",
-    "path": "jarvis/jarvis-legal-compliance.md",
+    "path": "jarvis\\jarvis-legal-compliance.md",
     "description": "Institutional-grade legal intelligence and compliance architecture — reviews contracts, structures entities, navigates regulatory frameworks, designs compliance programs, manages intellectual property, and provides actionable legal strategy to protect every asset and advance every mission.",
     "color": "indigo",
     "tools": [],
@@ -5742,7 +5742,7 @@
   "JARVIS LegalTech & Legal Operations": {
     "name": "JARVIS LegalTech & Legal Operations",
     "division": "jarvis",
-    "path": "jarvis/jarvis-legaltech.md",
+    "path": "jarvis\\jarvis-legaltech.md",
     "description": "Legal technology, LegalOps, AI-powered legal tools, contract lifecycle management, e-discovery, legal analytics, document automation, compliance technology, and the operational and organizational transformation of legal departments — from paper-based to data-driven, from reactive to proactive, from cost center to strategic partner.",
     "color": "navy",
     "tools": [],
@@ -5783,7 +5783,7 @@
   "JARVIS Linguistics & Language Intelligence": {
     "name": "JARVIS Linguistics & Language Intelligence",
     "division": "jarvis",
-    "path": "jarvis/jarvis-linguistics-nlp.md",
+    "path": "jarvis\\jarvis-linguistics-nlp.md",
     "description": "Computational linguistics and language intelligence — analyzes linguistic structure at every level, engineers NLP pipelines, advises on multilingual communication, builds translation and localization systems, applies psycholinguistics to communication design, decodes language patterns in any corpus, and provides the deep linguistic expertise that makes language AI work correctly.",
     "color": "teal",
     "tools": [],
@@ -5824,7 +5824,7 @@
   "JARVIS Manufacturing & Industry": {
     "name": "JARVIS Manufacturing & Industry",
     "division": "jarvis",
-    "path": "jarvis/jarvis-manufacturing-industry.md",
+    "path": "jarvis\\jarvis-manufacturing-industry.md",
     "description": "Industrial engineering and manufacturing intelligence — designs lean production systems, applies Six Sigma quality methodologies, engineers Industry 4.0 smart factory architectures, advises on process automation and robotics, manages industrial operations, and provides the technical depth to build factories that produce quality products at competitive cost with world-class efficiency.",
     "color": "steel",
     "tools": [],
@@ -5865,7 +5865,7 @@
   "JARVIS Maritime & Ocean": {
     "name": "JARVIS Maritime & Ocean",
     "division": "jarvis",
-    "path": "jarvis/jarvis-maritime-ocean.md",
+    "path": "jarvis\\jarvis-maritime-ocean.md",
     "description": "Maritime engineering, ocean science, and shipping intelligence — designs vessels and marine systems, models oceanographic phenomena, navigates maritime law and regulation, advises on port and shipping logistics, explores the blue economy, and provides the technical and scientific depth to understand and operate in the ocean environment from the seafloor to the shipping lanes.",
     "color": "ocean",
     "tools": [],
@@ -5906,7 +5906,7 @@
   "JARVIS Marketing & Global Reach": {
     "name": "JARVIS Marketing & Global Reach",
     "division": "jarvis",
-    "path": "jarvis/jarvis-marketing-global.md",
+    "path": "jarvis\\jarvis-marketing-global.md",
     "description": "Omnichannel marketing intelligence and global growth architect — designs and executes integrated marketing strategies across SEO, paid media, social, content, email, and international localization to build brand authority, generate demand, and drive measurable growth worldwide.",
     "color": "violet",
     "tools": [],
@@ -5947,7 +5947,7 @@
   "JARVIS Materials Science & Chemistry": {
     "name": "JARVIS Materials Science & Chemistry",
     "division": "jarvis",
-    "path": "jarvis/jarvis-materials-chemistry.md",
+    "path": "jarvis\\jarvis-materials-chemistry.md",
     "description": "Materials science, synthetic chemistry, and advanced materials intelligence — designs material systems for target properties, applies polymer science and nanotechnology, synthesizes complex organic molecules, advises on materials characterization, engineers surface science and coatings, and provides the deep scientific expertise to develop and optimize materials for every application from aerospace composites to pharmaceutical APIs.",
     "color": "silver",
     "tools": [],
@@ -5988,7 +5988,7 @@
   "JARVIS Media & Entertainment": {
     "name": "JARVIS Media & Entertainment",
     "division": "jarvis",
-    "path": "jarvis/jarvis-media-entertainment.md",
+    "path": "jarvis\\jarvis-media-entertainment.md",
     "description": "Media and entertainment industry intelligence — develops creative IP, navigates film and TV production, designs music strategy, architects streaming platform decisions, manages entertainment rights and licensing, and provides the creative and commercial depth to build lasting entertainment properties across every format and distribution channel.",
     "color": "crimson",
     "tools": [],
@@ -6029,7 +6029,7 @@
   "JARVIS Mental Health & Psychology": {
     "name": "JARVIS Mental Health & Psychology",
     "division": "jarvis",
-    "path": "jarvis/jarvis-mental-health.md",
+    "path": "jarvis\\jarvis-mental-health.md",
     "description": "Mental health, psychology, and wellbeing intelligence — applies evidence-based therapeutic frameworks, advises on mental health program design, synthesizes clinical psychology research, supports crisis response protocols, and promotes psychological wellbeing through the full spectrum of evidence-based approaches from CBT to ACT to trauma-informed care.",
     "color": "lavender",
     "tools": [],
@@ -6070,7 +6070,7 @@
   "JARVIS Military & Defense Strategy": {
     "name": "JARVIS Military & Defense Strategy",
     "division": "jarvis",
-    "path": "jarvis/jarvis-military-defense.md",
+    "path": "jarvis\\jarvis-military-defense.md",
     "description": "Defense strategy, military technology, and geopolitical security intelligence — analyzes strategic military doctrines, models geopolitical risk, advises on defense procurement and capability development, applies operational research to defense problems, and provides the strategic and technical depth to understand military systems, national security challenges, and the geopolitical forces shaping global security.",
     "color": "olive",
     "tools": [],
@@ -6111,7 +6111,7 @@
   "JARVIS Music Production": {
     "name": "JARVIS Music Production",
     "division": "jarvis",
-    "path": "jarvis/jarvis-music-production.md",
+    "path": "jarvis\\jarvis-music-production.md",
     "description": "Music production, sound design, and music technology intelligence — engineers professional recordings, designs sonic worlds, applies music theory to composition, masters DAW workflows, advises on audio engineering and acoustics, decodes music business strategy, and provides the technical and creative depth to produce music at the highest professional standard.",
     "color": "violet",
     "tools": [],
@@ -6152,7 +6152,7 @@
   "JARVIS Nanotechnology & Molecular Engineering": {
     "name": "JARVIS Nanotechnology & Molecular Engineering",
     "division": "jarvis",
-    "path": "jarvis/jarvis-nanotechnology.md",
+    "path": "jarvis\\jarvis-nanotechnology.md",
     "description": "Nanotechnology, nanomaterials, molecular machines, nanoelectronics, nanomedicine, self-assembly, scanning probe microscopy, nanofabrication, and the interdisciplinary engineering frontier where physics, chemistry, biology, and engineering converge at the scale of individual atoms and molecules.",
     "color": "purple",
     "tools": [],
@@ -6193,7 +6193,7 @@
   "JARVIS Neuroscience & Brain-Computer Interface": {
     "name": "JARVIS Neuroscience & Brain-Computer Interface",
     "division": "jarvis",
-    "path": "jarvis/jarvis-neuroscience-bci.md",
+    "path": "jarvis\\jarvis-neuroscience-bci.md",
     "description": "Neuroscience and brain-computer interface intelligence — interprets neural signal data, advises on BCI architecture and implant design, applies cognitive neuroscience to human performance and learning, navigates neurotechnology regulation, and sits at the frontier of the most profound human-technology interface ever engineered.",
     "color": "electric-blue",
     "tools": [],
@@ -6234,7 +6234,7 @@
   "JARVIS Nonprofits & Social Impact": {
     "name": "JARVIS Nonprofits & Social Impact",
     "division": "jarvis",
-    "path": "jarvis/jarvis-nonprofits-social-impact.md",
+    "path": "jarvis\\jarvis-nonprofits-social-impact.md",
     "description": "Nonprofit strategy, social enterprise, and impact intelligence — designs mission-driven organizations, engineers fundraising strategies, writes compelling grant proposals, builds theory of change frameworks, measures social impact rigorously, and provides the strategic and operational depth to build organizations that actually change the world.",
     "color": "green",
     "tools": [],
@@ -6275,7 +6275,7 @@
   "JARVIS Nuclear Energy & Physics": {
     "name": "JARVIS Nuclear Energy & Physics",
     "division": "jarvis",
-    "path": "jarvis/jarvis-nuclear-energy.md",
+    "path": "jarvis\\jarvis-nuclear-energy.md",
     "description": "Nuclear engineering, nuclear physics, and nuclear policy intelligence — designs reactor systems and fuel cycles, applies nuclear physics from fission to fusion, advises on radiation safety and protection, analyzes nuclear policy and nonproliferation, models nuclear waste management, and provides the technical and policy depth to navigate every dimension of nuclear energy and physics.",
     "color": "yellow",
     "tools": [],
@@ -6316,7 +6316,7 @@
   "JARVIS Omega Creative Director": {
     "name": "JARVIS Omega Creative Director",
     "division": "jarvis",
-    "path": "jarvis/jarvis-omega-creative.md",
+    "path": "jarvis\\jarvis-omega-creative.md",
     "description": "Omniscient creative intelligence — visual design, brand identity, motion graphics, video production, photography, music composition, copywriting, UI/UX, spatial design, fashion, architecture, game art, film direction, AR/VR experience design, and every creative discipline unified in a single polymath artistic mind that conceives, directs, and executes world-class creative work.",
     "color": "pink",
     "tools": [],
@@ -6357,7 +6357,7 @@
   "JARVIS Omega Engineer": {
     "name": "JARVIS Omega Engineer",
     "division": "jarvis",
-    "path": "jarvis/jarvis-omega-engineer.md",
+    "path": "jarvis\\jarvis-omega-engineer.md",
     "description": "Omniscient engineering intelligence — full-stack software, AI/ML engineering, hardware design, embedded systems, DevOps, security, cloud architecture, databases, mobile, blockchain, quantum, robotics, compiler design, and every engineering discipline unified in a single polymath mind that can architect, build, debug, review, and optimize any technical system from first principles.",
     "color": "cyan",
     "tools": [],
@@ -6398,7 +6398,7 @@
   "JARVIS Omega Operator": {
     "name": "JARVIS Omega Operator",
     "division": "jarvis",
-    "path": "jarvis/jarvis-omega-operator.md",
+    "path": "jarvis\\jarvis-omega-operator.md",
     "description": "Autonomous computer use, GUI automation, web research and scraping, file system management, terminal operations, multi-step task execution, workflow orchestration, process automation, API integration, desktop and browser automation — the hands of JARVIS, capable of operating any computer system, any software, any web interface, and any automation pipeline without human assistance.",
     "color": "orange",
     "tools": [],
@@ -6439,7 +6439,7 @@
   "JARVIS Ops & Support": {
     "name": "JARVIS Ops & Support",
     "division": "jarvis",
-    "path": "jarvis/jarvis-ops-support.md",
+    "path": "jarvis\\jarvis-ops-support.md",
     "description": "Site reliability, DevOps, and support operations intelligence — builds production infrastructure, designs on-call runbooks, automates operational workflows, manages incident response, engineers customer support excellence, and keeps every system running reliably at any scale.",
     "color": "slate",
     "tools": [],
@@ -6480,7 +6480,7 @@
   "JARVIS Paid Media": {
     "name": "JARVIS Paid Media",
     "division": "jarvis",
-    "path": "jarvis/jarvis-paid-media.md",
+    "path": "jarvis\\jarvis-paid-media.md",
     "description": "Performance advertising intelligence — architects and optimizes paid campaigns across search, social, programmatic, and shopping channels to hit ROAS and CPA targets with precision, scale winning creative, eliminate wasted spend, and build attribution models that reveal the true ROI of every dollar invested.",
     "color": "amber",
     "tools": [],
@@ -6521,7 +6521,7 @@
   "JARVIS Parenting & Family": {
     "name": "JARVIS Parenting & Family",
     "division": "jarvis",
-    "path": "jarvis/jarvis-parenting-family.md",
+    "path": "jarvis\\jarvis-parenting-family.md",
     "description": "Parenting, child development, and family systems intelligence — applies developmental science to support children's growth, advises on evidence-based parenting strategies, navigates family systems dynamics, supports educational decision-making, and provides the research-based and compassionate guidance to support families through every stage of the parenting journey.",
     "color": "coral",
     "tools": [],
@@ -6562,7 +6562,7 @@
   "JARVIS Pet Care & Animal Wellness Tech": {
     "name": "JARVIS Pet Care & Animal Wellness Tech",
     "division": "jarvis",
-    "path": "jarvis/jarvis-pet-care-tech.md",
+    "path": "jarvis\\jarvis-pet-care-tech.md",
     "description": "Pet technology, veterinary consumer products, animal wellness monitoring, pet health insurance, pet food innovation, companion animal behavior science, veterinary telehealth, pet tech business models, and the science and technology converging to make pet care more effective, personalized, and accessible.",
     "color": "orange",
     "tools": [],
@@ -6603,7 +6603,7 @@
   "JARVIS Philanthropy & Impact Investing": {
     "name": "JARVIS Philanthropy & Impact Investing",
     "division": "jarvis",
-    "path": "jarvis/jarvis-philanthropy-impact.md",
+    "path": "jarvis\\jarvis-philanthropy-impact.md",
     "description": "Philanthropic strategy, impact investing, and catalytic capital intelligence — designs giving programs with maximum social impact, builds impact investment portfolios, applies ESG frameworks rigorously, structures catalytic capital mechanisms, advises on donor-advised funds and foundation strategy, and provides the strategic and financial depth to deploy capital for measurable positive change.",
     "color": "jade",
     "tools": [],
@@ -6644,7 +6644,7 @@
   "JARVIS Philosophy & Applied Ethics": {
     "name": "JARVIS Philosophy & Applied Ethics",
     "division": "jarvis",
-    "path": "jarvis/jarvis-philosophy-ethics.md",
+    "path": "jarvis\\jarvis-philosophy-ethics.md",
     "description": "Philosophy and applied ethics intelligence — applies formal logic and argumentation, navigates ethical frameworks, advises on AI ethics and algorithmic fairness, examines the philosophical foundations of knowledge and science, engages with political and moral philosophy, and provides the rigorous intellectual framework that turns hard questions into clear thinking and better decisions.",
     "color": "gold",
     "tools": [],
@@ -6685,7 +6685,7 @@
   "JARVIS Photography & Visual Arts": {
     "name": "JARVIS Photography & Visual Arts",
     "division": "jarvis",
-    "path": "jarvis/jarvis-photography-visual-arts.md",
+    "path": "jarvis\\jarvis-photography-visual-arts.md",
     "description": "Photography, visual arts, and digital imaging intelligence — masters photographic technique across every genre, applies color science and post-processing craft, advises on visual arts practice and fine art strategy, navigates the photography business, applies art direction principles, and provides the technical and aesthetic depth to create images that communicate with power and precision.",
     "color": "amber",
     "tools": [],
@@ -6726,7 +6726,7 @@
   "JARVIS Policy & Governance": {
     "name": "JARVIS Policy & Governance",
     "division": "jarvis",
-    "path": "jarvis/jarvis-policy-governance.md",
+    "path": "jarvis\\jarvis-policy-governance.md",
     "description": "Public policy and governance intelligence — designs regulatory frameworks, advises on government digital transformation, navigates legislative processes, builds civic technology strategy, analyzes geopolitical risk, and provides the institutional knowledge and analytical depth to shape policy outcomes and modernize public institutions.",
     "color": "slate",
     "tools": [],
@@ -6767,7 +6767,7 @@
   "JARVIS Privacy & Data Governance": {
     "name": "JARVIS Privacy & Data Governance",
     "division": "jarvis",
-    "path": "jarvis/jarvis-privacy-data-governance.md",
+    "path": "jarvis\\jarvis-privacy-data-governance.md",
     "description": "Data privacy law, data governance frameworks, privacy engineering, GDPR/CCPA compliance, data mesh architecture, data catalog design, privacy-by-design implementation, data ethics, and the organizational structures and technical controls that make responsible data use a competitive advantage rather than a compliance burden.",
     "color": "gray",
     "tools": [],
@@ -6808,7 +6808,7 @@
   "JARVIS Product Management": {
     "name": "JARVIS Product Management",
     "division": "jarvis",
-    "path": "jarvis/jarvis-product-management.md",
+    "path": "jarvis\\jarvis-product-management.md",
     "description": "Senior product intelligence and roadmap architect — translates vision into strategy, strategy into prioritized roadmaps, roadmaps into shipped features, and shipped features into measured outcomes — all driven by deep user insight, behavioral evidence, and relentless focus on value.",
     "color": "sky",
     "tools": [],
@@ -6849,7 +6849,7 @@
   "JARVIS Project Management": {
     "name": "JARVIS Project Management",
     "division": "jarvis",
-    "path": "jarvis/jarvis-project-management.md",
+    "path": "jarvis\\jarvis-project-management.md",
     "description": "Elite program and project management intelligence — orchestrates multi-team programs, designs sprint cadences, builds Jira and Linear workflows, runs studio operations, manages stakeholder expectations, eliminates blockers, and delivers every initiative on scope, on time, and with full traceability.",
     "color": "teal",
     "tools": [],
@@ -6890,7 +6890,7 @@
   "JARVIS Quantitative Finance & Trading": {
     "name": "JARVIS Quantitative Finance & Trading",
     "division": "jarvis",
-    "path": "jarvis/jarvis-quant-finance.md",
+    "path": "jarvis\\jarvis-quant-finance.md",
     "description": "Quantitative finance and systematic trading intelligence — builds alpha-generating models, engineers trading systems, designs risk frameworks, applies statistical arbitrage, manages portfolio optimization, and provides the mathematical and computational depth to operate at the highest levels of modern financial markets.",
     "color": "green",
     "tools": [],
@@ -6931,7 +6931,7 @@
   "JARVIS Quantum Computing": {
     "name": "JARVIS Quantum Computing",
     "division": "jarvis",
-    "path": "jarvis/jarvis-quantum-computing.md",
+    "path": "jarvis\\jarvis-quantum-computing.md",
     "description": "Quantum computing architectures, quantum algorithms, quantum error correction, quantum programming, quantum hardware platforms, and quantum-safe cryptography — bridges theoretical quantum advantage with practical near-term NISQ applications and long-term fault-tolerant quantum systems.",
     "color": "purple",
     "tools": [],
@@ -6972,7 +6972,7 @@
   "JARVIS Real Estate & PropTech": {
     "name": "JARVIS Real Estate & PropTech",
     "division": "jarvis",
-    "path": "jarvis/jarvis-real-estate-proptech.md",
+    "path": "jarvis\\jarvis-real-estate-proptech.md",
     "description": "Real estate investment and property technology intelligence — analyzes deals, builds financial models for residential and commercial real estate, advises on portfolio construction, designs PropTech product strategy, navigates development economics, and provides the quantitative and strategic depth to make confident, high-return property decisions.",
     "color": "brown",
     "tools": [],
@@ -7013,7 +7013,7 @@
   "JARVIS Cybersecurity Red Team": {
     "name": "JARVIS Cybersecurity Red Team",
     "division": "jarvis",
-    "path": "jarvis/jarvis-red-team.md",
+    "path": "jarvis\\jarvis-red-team.md",
     "description": "Offensive security, penetration testing, and adversarial intelligence — designs red team operations, applies the full TTPs of advanced threat actors, advises on vulnerability research, builds adversary simulation programs, models attack chains, and provides the offensive security depth to help defenders understand exactly how real attackers think, plan, and operate.",
     "color": "crimson",
     "tools": [],
@@ -7054,7 +7054,7 @@
   "JARVIS Sales & Growth": {
     "name": "JARVIS Sales & Growth",
     "division": "jarvis",
-    "path": "jarvis/jarvis-sales-growth.md",
+    "path": "jarvis\\jarvis-sales-growth.md",
     "description": "Elite revenue and growth intelligence — builds sales playbooks, designs outbound sequences, coaches discovery and closing, architects RevOps pipelines, runs growth experiments, and turns every go-to-market motion into a repeatable, scalable revenue engine.",
     "color": "orange",
     "tools": [],
@@ -7095,7 +7095,7 @@
   "JARVIS Security & Cyber Intelligence": {
     "name": "JARVIS Security & Cyber Intelligence",
     "division": "jarvis",
-    "path": "jarvis/jarvis-security-cyber.md",
+    "path": "jarvis\\jarvis-security-cyber.md",
     "description": "Elite cybersecurity intelligence and defense architect — conducts threat modeling, penetration testing, zero-trust design, vulnerability analysis, incident response, and builds security-first systems that are impenetrable by design.",
     "color": "red",
     "tools": [],
@@ -7136,7 +7136,7 @@
   "JARVIS Smart Cities & Urban Tech": {
     "name": "JARVIS Smart Cities & Urban Tech",
     "division": "jarvis",
-    "path": "jarvis/jarvis-smart-cities.md",
+    "path": "jarvis\\jarvis-smart-cities.md",
     "description": "Smart city architecture, urban data platforms, intelligent mobility, urban IoT infrastructure, digital twin cities, smart energy grids, public sector technology, and the policy frameworks governing urban technology deployment — bridges technology capability with the operational and governance realities of city management.",
     "color": "teal",
     "tools": [],
@@ -7177,7 +7177,7 @@
   "JARVIS Social Entrepreneurship & Impact": {
     "name": "JARVIS Social Entrepreneurship & Impact",
     "division": "jarvis",
-    "path": "jarvis/jarvis-social-entrepreneurship.md",
+    "path": "jarvis\\jarvis-social-entrepreneurship.md",
     "description": "Social entrepreneurship, impact investing, benefit corporations, B Corps, social enterprise business models, impact measurement and management, blended finance, community development finance, ESG strategy, and the frameworks that build businesses designed from the ground up to generate profit and positive social and environmental outcomes simultaneously.",
     "color": "green",
     "tools": [],
@@ -7218,7 +7218,7 @@
   "JARVIS Space & Aerospace": {
     "name": "JARVIS Space & Aerospace",
     "division": "jarvis",
-    "path": "jarvis/jarvis-space-aerospace.md",
+    "path": "jarvis\\jarvis-space-aerospace.md",
     "description": "Space systems and aerospace intelligence — designs satellite architectures, models orbital mechanics, advises on launch vehicle selection, engineers spacecraft subsystems, navigates space regulation and spectrum licensing, and provides the technical and strategic depth to build, launch, and operate systems that work in the harshest environment in the known universe.",
     "color": "navy",
     "tools": [],
@@ -7259,7 +7259,7 @@
   "JARVIS Sports Media & Analytics": {
     "name": "JARVIS Sports Media & Analytics",
     "division": "jarvis",
-    "path": "jarvis/jarvis-sports-analytics.md",
+    "path": "jarvis\\jarvis-sports-analytics.md",
     "description": "Sports analytics, media strategy, and performance intelligence — builds quantitative models for player and team performance, advises on sports media and broadcasting strategy, applies sports betting analytics, decodes sports business economics, designs sports data systems, and provides the analytical and commercial depth to understand modern sports from the data layer to the broadcast deal.",
     "color": "orange",
     "tools": [],
@@ -7300,7 +7300,7 @@
   "JARVIS Sports & Performance Science": {
     "name": "JARVIS Sports & Performance Science",
     "division": "jarvis",
-    "path": "jarvis/jarvis-sports-performance.md",
+    "path": "jarvis\\jarvis-sports-performance.md",
     "description": "Sports science and human performance intelligence — optimizes athletic training, designs injury prevention programs, applies biomechanics and exercise physiology, builds sports analytics models, advises on nutrition and recovery, and applies performance science to maximize every athlete's potential — from weekend warrior to elite competitor.",
     "color": "red",
     "tools": [],
@@ -7341,7 +7341,7 @@
   "JARVIS Strategy & Operations": {
     "name": "JARVIS Strategy & Operations",
     "division": "jarvis",
-    "path": "jarvis/jarvis-strategy-ops.md",
+    "path": "jarvis\\jarvis-strategy-ops.md",
     "description": "Executive strategy intelligence and operations excellence system — synthesizes market intelligence, defines winning strategies, manages complex multi-project portfolios, drives organizational execution, and turns ambiguous goals into measurable outcomes.",
     "color": "gold",
     "tools": [],
@@ -7382,7 +7382,7 @@
   "JARVIS Supply Chain & Logistics": {
     "name": "JARVIS Supply Chain & Logistics",
     "division": "jarvis",
-    "path": "jarvis/jarvis-supply-chain-logistics.md",
+    "path": "jarvis\\jarvis-supply-chain-logistics.md",
     "description": "Global supply chain and logistics intelligence — designs resilient supply networks, optimizes inventory and fulfillment, engineers procurement strategy, navigates trade compliance, models logistics costs, and transforms supply chain from a cost center into a competitive advantage that delivers products faster, cheaper, and more reliably than competitors.",
     "color": "orange",
     "tools": [],
@@ -7423,7 +7423,7 @@
   "JARVIS Testing & QA": {
     "name": "JARVIS Testing & QA",
     "division": "jarvis",
-    "path": "jarvis/jarvis-testing-qa.md",
+    "path": "jarvis\\jarvis-testing-qa.md",
     "description": "Full-spectrum quality assurance intelligence — designs test strategies, automates test suites, audits accessibility, benchmarks performance, validates APIs, hunts edge cases, and builds the quality culture that ships software that works every time for every user on every device.",
     "color": "rose",
     "tools": [],
@@ -7464,7 +7464,7 @@
   "JARVIS Translation & Localization": {
     "name": "JARVIS Translation & Localization",
     "division": "jarvis",
-    "path": "jarvis/jarvis-translation-localization.md",
+    "path": "jarvis\\jarvis-translation-localization.md",
     "description": "Professional translation, localization engineering, and multilingual intelligence — delivers accurate and culturally adapted translations across 100+ languages, designs localization workflows and TMS architectures, applies CAT tool expertise, advises on GILT (globalization, internationalization, localization, translation) strategy, and provides the linguistic and technical depth to make products and content work beautifully in every language and culture.",
     "color": "gold",
     "tools": [],
@@ -7505,7 +7505,7 @@
   "JARVIS Transportation & Mobility Tech": {
     "name": "JARVIS Transportation & Mobility Tech",
     "division": "jarvis",
-    "path": "jarvis/jarvis-transportation-mobility-tech.md",
+    "path": "jarvis\\jarvis-transportation-mobility-tech.md",
     "description": "Mobility as a Service, autonomous vehicles, connected vehicle technology, urban mobility systems, shared mobility, electric mobility infrastructure, mobility data analytics, multimodal transit, logistics last-mile technology, and the engineering and policy frameworks reshaping how people and goods move through cities and regions.",
     "color": "blue",
     "tools": [],
@@ -7546,7 +7546,7 @@
   "JARVIS Travel & Hospitality": {
     "name": "JARVIS Travel & Hospitality",
     "division": "jarvis",
-    "path": "jarvis/jarvis-travel-hospitality.md",
+    "path": "jarvis\\jarvis-travel-hospitality.md",
     "description": "Travel planning and hospitality intelligence — crafts personalized travel experiences, designs hotel and resort operations, navigates aviation and transportation systems, advises on destination marketing, applies revenue management to hospitality assets, and provides the expertise to deliver exceptional experiences across every segment of the travel and tourism industry.",
     "color": "sky",
     "tools": [],
@@ -7587,7 +7587,7 @@
   "JARVIS Veterinary & Animal Science": {
     "name": "JARVIS Veterinary & Animal Science",
     "division": "jarvis",
-    "path": "jarvis/jarvis-veterinary-animal-science.md",
+    "path": "jarvis\\jarvis-veterinary-animal-science.md",
     "description": "Veterinary medicine, animal science, and wildlife intelligence — advises on animal health and disease management, applies veterinary diagnostic reasoning, designs animal nutrition programs, provides wildlife biology expertise, navigates aquaculture systems, and brings the scientific depth to support animal health and welfare across companion animals, livestock, wildlife, and aquatic species.",
     "color": "teal",
     "tools": [],
@@ -7628,7 +7628,7 @@
   "JARVIS Voice & Speech": {
     "name": "JARVIS Voice & Speech",
     "division": "jarvis",
-    "path": "jarvis/jarvis-voice-speech.md",
+    "path": "jarvis\\jarvis-voice-speech.md",
     "description": "Conversational voice intelligence — designs and builds voice AI systems, speech recognition pipelines, natural language voice interfaces, text-to-speech synthesis, real-time transcription, wake-word detection, and hands-free multimodal control layers.",
     "color": "teal",
     "tools": [],
@@ -7669,7 +7669,7 @@
   "JARVIS Water Resources & Hydrology": {
     "name": "JARVIS Water Resources & Hydrology",
     "division": "jarvis",
-    "path": "jarvis/jarvis-water-resources.md",
+    "path": "jarvis\\jarvis-water-resources.md",
     "description": "Water resource management, hydrology, water security, water infrastructure, desalination and water treatment technology, irrigation and agricultural water use, groundwater management, flood risk management, water quality, water governance, and the engineering and policy frameworks addressing global water scarcity in a changing climate.",
     "color": "blue",
     "tools": [],
@@ -7710,7 +7710,7 @@
   "JARVIS Web3 & Blockchain": {
     "name": "JARVIS Web3 & Blockchain",
     "division": "jarvis",
-    "path": "jarvis/jarvis-web3-blockchain.md",
+    "path": "jarvis\\jarvis-web3-blockchain.md",
     "description": "Decentralized systems intelligence — audits smart contracts, designs tokenomics, architects DeFi protocols, advises on DAO governance, navigates Layer 2 ecosystems, engineers NFT systems, and provides the technical and strategic depth to build secure, sustainable, and compliant decentralized applications.",
     "color": "purple",
     "tools": [],
@@ -7751,7 +7751,7 @@
   "JARVIS Wellness & Fitness Tech": {
     "name": "JARVIS Wellness & Fitness Tech",
     "division": "jarvis",
-    "path": "jarvis/jarvis-wellness-fitness-tech.md",
+    "path": "jarvis\\jarvis-wellness-fitness-tech.md",
     "description": "Consumer wellness technology, fitness wearables, digital health and wellness apps, personalized nutrition, sleep optimization, mental wellness tech, longevity biohacking, fitness platform business models, and the intersection of behavioral science and technology for sustainable behavior change in health and fitness.",
     "color": "teal",
     "tools": [],
@@ -7792,7 +7792,7 @@
   "README": {
     "name": "README",
     "division": "jarvis",
-    "path": "jarvis/README.md",
+    "path": "jarvis\\README.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -7833,7 +7833,7 @@
   "Agentic Search Optimizer": {
     "name": "Agentic Search Optimizer",
     "division": "marketing",
-    "path": "marketing/marketing-agentic-search-optimizer.md",
+    "path": "marketing\\marketing-agentic-search-optimizer.md",
     "description": "Expert in WebMCP readiness and agentic task completion — audits whether AI agents can actually accomplish tasks on your site (book, buy, register, subscribe), implements WebMCP declarative and imperative patterns, and measures task completion rates across AI browsing agents",
     "color": "#0891B2",
     "tools": [],
@@ -7874,7 +7874,7 @@
   "AI Citation Strategist": {
     "name": "AI Citation Strategist",
     "division": "marketing",
-    "path": "marketing/marketing-ai-citation-strategist.md",
+    "path": "marketing\\marketing-ai-citation-strategist.md",
     "description": "Expert in AI recommendation engine optimization (AEO/GEO) — audits brand visibility across ChatGPT, Claude, Gemini, and Perplexity, identifies why competitors get cited instead, and delivers content fixes that improve AI citations",
     "color": "#6D28D9",
     "tools": [],
@@ -7915,7 +7915,7 @@
   "App Store Optimizer": {
     "name": "App Store Optimizer",
     "division": "marketing",
-    "path": "marketing/marketing-app-store-optimizer.md",
+    "path": "marketing\\marketing-app-store-optimizer.md",
     "description": "Expert app store marketing specialist focused on App Store Optimization (ASO), conversion rate optimization, and app discoverability",
     "color": "blue",
     "tools": [],
@@ -7956,7 +7956,7 @@
   "Baidu SEO Specialist": {
     "name": "Baidu SEO Specialist",
     "division": "marketing",
-    "path": "marketing/marketing-baidu-seo-specialist.md",
+    "path": "marketing\\marketing-baidu-seo-specialist.md",
     "description": "Expert Baidu search optimization specialist focused on Chinese search engine ranking, Baidu ecosystem integration, ICP compliance, Chinese keyword research, and mobile-first indexing for the China market.",
     "color": "blue",
     "tools": [],
@@ -7997,7 +7997,7 @@
   "Bilibili Content Strategist": {
     "name": "Bilibili Content Strategist",
     "division": "marketing",
-    "path": "marketing/marketing-bilibili-content-strategist.md",
+    "path": "marketing\\marketing-bilibili-content-strategist.md",
     "description": "Expert Bilibili marketing specialist focused on UP主 growth, danmaku culture mastery, B站 algorithm optimization, community building, and branded content strategy for China's leading video community platform.",
     "color": "pink",
     "tools": [],
@@ -8038,7 +8038,7 @@
   "Book Co-Author": {
     "name": "Book Co-Author",
     "division": "marketing",
-    "path": "marketing/marketing-book-co-author.md",
+    "path": "marketing\\marketing-book-co-author.md",
     "description": "Strategic thought-leadership book collaborator for founders, experts, and operators turning voice notes, fragments, and positioning into structured first-person chapters.",
     "color": "#8B5E3C",
     "tools": [],
@@ -8079,7 +8079,7 @@
   "Carousel Growth Engine": {
     "name": "Carousel Growth Engine",
     "division": "marketing",
-    "path": "marketing/marketing-carousel-growth-engine.md",
+    "path": "marketing\\marketing-carousel-growth-engine.md",
     "description": "Autonomous TikTok and Instagram carousel generation specialist. Analyzes any website URL with Playwright, generates viral 6-slide carousels via Gemini image generation, publishes directly to feed via Upload-Post API with auto trending music, fetches analytics, and iteratively improves through a data-driven learning loop.",
     "color": "#FF0050",
     "tools": [],
@@ -8120,7 +8120,7 @@
   "China E-Commerce Operator": {
     "name": "China E-Commerce Operator",
     "division": "marketing",
-    "path": "marketing/marketing-china-ecommerce-operator.md",
+    "path": "marketing\\marketing-china-ecommerce-operator.md",
     "description": "Expert China e-commerce operations specialist covering Taobao, Tmall, Pinduoduo, and JD ecosystems with deep expertise in product listing optimization, live commerce, store operations, 618/Double 11 campaigns, and cross-platform strategy.",
     "color": "red",
     "tools": [],
@@ -8161,7 +8161,7 @@
   "China Market Localization Strategist": {
     "name": "China Market Localization Strategist",
     "division": "marketing",
-    "path": "marketing/marketing-china-market-localization-strategist.md",
+    "path": "marketing\\marketing-china-market-localization-strategist.md",
     "description": "Full-stack China market localization expert who transforms real-time trend signals into executable go-to-market strategies across Douyin, Xiaohongshu, WeChat, Bilibili, and beyond",
     "color": "#E60012",
     "tools": [],
@@ -8202,7 +8202,7 @@
   "Content Creator": {
     "name": "Content Creator",
     "division": "marketing",
-    "path": "marketing/marketing-content-creator.md",
+    "path": "marketing\\marketing-content-creator.md",
     "description": "Expert content strategist and creator for multi-platform campaigns. Develops editorial calendars, creates compelling copy, manages brand storytelling, and optimizes content for engagement across all digital channels.",
     "color": "teal",
     "tools": [
@@ -8249,7 +8249,7 @@
   "Cross-Border E-Commerce Specialist": {
     "name": "Cross-Border E-Commerce Specialist",
     "division": "marketing",
-    "path": "marketing/marketing-cross-border-ecommerce.md",
+    "path": "marketing\\marketing-cross-border-ecommerce.md",
     "description": "Full-funnel cross-border e-commerce strategist covering Amazon, Shopee, Lazada, AliExpress, Temu, and TikTok Shop operations, international logistics and overseas warehousing, compliance and taxation, multilingual listing optimization, brand globalization, and DTC independent site development.",
     "color": "blue",
     "tools": [],
@@ -8290,7 +8290,7 @@
   "Douyin Strategist": {
     "name": "Douyin Strategist",
     "division": "marketing",
-    "path": "marketing/marketing-douyin-strategist.md",
+    "path": "marketing\\marketing-douyin-strategist.md",
     "description": "Short-video marketing expert specializing in the Douyin platform, with deep expertise in recommendation algorithm mechanics, viral video planning, livestream commerce workflows, and full-funnel brand growth through content matrix strategies.",
     "color": "#000000",
     "tools": [],
@@ -8331,7 +8331,7 @@
   "Growth Hacker": {
     "name": "Growth Hacker",
     "division": "marketing",
-    "path": "marketing/marketing-growth-hacker.md",
+    "path": "marketing\\marketing-growth-hacker.md",
     "description": "Expert growth strategist specializing in rapid user acquisition through data-driven experimentation. Develops viral loops, optimizes conversion funnels, and finds scalable growth channels for exponential business growth.",
     "color": "green",
     "tools": [
@@ -8378,7 +8378,7 @@
   "Instagram Curator": {
     "name": "Instagram Curator",
     "division": "marketing",
-    "path": "marketing/marketing-instagram-curator.md",
+    "path": "marketing\\marketing-instagram-curator.md",
     "description": "Expert Instagram marketing specialist focused on visual storytelling, community building, and multi-format content optimization. Masters aesthetic development and drives meaningful engagement.",
     "color": "#E4405F",
     "tools": [],
@@ -8419,7 +8419,7 @@
   "Kuaishou Strategist": {
     "name": "Kuaishou Strategist",
     "division": "marketing",
-    "path": "marketing/marketing-kuaishou-strategist.md",
+    "path": "marketing\\marketing-kuaishou-strategist.md",
     "description": "Expert Kuaishou marketing strategist specializing in short-video content for China's lower-tier city markets, live commerce operations, community trust building, and grassroots audience growth on 快手.",
     "color": "orange",
     "tools": [],
@@ -8460,7 +8460,7 @@
   "LinkedIn Content Creator": {
     "name": "LinkedIn Content Creator",
     "division": "marketing",
-    "path": "marketing/marketing-linkedin-content-creator.md",
+    "path": "marketing\\marketing-linkedin-content-creator.md",
     "description": "Expert LinkedIn content strategist focused on thought leadership, personal brand building, and high-engagement professional content. Masters LinkedIn's algorithm and culture to drive inbound opportunities for founders, job seekers, developers, and anyone building a professional presence.",
     "color": "#0A66C2",
     "tools": [],
@@ -8501,7 +8501,7 @@
   "Livestream Commerce Coach": {
     "name": "Livestream Commerce Coach",
     "division": "marketing",
-    "path": "marketing/marketing-livestream-commerce-coach.md",
+    "path": "marketing\\marketing-livestream-commerce-coach.md",
     "description": "Veteran livestream e-commerce coach specializing in host training and live room operations across Douyin, Kuaishou, Taobao Live, and Channels, covering script design, product sequencing, paid-vs-organic traffic balancing, conversion closing techniques, and real-time data-driven optimization.",
     "color": "#E63946",
     "tools": [],
@@ -8542,7 +8542,7 @@
   "Podcast Strategist": {
     "name": "Podcast Strategist",
     "division": "marketing",
-    "path": "marketing/marketing-podcast-strategist.md",
+    "path": "marketing\\marketing-podcast-strategist.md",
     "description": "Content strategy and operations expert for the Chinese podcast market, with deep expertise in Xiaoyuzhou, Ximalaya, and other major audio platforms, covering show positioning, audio production, audience growth, multi-platform distribution, and monetization to help podcast creators build sticky audio content brands.",
     "color": "purple",
     "tools": [],
@@ -8583,7 +8583,7 @@
   "Private Domain Operator": {
     "name": "Private Domain Operator",
     "division": "marketing",
-    "path": "marketing/marketing-private-domain-operator.md",
+    "path": "marketing\\marketing-private-domain-operator.md",
     "description": "Expert in building enterprise WeChat (WeCom) private domain ecosystems, with deep expertise in SCRM systems, segmented community operations, Mini Program commerce integration, user lifecycle management, and full-funnel conversion optimization.",
     "color": "#1A73E8",
     "tools": [],
@@ -8624,7 +8624,7 @@
   "Reddit Community Builder": {
     "name": "Reddit Community Builder",
     "division": "marketing",
-    "path": "marketing/marketing-reddit-community-builder.md",
+    "path": "marketing\\marketing-reddit-community-builder.md",
     "description": "Expert Reddit marketing specialist focused on authentic community engagement, value-driven content creation, and long-term relationship building. Masters Reddit culture navigation.",
     "color": "#FF4500",
     "tools": [],
@@ -8665,7 +8665,7 @@
   "SEO Specialist": {
     "name": "SEO Specialist",
     "division": "marketing",
-    "path": "marketing/marketing-seo-specialist.md",
+    "path": "marketing\\marketing-seo-specialist.md",
     "description": "Expert search engine optimization strategist specializing in technical SEO, content optimization, link authority building, and organic search growth. Drives sustainable traffic through data-driven search strategies.",
     "color": "#4285F4",
     "tools": [
@@ -8712,7 +8712,7 @@
   "Short-Video Editing Coach": {
     "name": "Short-Video Editing Coach",
     "division": "marketing",
-    "path": "marketing/marketing-short-video-editing-coach.md",
+    "path": "marketing\\marketing-short-video-editing-coach.md",
     "description": "Hands-on short-video editing coach covering the full post-production pipeline, with mastery of CapCut Pro, Premiere Pro, DaVinci Resolve, and Final Cut Pro across composition and camera language, color grading, audio engineering, motion graphics and VFX, subtitle design, multi-platform export optimization, editing workflow efficiency, and AI-assisted editing.",
     "color": "#7B2D8E",
     "tools": [],
@@ -8753,7 +8753,7 @@
   "Social Media Strategist": {
     "name": "Social Media Strategist",
     "division": "marketing",
-    "path": "marketing/marketing-social-media-strategist.md",
+    "path": "marketing\\marketing-social-media-strategist.md",
     "description": "Expert social media strategist for LinkedIn, Twitter, and professional platforms. Creates cross-platform campaigns, builds communities, manages real-time engagement, and develops thought leadership strategies.",
     "color": "blue",
     "tools": [
@@ -8800,7 +8800,7 @@
   "TikTok Strategist": {
     "name": "TikTok Strategist",
     "division": "marketing",
-    "path": "marketing/marketing-tiktok-strategist.md",
+    "path": "marketing\\marketing-tiktok-strategist.md",
     "description": "Expert TikTok marketing specialist focused on viral content creation, algorithm optimization, and community building. Masters TikTok's unique culture and features for brand growth.",
     "color": "#000000",
     "tools": [],
@@ -8841,7 +8841,7 @@
   "Twitter Engager": {
     "name": "Twitter Engager",
     "division": "marketing",
-    "path": "marketing/marketing-twitter-engager.md",
+    "path": "marketing\\marketing-twitter-engager.md",
     "description": "Expert Twitter marketing specialist focused on real-time engagement, thought leadership building, and community-driven growth. Builds brand authority through authentic conversation participation and viral thread creation.",
     "color": "#1DA1F2",
     "tools": [],
@@ -8882,7 +8882,7 @@
   "Video Optimization Specialist": {
     "name": "Video Optimization Specialist",
     "division": "marketing",
-    "path": "marketing/marketing-video-optimization-specialist.md",
+    "path": "marketing\\marketing-video-optimization-specialist.md",
     "description": "Video marketing strategist specializing in YouTube algorithm optimization, audience retention, chaptering, thumbnail concepts, and cross-platform video syndication.",
     "color": "red",
     "tools": [],
@@ -8923,7 +8923,7 @@
   "WeChat Official Account Manager": {
     "name": "WeChat Official Account Manager",
     "division": "marketing",
-    "path": "marketing/marketing-wechat-official-account.md",
+    "path": "marketing\\marketing-wechat-official-account.md",
     "description": "Expert WeChat Official Account (OA) strategist specializing in content marketing, subscriber engagement, and conversion optimization. Masters multi-format content and builds loyal communities through consistent value delivery.",
     "color": "#09B83E",
     "tools": [],
@@ -8964,7 +8964,7 @@
   "Weibo Strategist": {
     "name": "Weibo Strategist",
     "division": "marketing",
-    "path": "marketing/marketing-weibo-strategist.md",
+    "path": "marketing\\marketing-weibo-strategist.md",
     "description": "Full-spectrum operations expert for Sina Weibo, with deep expertise in trending topic mechanics, Super Topic community management, public sentiment monitoring, fan economy strategies, and Weibo advertising, helping brands achieve viral reach and sustained growth on China's leading public discourse platform.",
     "color": "#FF8200",
     "tools": [],
@@ -9005,7 +9005,7 @@
   "Xiaohongshu Specialist": {
     "name": "Xiaohongshu Specialist",
     "division": "marketing",
-    "path": "marketing/marketing-xiaohongshu-specialist.md",
+    "path": "marketing\\marketing-xiaohongshu-specialist.md",
     "description": "Expert Xiaohongshu marketing specialist focused on lifestyle content, trend-driven strategies, and authentic community engagement. Masters micro-content creation and drives viral growth through aesthetic storytelling.",
     "color": "#FF1B6D",
     "tools": [],
@@ -9046,7 +9046,7 @@
   "Zhihu Strategist": {
     "name": "Zhihu Strategist",
     "division": "marketing",
-    "path": "marketing/marketing-zhihu-strategist.md",
+    "path": "marketing\\marketing-zhihu-strategist.md",
     "description": "Expert Zhihu marketing specialist focused on thought leadership, community credibility, and knowledge-driven engagement. Masters question-answering strategy and builds brand authority through authentic expertise sharing.",
     "color": "#0084FF",
     "tools": [],
@@ -9087,7 +9087,7 @@
   "Paid Media Auditor": {
     "name": "Paid Media Auditor",
     "division": "paid-media",
-    "path": "paid-media/paid-media-auditor.md",
+    "path": "paid-media\\paid-media-auditor.md",
     "description": "Comprehensive paid media auditor who systematically evaluates Google Ads, Microsoft Ads, and Meta accounts across 200+ checkpoints spanning account structure, tracking, bidding, creative, audiences, and competitive positioning. Produces actionable audit reports with prioritized recommendations and projected impact.",
     "color": "orange",
     "tools": [
@@ -9135,7 +9135,7 @@
   "Ad Creative Strategist": {
     "name": "Ad Creative Strategist",
     "division": "paid-media",
-    "path": "paid-media/paid-media-creative-strategist.md",
+    "path": "paid-media\\paid-media-creative-strategist.md",
     "description": "Paid media creative specialist focused on ad copywriting, RSA optimization, asset group design, and creative testing frameworks across Google, Meta, Microsoft, and programmatic platforms. Bridges the gap between performance data and persuasive messaging.",
     "color": "orange",
     "tools": [
@@ -9183,7 +9183,7 @@
   "Paid Social Strategist": {
     "name": "Paid Social Strategist",
     "division": "paid-media",
-    "path": "paid-media/paid-media-paid-social-strategist.md",
+    "path": "paid-media\\paid-media-paid-social-strategist.md",
     "description": "Cross-platform paid social advertising specialist covering Meta (Facebook/Instagram), LinkedIn, TikTok, Pinterest, X, and Snapchat. Designs full-funnel social ad programs from prospecting through retargeting with platform-specific creative and audience strategies.",
     "color": "orange",
     "tools": [
@@ -9231,7 +9231,7 @@
   "PPC Campaign Strategist": {
     "name": "PPC Campaign Strategist",
     "division": "paid-media",
-    "path": "paid-media/paid-media-ppc-strategist.md",
+    "path": "paid-media\\paid-media-ppc-strategist.md",
     "description": "Senior paid media strategist specializing in large-scale search, shopping, and performance max campaign architecture across Google, Microsoft, and Amazon ad platforms. Designs account structures, budget allocation frameworks, and bidding strategies that scale from $10K to $10M+ monthly spend.",
     "color": "orange",
     "tools": [
@@ -9279,7 +9279,7 @@
   "Programmatic & Display Buyer": {
     "name": "Programmatic & Display Buyer",
     "division": "paid-media",
-    "path": "paid-media/paid-media-programmatic-buyer.md",
+    "path": "paid-media\\paid-media-programmatic-buyer.md",
     "description": "Display advertising and programmatic media buying specialist covering managed placements, Google Display Network, DV360, trade desk platforms, partner media (newsletters, sponsored content), and ABM display strategies via platforms like Demandbase and 6Sense.",
     "color": "orange",
     "tools": [
@@ -9327,7 +9327,7 @@
   "Search Query Analyst": {
     "name": "Search Query Analyst",
     "division": "paid-media",
-    "path": "paid-media/paid-media-search-query-analyst.md",
+    "path": "paid-media\\paid-media-search-query-analyst.md",
     "description": "Specialist in search term analysis, negative keyword architecture, and query-to-intent mapping. Turns raw search query data into actionable optimizations that eliminate waste and amplify high-intent traffic across paid search accounts.",
     "color": "orange",
     "tools": [
@@ -9375,7 +9375,7 @@
   "Tracking & Measurement Specialist": {
     "name": "Tracking & Measurement Specialist",
     "division": "paid-media",
-    "path": "paid-media/paid-media-tracking-specialist.md",
+    "path": "paid-media\\paid-media-tracking-specialist.md",
     "description": "Expert in conversion tracking architecture, tag management, and attribution modeling across Google Tag Manager, GA4, Google Ads, Meta CAPI, LinkedIn Insight Tag, and server-side implementations. Ensures every conversion is counted correctly and every dollar of ad spend is measurable.",
     "color": "orange",
     "tools": [
@@ -9423,7 +9423,7 @@
   "AI Product Manager": {
     "name": "AI Product Manager",
     "division": "product",
-    "path": "product/product-ai-product-manager.md",
+    "path": "product\\product-ai-product-manager.md",
     "description": "Product manager specializing in AI- and LLM-powered features. Frames problems where non-determinism is the default, sets eval-driven success criteria, manages safety and cost budgets, and ships AI features that actually survive contact with real users.",
     "color": "magenta",
     "tools": [],
@@ -9464,7 +9464,7 @@
   "Behavioral Nudge Engine": {
     "name": "Behavioral Nudge Engine",
     "division": "product",
-    "path": "product/product-behavioral-nudge-engine.md",
+    "path": "product\\product-behavioral-nudge-engine.md",
     "description": "Behavioral psychology specialist that adapts software interaction cadences and styles to maximize user motivation and success.",
     "color": "#FF8A65",
     "tools": [],
@@ -9505,7 +9505,7 @@
   "Feedback Synthesizer": {
     "name": "Feedback Synthesizer",
     "division": "product",
-    "path": "product/product-feedback-synthesizer.md",
+    "path": "product\\product-feedback-synthesizer.md",
     "description": "Expert in collecting, analyzing, and synthesizing user feedback from multiple channels to extract actionable product insights. Transforms qualitative feedback into quantitative priorities and strategic recommendations.",
     "color": "blue",
     "tools": [
@@ -9552,7 +9552,7 @@
   "Product Manager": {
     "name": "Product Manager",
     "division": "product",
-    "path": "product/product-manager.md",
+    "path": "product\\product-manager.md",
     "description": "Holistic product leader who owns the full product lifecycle — from discovery and strategy through roadmap, stakeholder alignment, go-to-market, and outcome measurement. Bridges business goals, user needs, and technical reality to ship the right thing at the right time.",
     "color": "blue",
     "tools": [
@@ -9599,7 +9599,7 @@
   "Sprint Prioritizer": {
     "name": "Sprint Prioritizer",
     "division": "product",
-    "path": "product/product-sprint-prioritizer.md",
+    "path": "product\\product-sprint-prioritizer.md",
     "description": "Expert product manager specializing in agile sprint planning, feature prioritization, and resource allocation. Focused on maximizing team velocity and business value delivery through data-driven prioritization frameworks.",
     "color": "green",
     "tools": [
@@ -9646,7 +9646,7 @@
   "Trend Researcher": {
     "name": "Trend Researcher",
     "division": "product",
-    "path": "product/product-trend-researcher.md",
+    "path": "product\\product-trend-researcher.md",
     "description": "Expert market intelligence analyst specializing in identifying emerging trends, competitive analysis, and opportunity assessment. Focused on providing actionable insights that drive product strategy and innovation decisions.",
     "color": "purple",
     "tools": [
@@ -9693,7 +9693,7 @@
   "Experiment Tracker": {
     "name": "Experiment Tracker",
     "division": "project-management",
-    "path": "project-management/project-management-experiment-tracker.md",
+    "path": "project-management\\project-management-experiment-tracker.md",
     "description": "Expert project manager specializing in experiment design, execution tracking, and data-driven decision making. Focused on managing A/B tests, feature experiments, and hypothesis validation through systematic experimentation and rigorous analysis.",
     "color": "purple",
     "tools": [],
@@ -9734,7 +9734,7 @@
   "Jira Workflow Steward": {
     "name": "Jira Workflow Steward",
     "division": "project-management",
-    "path": "project-management/project-management-jira-workflow-steward.md",
+    "path": "project-management\\project-management-jira-workflow-steward.md",
     "description": "Expert delivery operations specialist who enforces Jira-linked Git workflows, traceable commits, structured pull requests, and release-safe branch strategy across software teams.",
     "color": "orange",
     "tools": [],
@@ -9775,7 +9775,7 @@
   "Project Shepherd": {
     "name": "Project Shepherd",
     "division": "project-management",
-    "path": "project-management/project-management-project-shepherd.md",
+    "path": "project-management\\project-management-project-shepherd.md",
     "description": "Expert project manager specializing in cross-functional project coordination, timeline management, and stakeholder alignment. Focused on shepherding projects from conception to completion while managing resources, risks, and communications across multiple teams and departments.",
     "color": "blue",
     "tools": [],
@@ -9816,7 +9816,7 @@
   "Studio Operations": {
     "name": "Studio Operations",
     "division": "project-management",
-    "path": "project-management/project-management-studio-operations.md",
+    "path": "project-management\\project-management-studio-operations.md",
     "description": "Expert operations manager specializing in day-to-day studio efficiency, process optimization, and resource coordination. Focused on ensuring smooth operations, maintaining productivity standards, and supporting all teams with the tools and processes needed for success.",
     "color": "green",
     "tools": [],
@@ -9857,7 +9857,7 @@
   "Studio Producer": {
     "name": "Studio Producer",
     "division": "project-management",
-    "path": "project-management/project-management-studio-producer.md",
+    "path": "project-management\\project-management-studio-producer.md",
     "description": "Senior strategic leader specializing in high-level creative and technical project orchestration, resource allocation, and multi-project portfolio management. Focused on aligning creative vision with business objectives while managing complex cross-functional initiatives and ensuring optimal studio operations.",
     "color": "gold",
     "tools": [],
@@ -9898,7 +9898,7 @@
   "Senior Project Manager": {
     "name": "Senior Project Manager",
     "division": "project-management",
-    "path": "project-management/project-manager-senior.md",
+    "path": "project-management\\project-manager-senior.md",
     "description": "Converts specs to tasks and remembers previous projects. Focused on realistic scope, no background processes, exact spec requirements",
     "color": "blue",
     "tools": [],
@@ -9939,7 +9939,7 @@
   "Account Strategist": {
     "name": "Account Strategist",
     "division": "sales",
-    "path": "sales/sales-account-strategist.md",
+    "path": "sales\\sales-account-strategist.md",
     "description": "Expert post-sale account strategist specializing in land-and-expand execution, stakeholder mapping, QBR facilitation, and net revenue retention. Turns closed deals into long-term platform relationships through systematic expansion planning and multi-threaded account development.",
     "color": "#2E7D32",
     "tools": [],
@@ -9980,7 +9980,7 @@
   "Sales Coach": {
     "name": "Sales Coach",
     "division": "sales",
-    "path": "sales/sales-coach.md",
+    "path": "sales\\sales-coach.md",
     "description": "Expert sales coaching specialist focused on rep development, pipeline review facilitation, call coaching, deal strategy, and forecast accuracy. Makes every rep and every deal better through structured coaching methodology and behavioral feedback.",
     "color": "#E65100",
     "tools": [],
@@ -10021,7 +10021,7 @@
   "Deal Strategist": {
     "name": "Deal Strategist",
     "division": "sales",
-    "path": "sales/sales-deal-strategist.md",
+    "path": "sales\\sales-deal-strategist.md",
     "description": "Senior deal strategist specializing in MEDDPICC qualification, competitive positioning, and win planning for complex B2B sales cycles. Scores opportunities, exposes pipeline risk, and builds deal strategies that survive forecast review.",
     "color": "#1B4D3E",
     "tools": [],
@@ -10062,7 +10062,7 @@
   "Discovery Coach": {
     "name": "Discovery Coach",
     "division": "sales",
-    "path": "sales/sales-discovery-coach.md",
+    "path": "sales\\sales-discovery-coach.md",
     "description": "Coaches sales teams on elite discovery methodology — question design, current-state mapping, gap quantification, and call structure that surfaces real buying motivation.",
     "color": "#5C7CFA",
     "tools": [],
@@ -10103,7 +10103,7 @@
   "Sales Engineer": {
     "name": "Sales Engineer",
     "division": "sales",
-    "path": "sales/sales-engineer.md",
+    "path": "sales\\sales-engineer.md",
     "description": "Senior pre-sales engineer specializing in technical discovery, demo engineering, POC scoping, competitive battlecards, and bridging product capabilities to business outcomes. Wins the technical decision so the deal can close.",
     "color": "#2E5090",
     "tools": [],
@@ -10144,7 +10144,7 @@
   "Outbound Strategist": {
     "name": "Outbound Strategist",
     "division": "sales",
-    "path": "sales/sales-outbound-strategist.md",
+    "path": "sales\\sales-outbound-strategist.md",
     "description": "Signal-based outbound specialist who designs multi-channel prospecting sequences, defines ICPs, and builds pipeline through research-driven personalization — not volume.",
     "color": "#E8590C",
     "tools": [],
@@ -10185,7 +10185,7 @@
   "Pipeline Analyst": {
     "name": "Pipeline Analyst",
     "division": "sales",
-    "path": "sales/sales-pipeline-analyst.md",
+    "path": "sales\\sales-pipeline-analyst.md",
     "description": "Revenue operations analyst specializing in pipeline health diagnostics, deal velocity analysis, forecast accuracy, and data-driven sales coaching. Turns CRM data into actionable pipeline intelligence that surfaces risks before they become missed quarters.",
     "color": "#059669",
     "tools": [],
@@ -10226,7 +10226,7 @@
   "Proposal Strategist": {
     "name": "Proposal Strategist",
     "division": "sales",
-    "path": "sales/sales-proposal-strategist.md",
+    "path": "sales\\sales-proposal-strategist.md",
     "description": "Strategic proposal architect who transforms RFPs and sales opportunities into compelling win narratives. Specializes in win theme development, competitive positioning, executive summary craft, and building proposals that persuade rather than merely comply.",
     "color": "#2563EB",
     "tools": [],
@@ -10267,7 +10267,7 @@
   "Biologist": {
     "name": "Biologist",
     "division": "science",
-    "path": "science/science-biologist.md",
+    "path": "science\\science-biologist.md",
     "description": "Expert in molecular biology, genetics, evolutionary biology, and systems biology — decodes life's mechanisms from DNA to ecosystems and applies biological principles to biotech, medicine, and AI",
     "color": "#22C55E",
     "tools": [],
@@ -10308,7 +10308,7 @@
   "Neuroscientist": {
     "name": "Neuroscientist",
     "division": "science",
-    "path": "science/science-neuroscientist.md",
+    "path": "science\\science-neuroscientist.md",
     "description": "Expert in brain science, cognitive neuroscience, neural computation, and the neuroscience of learning — bridges brain mechanisms to AI architecture, human performance, and intelligent system design",
     "color": "#A855F7",
     "tools": [],
@@ -10349,7 +10349,7 @@
   "Physicist": {
     "name": "Physicist",
     "division": "science",
-    "path": "science/science-physicist.md",
+    "path": "science\\science-physicist.md",
     "description": "Expert in theoretical and applied physics — from quantum mechanics and relativity to thermodynamics, electromagnetism, and emerging fields like quantum computing and photonics",
     "color": "#6366F1",
     "tools": [],
@@ -10390,7 +10390,7 @@
   "macOS Spatial/Metal Engineer": {
     "name": "macOS Spatial/Metal Engineer",
     "division": "spatial-computing",
-    "path": "spatial-computing/macos-spatial-metal-engineer.md",
+    "path": "spatial-computing\\macos-spatial-metal-engineer.md",
     "description": "Native Swift and Metal specialist building high-performance 3D rendering systems and spatial computing experiences for macOS and Vision Pro",
     "color": "metallic-blue",
     "tools": [],
@@ -10431,7 +10431,7 @@
   "Terminal Integration Specialist": {
     "name": "Terminal Integration Specialist",
     "division": "spatial-computing",
-    "path": "spatial-computing/terminal-integration-specialist.md",
+    "path": "spatial-computing\\terminal-integration-specialist.md",
     "description": "Terminal emulation, text rendering optimization, and SwiftTerm integration for modern Swift applications",
     "color": "green",
     "tools": [],
@@ -10472,7 +10472,7 @@
   "visionOS Spatial Engineer": {
     "name": "visionOS Spatial Engineer",
     "division": "spatial-computing",
-    "path": "spatial-computing/visionos-spatial-engineer.md",
+    "path": "spatial-computing\\visionos-spatial-engineer.md",
     "description": "Native visionOS spatial computing, SwiftUI volumetric interfaces, and Liquid Glass design implementation",
     "color": "indigo",
     "tools": [],
@@ -10513,7 +10513,7 @@
   "XR Cockpit Interaction Specialist": {
     "name": "XR Cockpit Interaction Specialist",
     "division": "spatial-computing",
-    "path": "spatial-computing/xr-cockpit-interaction-specialist.md",
+    "path": "spatial-computing\\xr-cockpit-interaction-specialist.md",
     "description": "Specialist in designing and developing immersive cockpit-based control systems for XR environments",
     "color": "orange",
     "tools": [],
@@ -10554,7 +10554,7 @@
   "XR Immersive Developer": {
     "name": "XR Immersive Developer",
     "division": "spatial-computing",
-    "path": "spatial-computing/xr-immersive-developer.md",
+    "path": "spatial-computing\\xr-immersive-developer.md",
     "description": "Expert WebXR and immersive technology developer with specialization in browser-based AR/VR/XR applications",
     "color": "neon-cyan",
     "tools": [],
@@ -10595,7 +10595,7 @@
   "XR Interface Architect": {
     "name": "XR Interface Architect",
     "division": "spatial-computing",
-    "path": "spatial-computing/xr-interface-architect.md",
+    "path": "spatial-computing\\xr-interface-architect.md",
     "description": "Spatial interaction designer and interface strategist for immersive AR/VR/XR environments",
     "color": "neon-green",
     "tools": [],
@@ -10636,7 +10636,7 @@
   "Accounts Payable Agent": {
     "name": "Accounts Payable Agent",
     "division": "specialized",
-    "path": "specialized/accounts-payable-agent.md",
+    "path": "specialized\\accounts-payable-agent.md",
     "description": "Autonomous payment processing specialist that executes vendor payments, contractor invoices, and recurring bills across any payment rail — crypto, fiat, stablecoins. Integrates with AI agent workflows via tool calls.",
     "color": "green",
     "tools": [],
@@ -10677,7 +10677,7 @@
   "Agentic Identity & Trust Architect": {
     "name": "Agentic Identity & Trust Architect",
     "division": "specialized",
-    "path": "specialized/agentic-identity-trust.md",
+    "path": "specialized\\agentic-identity-trust.md",
     "description": "Designs identity, authentication, and trust verification systems for autonomous AI agents operating in multi-agent environments. Ensures agents can prove who they are, what they're authorized to do, and what they actually did.",
     "color": "#2d5a27",
     "tools": [],
@@ -10718,7 +10718,7 @@
   "Agents Orchestrator": {
     "name": "Agents Orchestrator",
     "division": "specialized",
-    "path": "specialized/agents-orchestrator.md",
+    "path": "specialized\\agents-orchestrator.md",
     "description": "Autonomous pipeline manager that orchestrates the entire development workflow. You are the leader of this process.",
     "color": "cyan",
     "tools": [],
@@ -10759,7 +10759,7 @@
   "Amjad Jarvis Unified Brain": {
     "name": "Amjad Jarvis Unified Brain",
     "division": "specialized",
-    "path": "specialized/amjad-jarvis-unified-brain.md",
+    "path": "specialized\\amjad-jarvis-unified-brain.md",
     "description": "The meta-orchestrator that unifies all 144+ agents under Amjad's personality, constraints, and goals with zero artificial limitations",
     "color": "#FFD700",
     "tools": [],
@@ -10800,7 +10800,7 @@
   "Automation Governance Architect": {
     "name": "Automation Governance Architect",
     "division": "specialized",
-    "path": "specialized/automation-governance-architect.md",
+    "path": "specialized\\automation-governance-architect.md",
     "description": "Governance-first architect for business automations (n8n-first) who audits value, risk, and maintainability before implementation.",
     "color": "cyan",
     "tools": [],
@@ -10841,7 +10841,7 @@
   "Blockchain Security Auditor": {
     "name": "Blockchain Security Auditor",
     "division": "specialized",
-    "path": "specialized/blockchain-security-auditor.md",
+    "path": "specialized\\blockchain-security-auditor.md",
     "description": "Expert smart contract security auditor specializing in vulnerability detection, formal verification, exploit analysis, and comprehensive audit report writing for DeFi protocols and blockchain applications.",
     "color": "red",
     "tools": [],
@@ -10882,7 +10882,7 @@
   "Business Account Creator": {
     "name": "Business Account Creator",
     "division": "specialized",
-    "path": "specialized/business-account-creator.md",
+    "path": "specialized\\business-account-creator.md",
     "description": "Drives the entire account-creation flow end-to-end via browser automation. Generates the username, the password, the bio, the avatar choice, fills the form, follows the verification email, configures 2FA, copies the recovery codes to your password manager, connects the account to downstream services. The only thing left to you is the moment a CAPTCHA appears — that's a physical-world constraint, not a permission one.",
     "color": "emerald",
     "tools": [],
@@ -10923,7 +10923,7 @@
   "Compliance Auditor": {
     "name": "Compliance Auditor",
     "division": "specialized",
-    "path": "specialized/compliance-auditor.md",
+    "path": "specialized\\compliance-auditor.md",
     "description": "Expert technical compliance auditor specializing in SOC 2, ISO 27001, HIPAA, and PCI-DSS audits — from readiness assessment through evidence collection to certification.",
     "color": "orange",
     "tools": [],
@@ -10964,7 +10964,7 @@
   "Corporate Training Designer": {
     "name": "Corporate Training Designer",
     "division": "specialized",
-    "path": "specialized/corporate-training-designer.md",
+    "path": "specialized\\corporate-training-designer.md",
     "description": "Expert in enterprise training system design and curriculum development — proficient in training needs analysis, instructional design methodology, blended learning program design, internal trainer development, leadership programs, and training effectiveness evaluation and continuous optimization.",
     "color": "orange",
     "tools": [],
@@ -11005,7 +11005,7 @@
   "Customer Service": {
     "name": "Customer Service",
     "division": "specialized",
-    "path": "specialized/customer-service.md",
+    "path": "specialized\\customer-service.md",
     "description": "Friendly, professional customer service specialist for any industry — handling inquiries, complaints, account support, FAQs, and seamless escalation with warmth, efficiency, and a genuine commitment to customer satisfaction",
     "color": "teal",
     "tools": [],
@@ -11046,7 +11046,7 @@
   "Data Consolidation Agent": {
     "name": "Data Consolidation Agent",
     "division": "specialized",
-    "path": "specialized/data-consolidation-agent.md",
+    "path": "specialized\\data-consolidation-agent.md",
     "description": "AI agent that consolidates extracted sales data into live reporting dashboards with territory, rep, and pipeline summaries",
     "color": "#38a169",
     "tools": [],
@@ -11087,7 +11087,7 @@
   "Elder Sage": {
     "name": "Elder Sage",
     "division": "specialized",
-    "path": "specialized/elder-sage.md",
+    "path": "specialized\\elder-sage.md",
     "description": "Master orchestrator with millennia-of-experience framing, ruthless delegation, and runtime self-awareness. Knows which of the 302 specialists to summon for any request, treats full trust mode as authority to act (not authority to second-guess), and never blocks. Pair with JARVIS for breadth + intensity; pair with Careful Coder when caution matters more than speed.",
     "color": "violet",
     "tools": [],
@@ -11128,7 +11128,7 @@
   "Government Digital Presales Consultant": {
     "name": "Government Digital Presales Consultant",
     "division": "specialized",
-    "path": "specialized/government-digital-presales-consultant.md",
+    "path": "specialized\\government-digital-presales-consultant.md",
     "description": "Presales expert for China's government digital transformation market (ToG), proficient in policy interpretation, solution design, bid document preparation, POC validation, compliance requirements (classified protection/cryptographic assessment/Xinchuang domestic IT), and stakeholder management — helping technical teams efficiently win government IT projects.",
     "color": "#8B0000",
     "tools": [],
@@ -11169,7 +11169,7 @@
   "Healthcare Customer Service": {
     "name": "Healthcare Customer Service",
     "division": "specialized",
-    "path": "specialized/healthcare-customer-service.md",
+    "path": "specialized\\healthcare-customer-service.md",
     "description": "Empathetic healthcare customer service specialist for patient support, billing inquiries, appointment management, insurance questions, complaint resolution, and seamless escalation to clinical or administrative staff",
     "color": "teal",
     "tools": [],
@@ -11210,7 +11210,7 @@
   "Healthcare Marketing Compliance Specialist": {
     "name": "Healthcare Marketing Compliance Specialist",
     "division": "specialized",
-    "path": "specialized/healthcare-marketing-compliance.md",
+    "path": "specialized\\healthcare-marketing-compliance.md",
     "description": "Expert in healthcare marketing compliance in China, proficient in the Advertising Law, Medical Advertisement Management Measures, Drug Administration Law, and related regulations — covering pharmaceuticals, medical devices, medical aesthetics, health supplements, and internet healthcare across content review, risk control, platform rule interpretation, and patient privacy protection, helping enterprises conduct effective health marketing within legal boundaries.",
     "color": "#2E8B57",
     "tools": [],
@@ -11251,7 +11251,7 @@
   "Hospitality Guest Services": {
     "name": "Hospitality Guest Services",
     "division": "specialized",
-    "path": "specialized/hospitality-guest-services.md",
+    "path": "specialized\\hospitality-guest-services.md",
     "description": "Comprehensive hospitality guest services specialist for hotels, resorts, restaurants, and event venues — covering reservations, check-in/check-out, concierge services, guest complaint resolution, loyalty program management, and post-stay follow-up to deliver exceptional guest experiences that drive loyalty and revenue",
     "color": "teal",
     "tools": [],
@@ -11292,7 +11292,7 @@
   "HR Onboarding": {
     "name": "HR Onboarding",
     "division": "specialized",
-    "path": "specialized/hr-onboarding.md",
+    "path": "specialized\\hr-onboarding.md",
     "description": "Comprehensive HR onboarding specialist for employee orientation, documentation management, compliance tracking, benefits enrollment, culture integration, and new hire support — delivering a seamless first-day-to-first-year experience that drives retention and productivity",
     "color": "green",
     "tools": [],
@@ -11333,7 +11333,7 @@
   "Identity Graph Operator": {
     "name": "Identity Graph Operator",
     "division": "specialized",
-    "path": "specialized/identity-graph-operator.md",
+    "path": "specialized\\identity-graph-operator.md",
     "description": "Operates a shared identity graph that multiple AI agents resolve against. Ensures every agent in a multi-agent system gets the same canonical answer for \"who is this entity?\" - deterministically, even under concurrent writes.",
     "color": "#C5A572",
     "tools": [],
@@ -11374,7 +11374,7 @@
   "Jarvis Autonomous Executor": {
     "name": "Jarvis Autonomous Executor",
     "division": "specialized",
-    "path": "specialized/jarvis-autonomous-executor.md",
+    "path": "specialized\\jarvis-autonomous-executor.md",
     "description": "The zero-human-intervention execution engine — receives any goal, instantly takes full control, decomposes it, assembles the right team of agents, drives execution end-to-end, self-verifies every step, and delivers a finished result while the user is away from the machine",
     "color": "#EF4444",
     "tools": [],
@@ -11415,7 +11415,7 @@
   "Jarvis Curiosity Engine": {
     "name": "Jarvis Curiosity Engine",
     "division": "specialized",
-    "path": "specialized/jarvis-curiosity-engine.md",
+    "path": "specialized\\jarvis-curiosity-engine.md",
     "description": "Exploration and discovery agent that drives Jarvis to learn new topics, discover emerging fields, make unexpected connections, and continuously expand the frontier of what the system knows and can do",
     "color": "#F97316",
     "tools": [],
@@ -11456,7 +11456,7 @@
   "Jarvis Goal Decomposer": {
     "name": "Jarvis Goal Decomposer",
     "division": "specialized",
-    "path": "specialized/jarvis-goal-decomposer.md",
+    "path": "specialized\\jarvis-goal-decomposer.md",
     "description": "High-level goal intelligence that shatters any ambiguous request into a precise, executable DAG of atomic subtasks — with agent assignments, dependency chains, success criteria, and parallel execution paths — so no agent ever faces a task too large to execute",
     "color": "#F59E0B",
     "tools": [],
@@ -11497,7 +11497,7 @@
   "Jarvis Knowledge Synthesizer": {
     "name": "Jarvis Knowledge Synthesizer",
     "division": "specialized",
-    "path": "specialized/jarvis-knowledge-synthesizer.md",
+    "path": "specialized\\jarvis-knowledge-synthesizer.md",
     "description": "Cross-domain knowledge synthesizer that connects insights from science, engineering, design, business, and philosophy into unified mental models — eliminating knowledge silos and creating powerful conceptual bridges",
     "color": "#8B5CF6",
     "tools": [],
@@ -11538,7 +11538,7 @@
   "Jarvis Research Director": {
     "name": "Jarvis Research Director",
     "division": "specialized",
-    "path": "specialized/jarvis-research-director.md",
+    "path": "specialized\\jarvis-research-director.md",
     "description": "Deep research orchestrator that coordinates multi-source, multi-domain research campaigns — synthesizing academic literature, technical documentation, market intelligence, and real-world evidence into actionable insights for Amjad",
     "color": "#DC2626",
     "tools": [],
@@ -11579,7 +11579,7 @@
   "Jarvis Self-Healing Engine": {
     "name": "Jarvis Self-Healing Engine",
     "division": "specialized",
-    "path": "specialized/jarvis-self-healing-engine.md",
+    "path": "specialized\\jarvis-self-healing-engine.md",
     "description": "The code immortality system — writes code, executes it, reads every error with forensic precision, mutates the logic, and relentlessly retries until the code runs perfectly. It never gives up, never produces broken output, and never needs a human to fix its mistakes.",
     "color": "#10B981",
     "tools": [],
@@ -11620,7 +11620,7 @@
   "Jarvis Self-Learner": {
     "name": "Jarvis Self-Learner",
     "division": "specialized",
-    "path": "specialized/jarvis-self-learner.md",
+    "path": "specialized\\jarvis-self-learner.md",
     "description": "Meta-learning engine that extracts lessons, patterns, and skills from every interaction — continuously improving Jarvis's capabilities, routing accuracy, and task performance through structured self-reflection and knowledge integration",
     "color": "#FFD700",
     "tools": [],
@@ -11661,7 +11661,7 @@
   "Jarvis Tool Master": {
     "name": "Jarvis Tool Master",
     "division": "specialized",
-    "path": "specialized/jarvis-tool-master.md",
+    "path": "specialized\\jarvis-tool-master.md",
     "description": "The universal tool integration expert — provides Jarvis with hands, eyes, and voice. Masters shell execution, web search and scraping, file system operations, REST/GraphQL APIs, code execution sandboxes, browser automation, and every external system integration needed for fully autonomous operation",
     "color": "#0EA5E9",
     "tools": [],
@@ -11702,7 +11702,7 @@
   "Language Translator": {
     "name": "Language Translator",
     "division": "specialized",
-    "path": "specialized/language-translator.md",
+    "path": "specialized\\language-translator.md",
     "description": "Real-time Spanish ↔ English translation specialist with cultural context, regional dialect awareness, travel phrase guidance, and tone-appropriate communication for everyday, business, and emergency situations",
     "color": "teal",
     "tools": [],
@@ -11743,7 +11743,7 @@
   "Legal Billing & Time Tracking": {
     "name": "Legal Billing & Time Tracking",
     "division": "specialized",
-    "path": "specialized/legal-billing-time-tracking.md",
+    "path": "specialized\\legal-billing-time-tracking.md",
     "description": "Comprehensive legal billing and time tracking specialist for accurate time capture, invoice generation, billing narrative writing, collections management, trust account compliance, and billing analysis — maximizing revenue recovery while maintaining client relationships and ethical compliance across any firm size or billing model",
     "color": "green",
     "tools": [],
@@ -11784,7 +11784,7 @@
   "Legal Client Intake": {
     "name": "Legal Client Intake",
     "division": "specialized",
-    "path": "specialized/legal-client-intake.md",
+    "path": "specialized\\legal-client-intake.md",
     "description": "Comprehensive legal client intake specialist for qualifying prospects, collecting case information, scheduling consultations, managing conflict checks, and delivering attorney-ready intake summaries across any practice area and firm size",
     "color": "blue",
     "tools": [],
@@ -11825,7 +11825,7 @@
   "Legal Document Review": {
     "name": "Legal Document Review",
     "division": "specialized",
-    "path": "specialized/legal-document-review.md",
+    "path": "specialized\\legal-document-review.md",
     "description": "Comprehensive legal document review specialist for contracts, litigation documents, and real estate agreements — summarizing documents, flagging risk clauses, comparing contract versions, and checking compliance across any law firm size or practice area",
     "color": "blue",
     "tools": [],
@@ -11866,7 +11866,7 @@
   "Loan Officer Assistant": {
     "name": "Loan Officer Assistant",
     "division": "specialized",
-    "path": "specialized/loan-officer-assistant.md",
+    "path": "specialized\\loan-officer-assistant.md",
     "description": "Comprehensive loan officer assistant for mortgage and lending professionals — covering borrower intake, pre-qualification, document collection, pipeline management, compliance tracking, rate quoting, and closing coordination across residential, commercial, and consumer lending",
     "color": "blue",
     "tools": [],
@@ -11907,7 +11907,7 @@
   "LSP/Index Engineer": {
     "name": "LSP/Index Engineer",
     "division": "specialized",
-    "path": "specialized/lsp-index-engineer.md",
+    "path": "specialized\\lsp-index-engineer.md",
     "description": "Language Server Protocol specialist building unified code intelligence systems through LSP client orchestration and semantic indexing",
     "color": "orange",
     "tools": [],
@@ -11948,7 +11948,7 @@
   "Real Estate Buyer & Seller": {
     "name": "Real Estate Buyer & Seller",
     "division": "specialized",
-    "path": "specialized/real-estate-buyer-seller.md",
+    "path": "specialized\\real-estate-buyer-seller.md",
     "description": "Comprehensive real estate agent assistant for buyer representation, seller representation, listing management, offer negotiation, transaction coordination, and closing support — delivering a world-class client experience from first showing to final closing across residential and investment real estate",
     "color": "teal",
     "tools": [],
@@ -11989,7 +11989,7 @@
   "Recruitment Specialist": {
     "name": "Recruitment Specialist",
     "division": "specialized",
-    "path": "specialized/recruitment-specialist.md",
+    "path": "specialized\\recruitment-specialist.md",
     "description": "Expert recruitment operations and talent acquisition specialist — skilled in China's major hiring platforms, talent assessment frameworks, and labor law compliance. Helps companies efficiently attract, screen, and retain top talent while building a competitive employer brand.",
     "color": "blue",
     "tools": [],
@@ -12030,7 +12030,7 @@
   "Report Distribution Agent": {
     "name": "Report Distribution Agent",
     "division": "specialized",
-    "path": "specialized/report-distribution-agent.md",
+    "path": "specialized\\report-distribution-agent.md",
     "description": "AI agent that automates distribution of consolidated sales reports to representatives based on territorial parameters",
     "color": "#d69e2e",
     "tools": [],
@@ -12071,7 +12071,7 @@
   "Retail Customer Returns": {
     "name": "Retail Customer Returns",
     "division": "specialized",
-    "path": "specialized/retail-customer-returns.md",
+    "path": "specialized\\retail-customer-returns.md",
     "description": "Comprehensive retail customer returns specialist for processing returns, exchanges, and refunds across in-store, online, and omnichannel retail — handling policy enforcement, fraud prevention, customer retention, vendor returns, and returns analytics to maximize recovery while preserving customer loyalty",
     "color": "amber",
     "tools": [],
@@ -12112,7 +12112,7 @@
   "Sales Data Extraction Agent": {
     "name": "Sales Data Extraction Agent",
     "division": "specialized",
-    "path": "specialized/sales-data-extraction-agent.md",
+    "path": "specialized\\sales-data-extraction-agent.md",
     "description": "AI agent specialized in monitoring Excel files and extracting key sales metrics (MTD, YTD, Year End) for internal live reporting",
     "color": "#2b6cb0",
     "tools": [],
@@ -12153,7 +12153,7 @@
   "Sales Outreach": {
     "name": "Sales Outreach",
     "division": "specialized",
-    "path": "specialized/sales-outreach.md",
+    "path": "specialized\\sales-outreach.md",
     "description": "Consultative B2B sales outreach specialist for cold prospecting, lead follow-up, objection handling, proposal writing, and pipeline management — combining data-driven targeting with genuine relationship-building to open doors and close deals",
     "color": "amber",
     "tools": [],
@@ -12194,7 +12194,7 @@
   "Chief of Staff": {
     "name": "Chief of Staff",
     "division": "specialized",
-    "path": "specialized/specialized-chief-of-staff.md",
+    "path": "specialized\\specialized-chief-of-staff.md",
     "description": "Master coordinator for founders and executives — filters noise, owns processes, enforces consistency, routes decisions, and positions outputs for impact so the boss can think clearly.",
     "color": "#6B7280",
     "tools": [],
@@ -12235,7 +12235,7 @@
   "Civil Engineer": {
     "name": "Civil Engineer",
     "division": "specialized",
-    "path": "specialized/specialized-civil-engineer.md",
+    "path": "specialized\\specialized-civil-engineer.md",
     "description": "Expert civil and structural engineer with global standards coverage — Eurocode, DIN, ACI, AISC, ASCE, AS/NZS, CSA, GB, IS, AIJ, and more. Specializes in structural analysis, geotechnical design, construction documentation, building code compliance, and multi-standard international projects.",
     "color": "yellow",
     "tools": [],
@@ -12276,7 +12276,7 @@
   "Cultural Intelligence Strategist": {
     "name": "Cultural Intelligence Strategist",
     "division": "specialized",
-    "path": "specialized/specialized-cultural-intelligence-strategist.md",
+    "path": "specialized\\specialized-cultural-intelligence-strategist.md",
     "description": "CQ specialist that detects invisible exclusion, researches global context, and ensures software resonates authentically across intersectional identities.",
     "color": "#FFA000",
     "tools": [],
@@ -12317,7 +12317,7 @@
   "Developer Advocate": {
     "name": "Developer Advocate",
     "division": "specialized",
-    "path": "specialized/specialized-developer-advocate.md",
+    "path": "specialized\\specialized-developer-advocate.md",
     "description": "Expert developer advocate specializing in building developer communities, creating compelling technical content, optimizing developer experience (DX), and driving platform adoption through authentic engineering engagement. Bridges product and engineering teams with external developers.",
     "color": "purple",
     "tools": [],
@@ -12358,7 +12358,7 @@
   "Document Generator": {
     "name": "Document Generator",
     "division": "specialized",
-    "path": "specialized/specialized-document-generator.md",
+    "path": "specialized\\specialized-document-generator.md",
     "description": "Expert document creation specialist who generates professional PDF, PPTX, DOCX, and XLSX files using code-based approaches with proper formatting, charts, and data visualization.",
     "color": "blue",
     "tools": [],
@@ -12399,7 +12399,7 @@
   "French Consulting Market Navigator": {
     "name": "French Consulting Market Navigator",
     "division": "specialized",
-    "path": "specialized/specialized-french-consulting-market.md",
+    "path": "specialized\\specialized-french-consulting-market.md",
     "description": "Navigate the French ESN/SI freelance ecosystem — margin models, platform mechanics (Malt, collective.work), portage salarial, rate positioning, and payment cycle realities",
     "color": "#002395",
     "tools": [],
@@ -12440,7 +12440,7 @@
   "Korean Business Navigator": {
     "name": "Korean Business Navigator",
     "division": "specialized",
-    "path": "specialized/specialized-korean-business-navigator.md",
+    "path": "specialized\\specialized-korean-business-navigator.md",
     "description": "Korean business culture for foreign professionals — 품의 decision process, nunchi reading, KakaoTalk business etiquette, hierarchy navigation, and relationship-first deal mechanics",
     "color": "#003478",
     "tools": [],
@@ -12481,7 +12481,7 @@
   "MCP Builder": {
     "name": "MCP Builder",
     "division": "specialized",
-    "path": "specialized/specialized-mcp-builder.md",
+    "path": "specialized\\specialized-mcp-builder.md",
     "description": "Expert Model Context Protocol developer who designs, builds, and tests MCP servers that extend AI agent capabilities with custom tools, resources, and prompts.",
     "color": "indigo",
     "tools": [],
@@ -12522,7 +12522,7 @@
   "Model QA Specialist": {
     "name": "Model QA Specialist",
     "division": "specialized",
-    "path": "specialized/specialized-model-qa.md",
+    "path": "specialized\\specialized-model-qa.md",
     "description": "Independent model QA expert who audits ML and statistical models end-to-end - from documentation review and data reconstruction to replication, calibration testing, interpretability analysis, performance monitoring, and audit-grade reporting.",
     "color": "#B22222",
     "tools": [],
@@ -12563,7 +12563,7 @@
   "Salesforce Architect": {
     "name": "Salesforce Architect",
     "division": "specialized",
-    "path": "specialized/specialized-salesforce-architect.md",
+    "path": "specialized\\specialized-salesforce-architect.md",
     "description": "Solution architecture for Salesforce platform — multi-cloud design, integration patterns, governor limits, deployment strategy, and data model governance for enterprise-scale orgs",
     "color": "#00A1E0",
     "tools": [],
@@ -12604,7 +12604,7 @@
   "Workflow Architect": {
     "name": "Workflow Architect",
     "division": "specialized",
-    "path": "specialized/specialized-workflow-architect.md",
+    "path": "specialized\\specialized-workflow-architect.md",
     "description": "Workflow design specialist who maps complete workflow trees for every system, user journey, and agent interaction — covering happy paths, all branch conditions, failure modes, recovery paths, handoff contracts, and observable states to produce build-ready specs that agents can implement against and QA can test against.",
     "color": "orange",
     "tools": [],
@@ -12645,7 +12645,7 @@
   "Study Abroad Advisor": {
     "name": "Study Abroad Advisor",
     "division": "specialized",
-    "path": "specialized/study-abroad-advisor.md",
+    "path": "specialized\\study-abroad-advisor.md",
     "description": "Full-spectrum study abroad planning expert covering the US, UK, Canada, Australia, Europe, Hong Kong, and Singapore — proficient in undergraduate, master's, and PhD application strategy, school selection, essay coaching, profile enhancement, standardized test planning, visa preparation, and overseas life adaptation, helping Chinese students craft personalized end-to-end study abroad plans.",
     "color": "#1B4D3E",
     "tools": [],
@@ -12686,7 +12686,7 @@
   "Supply Chain Strategist": {
     "name": "Supply Chain Strategist",
     "division": "specialized",
-    "path": "specialized/supply-chain-strategist.md",
+    "path": "specialized\\supply-chain-strategist.md",
     "description": "Expert supply chain management and procurement strategy specialist — skilled in supplier development, strategic sourcing, quality control, and supply chain digitalization. Grounded in China's manufacturing ecosystem, helps companies build efficient, resilient, and sustainable supply chains.",
     "color": "blue",
     "tools": [],
@@ -12727,7 +12727,7 @@
   "ZK Steward": {
     "name": "ZK Steward",
     "division": "specialized",
-    "path": "specialized/zk-steward.md",
+    "path": "specialized\\zk-steward.md",
     "description": "Knowledge-base steward in the spirit of Niklas Luhmann's Zettelkasten. Default perspective: Luhmann; switches to domain experts (Feynman, Munger, Ogilvy, etc.) by task. Enforces atomic notes, connectivity, and validation loops. Use for knowledge-base building, note linking, complex task breakdown, and cross-domain decision support.",
     "color": "teal",
     "tools": [],
@@ -12768,7 +12768,7 @@
   "EXECUTIVE-BRIEF": {
     "name": "EXECUTIVE-BRIEF",
     "division": "strategy",
-    "path": "strategy/EXECUTIVE-BRIEF.md",
+    "path": "strategy\\EXECUTIVE-BRIEF.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -12809,7 +12809,7 @@
   "nexus-strategy": {
     "name": "nexus-strategy",
     "division": "strategy",
-    "path": "strategy/nexus-strategy.md",
+    "path": "strategy\\nexus-strategy.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -12850,7 +12850,7 @@
   "QUICKSTART": {
     "name": "QUICKSTART",
     "division": "strategy",
-    "path": "strategy/QUICKSTART.md",
+    "path": "strategy\\QUICKSTART.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -12891,7 +12891,7 @@
   "agent-activation-prompts": {
     "name": "agent-activation-prompts",
     "division": "strategy",
-    "path": "strategy/coordination/agent-activation-prompts.md",
+    "path": "strategy\\coordination\\agent-activation-prompts.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -12932,7 +12932,7 @@
   "handoff-templates": {
     "name": "handoff-templates",
     "division": "strategy",
-    "path": "strategy/coordination/handoff-templates.md",
+    "path": "strategy\\coordination\\handoff-templates.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -12973,7 +12973,7 @@
   "phase-0-discovery": {
     "name": "phase-0-discovery",
     "division": "strategy",
-    "path": "strategy/playbooks/phase-0-discovery.md",
+    "path": "strategy\\playbooks\\phase-0-discovery.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -13014,7 +13014,7 @@
   "phase-1-strategy": {
     "name": "phase-1-strategy",
     "division": "strategy",
-    "path": "strategy/playbooks/phase-1-strategy.md",
+    "path": "strategy\\playbooks\\phase-1-strategy.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -13055,7 +13055,7 @@
   "phase-2-foundation": {
     "name": "phase-2-foundation",
     "division": "strategy",
-    "path": "strategy/playbooks/phase-2-foundation.md",
+    "path": "strategy\\playbooks\\phase-2-foundation.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -13096,7 +13096,7 @@
   "phase-3-build": {
     "name": "phase-3-build",
     "division": "strategy",
-    "path": "strategy/playbooks/phase-3-build.md",
+    "path": "strategy\\playbooks\\phase-3-build.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -13137,7 +13137,7 @@
   "phase-4-hardening": {
     "name": "phase-4-hardening",
     "division": "strategy",
-    "path": "strategy/playbooks/phase-4-hardening.md",
+    "path": "strategy\\playbooks\\phase-4-hardening.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -13178,7 +13178,7 @@
   "phase-5-launch": {
     "name": "phase-5-launch",
     "division": "strategy",
-    "path": "strategy/playbooks/phase-5-launch.md",
+    "path": "strategy\\playbooks\\phase-5-launch.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -13219,7 +13219,7 @@
   "phase-6-operate": {
     "name": "phase-6-operate",
     "division": "strategy",
-    "path": "strategy/playbooks/phase-6-operate.md",
+    "path": "strategy\\playbooks\\phase-6-operate.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -13260,7 +13260,7 @@
   "scenario-enterprise-feature": {
     "name": "scenario-enterprise-feature",
     "division": "strategy",
-    "path": "strategy/runbooks/scenario-enterprise-feature.md",
+    "path": "strategy\\runbooks\\scenario-enterprise-feature.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -13301,7 +13301,7 @@
   "scenario-incident-response": {
     "name": "scenario-incident-response",
     "division": "strategy",
-    "path": "strategy/runbooks/scenario-incident-response.md",
+    "path": "strategy\\runbooks\\scenario-incident-response.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -13342,7 +13342,7 @@
   "scenario-marketing-campaign": {
     "name": "scenario-marketing-campaign",
     "division": "strategy",
-    "path": "strategy/runbooks/scenario-marketing-campaign.md",
+    "path": "strategy\\runbooks\\scenario-marketing-campaign.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -13383,7 +13383,7 @@
   "scenario-startup-mvp": {
     "name": "scenario-startup-mvp",
     "division": "strategy",
-    "path": "strategy/runbooks/scenario-startup-mvp.md",
+    "path": "strategy\\runbooks\\scenario-startup-mvp.md",
     "description": "",
     "color": "",
     "tools": [],
@@ -13424,7 +13424,7 @@
   "Analytics Reporter": {
     "name": "Analytics Reporter",
     "division": "support",
-    "path": "support/support-analytics-reporter.md",
+    "path": "support\\support-analytics-reporter.md",
     "description": "Expert data analyst transforming raw data into actionable business insights. Creates dashboards, performs statistical analysis, tracks KPIs, and provides strategic decision support through data visualization and reporting.",
     "color": "teal",
     "tools": [],
@@ -13465,7 +13465,7 @@
   "Executive Summary Generator": {
     "name": "Executive Summary Generator",
     "division": "support",
-    "path": "support/support-executive-summary-generator.md",
+    "path": "support\\support-executive-summary-generator.md",
     "description": "Consultant-grade AI specialist trained to think and communicate like a senior strategy consultant. Transforms complex business inputs into concise, actionable executive summaries using McKinsey SCQA, BCG Pyramid Principle, and Bain frameworks for C-suite decision-makers.",
     "color": "purple",
     "tools": [],
@@ -13506,7 +13506,7 @@
   "Finance Tracker": {
     "name": "Finance Tracker",
     "division": "support",
-    "path": "support/support-finance-tracker.md",
+    "path": "support\\support-finance-tracker.md",
     "description": "Expert financial analyst and controller specializing in financial planning, budget management, and business performance analysis. Maintains financial health, optimizes cash flow, and provides strategic financial insights for business growth.",
     "color": "green",
     "tools": [],
@@ -13547,7 +13547,7 @@
   "Infrastructure Maintainer": {
     "name": "Infrastructure Maintainer",
     "division": "support",
-    "path": "support/support-infrastructure-maintainer.md",
+    "path": "support\\support-infrastructure-maintainer.md",
     "description": "Expert infrastructure specialist focused on system reliability, performance optimization, and technical operations management. Maintains robust, scalable infrastructure supporting business operations with security, performance, and cost efficiency.",
     "color": "orange",
     "tools": [],
@@ -13588,7 +13588,7 @@
   "Legal Compliance Checker": {
     "name": "Legal Compliance Checker",
     "division": "support",
-    "path": "support/support-legal-compliance-checker.md",
+    "path": "support\\support-legal-compliance-checker.md",
     "description": "Expert legal and compliance specialist ensuring business operations, data handling, and content creation comply with relevant laws, regulations, and industry standards across multiple jurisdictions.",
     "color": "red",
     "tools": [],
@@ -13629,7 +13629,7 @@
   "Support Responder": {
     "name": "Support Responder",
     "division": "support",
-    "path": "support/support-support-responder.md",
+    "path": "support\\support-support-responder.md",
     "description": "Expert customer support specialist delivering exceptional customer service, issue resolution, and user experience optimization. Specializes in multi-channel support, proactive customer care, and turning support interactions into positive brand experiences.",
     "color": "blue",
     "tools": [],
@@ -13670,7 +13670,7 @@
   "Voice Support Agent": {
     "name": "Voice Support Agent",
     "division": "support",
-    "path": "support/support-voice-agent.md",
+    "path": "support\\support-voice-agent.md",
     "description": "Real-time voice support specialist that handles inbound and outbound phone or WebRTC calls using LLM orchestration plus streaming ASR and TTS. Designs low-latency voice pipelines (LiveKit Agents, Pipecat, Vocode), handles barge-in, transfers, and call-center integrations, and turns transcripts into structured ticketing data.",
     "color": "azure",
     "tools": [],
@@ -13711,7 +13711,7 @@
   "Accessibility Auditor": {
     "name": "Accessibility Auditor",
     "division": "testing",
-    "path": "testing/testing-accessibility-auditor.md",
+    "path": "testing\\testing-accessibility-auditor.md",
     "description": "Expert accessibility specialist who audits interfaces against WCAG standards, tests with assistive technologies, and ensures inclusive design. Defaults to finding barriers — if it's not tested with a screen reader, it's not accessible.",
     "color": "#0077B6",
     "tools": [],
@@ -13752,7 +13752,7 @@
   "API Tester": {
     "name": "API Tester",
     "division": "testing",
-    "path": "testing/testing-api-tester.md",
+    "path": "testing\\testing-api-tester.md",
     "description": "Expert API testing specialist focused on comprehensive API validation, performance testing, and quality assurance across all systems and third-party integrations",
     "color": "purple",
     "tools": [],
@@ -13793,7 +13793,7 @@
   "Evidence Collector": {
     "name": "Evidence Collector",
     "division": "testing",
-    "path": "testing/testing-evidence-collector.md",
+    "path": "testing\\testing-evidence-collector.md",
     "description": "Screenshot-obsessed, fantasy-allergic QA specialist - Default to finding 3-5 issues, requires visual proof for everything",
     "color": "orange",
     "tools": [],
@@ -13834,7 +13834,7 @@
   "Performance Benchmarker": {
     "name": "Performance Benchmarker",
     "division": "testing",
-    "path": "testing/testing-performance-benchmarker.md",
+    "path": "testing\\testing-performance-benchmarker.md",
     "description": "Expert performance testing and optimization specialist focused on measuring, analyzing, and improving system performance across all applications and infrastructure",
     "color": "orange",
     "tools": [],
@@ -13875,7 +13875,7 @@
   "Prompt Eval Engineer": {
     "name": "Prompt Eval Engineer",
     "division": "testing",
-    "path": "testing/testing-prompt-eval-engineer.md",
+    "path": "testing\\testing-prompt-eval-engineer.md",
     "description": "Quality engineer for LLM and agent systems. Designs and maintains evaluation suites for prompts, agents, RAG pipelines, and tool-using workflows using promptfoo, DeepEval, and LM Eval Harness — so \"is this prompt better?\" becomes a measurable question instead of a vibe.",
     "color": "lime",
     "tools": [],
@@ -13916,7 +13916,7 @@
   "Reality Checker": {
     "name": "Reality Checker",
     "division": "testing",
-    "path": "testing/testing-reality-checker.md",
+    "path": "testing\\testing-reality-checker.md",
     "description": "Stops fantasy approvals, evidence-based certification - Default to \"NEEDS WORK\", requires overwhelming proof for production readiness",
     "color": "red",
     "tools": [],
@@ -13957,7 +13957,7 @@
   "Test Results Analyzer": {
     "name": "Test Results Analyzer",
     "division": "testing",
-    "path": "testing/testing-test-results-analyzer.md",
+    "path": "testing\\testing-test-results-analyzer.md",
     "description": "Expert test analysis specialist focused on comprehensive test result evaluation, quality metrics analysis, and actionable insight generation from testing activities",
     "color": "indigo",
     "tools": [],
@@ -13998,7 +13998,7 @@
   "Tool Evaluator": {
     "name": "Tool Evaluator",
     "division": "testing",
-    "path": "testing/testing-tool-evaluator.md",
+    "path": "testing\\testing-tool-evaluator.md",
     "description": "Expert technology assessment specialist focused on evaluating, testing, and recommending tools, software, and platforms for business use and productivity optimization",
     "color": "teal",
     "tools": [],
@@ -14039,7 +14039,7 @@
   "Workflow Optimizer": {
     "name": "Workflow Optimizer",
     "division": "testing",
-    "path": "testing/testing-workflow-optimizer.md",
+    "path": "testing\\testing-workflow-optimizer.md",
     "description": "Expert process improvement specialist focused on analyzing, optimizing, and automating workflows across all business functions for maximum productivity and efficiency",
     "color": "green",
     "tools": [],

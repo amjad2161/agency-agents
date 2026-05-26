@@ -279,7 +279,11 @@ def _cli_env() -> dict[str, str]:
     runtime_root = Path(__file__).resolve().parent.parent
     existing = os.environ.get("PYTHONPATH", "")
     pypath = str(runtime_root) + (os.pathsep + existing if existing else "")
-    return {**os.environ, "PYTHONPATH": pypath}
+    return {
+        **os.environ,
+        "PYTHONPATH": pypath,
+        "PYTHONUTF8": "1",  # Force UTF-8 mode on Windows
+    }
 
 
 class TestCLI:
@@ -287,14 +291,14 @@ class TestCLI:
     def test_agency_help_exits_zero(self):
         result = subprocess.run(
             _agency_cmd() + ["--help"],
-            capture_output=True, text=True, env=_cli_env(),
+            capture_output=True, encoding="utf-8", env=_cli_env(),
         )
         assert result.returncode == 0, f"--help exited {result.returncode}: {result.stderr}"
 
     def test_agency_help_mentions_run(self):
         result = subprocess.run(
             _agency_cmd() + ["--help"],
-            capture_output=True, text=True, env=_cli_env(),
+            capture_output=True, encoding="utf-8", env=_cli_env(),
         )
         output = result.stdout + result.stderr
         assert "run" in output.lower(), "CLI help should mention 'run' command"
@@ -302,7 +306,7 @@ class TestCLI:
     def test_agency_list_exits_zero(self):
         result = subprocess.run(
             _agency_cmd() + ["list"],
-            capture_output=True, text=True, env=_cli_env(),
+            capture_output=True, encoding="utf-8", env=_cli_env(),
         )
         assert result.returncode == 0, f"'list' exited {result.returncode}: {result.stderr}"
 

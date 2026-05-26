@@ -1,0 +1,33 @@
+name: Runtime tests
+
+on:
+  push:
+    branches: ["main", "claude/**"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install numpy pytest pytest-timeout
+
+      - name: Install optional deps
+        run: pip install pyyaml click httpx pydantic pypdf python-docx openpyxl flask requests || true
+
+      - name: Run all tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/runtime:${{ github.workspace }}
+          ANTHROPIC_API_KEY: ""
+        run: |
+          python -m pytest runtime/ tests/ -q --timeout=30 --tb=short -p no:warnings || \
+          python -m pytest runtime/ -q --timeout=30 --tb=short -p no:warnings

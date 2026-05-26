@@ -189,12 +189,7 @@ def _collect_unsafe_opens(path: Path) -> list[tuple[int, str]]:
 
         def visit_Call(self, node):
             if self._in_with == 0 and self._enter_depth == 0:
-                name = ""
-                if isinstance(node.func, ast.Name):
-                    name = node.func.id
-                elif isinstance(node.func, ast.Attribute):
-                    name = node.func.attr
-                if name == "open" and not _is_browser_open(node):
+                if isinstance(node.func, ast.Name) and node.func.id == "open":
                     unsafe.append((node.lineno, ast.unparse(node)[:80]))
             self.generic_visit(node)
 

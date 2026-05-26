@@ -473,9 +473,13 @@ class TestTokenizationHelpers:
 class TestCLISmoke:
 
     def test_cli_help_exits_zero(self):
+        env = dict(os.environ)
+        runtime_dir = str(Path(__file__).resolve().parents[1])
+        env["PYTHONPATH"] = os.path.pathsep.join([runtime_dir, env.get("PYTHONPATH", "")])
         result = subprocess.run(
             [sys.executable, "-m", "agency.cli", "--help"],
             capture_output=True, text=True, check=False, timeout=15,
+            env=env,
         )
         assert result.returncode == 0, (
             f"--help exited {result.returncode}\n{result.stderr[:300]}"

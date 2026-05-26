@@ -505,7 +505,51 @@ class OmniModelSingularity:
             query_hash=self._hash(query,ctx))
 
     def _fallback_route(self, query: str, scores: Dict[Persona,float], t0: float) -> SingularityResponse:
-        """Fallback to GPT+Google when no persona scores highly."""
+        """Fallback to GPT+Google, or dynamically scan AgentRegistry for the best expert."""
+        try:
+            import sys
+            from pathlib import Path
+            proj_root = Path(__file__).parent.parent.parent.resolve()
+            sys.path.append(str(proj_root))
+            from jarvis_brainiac.agent_registry import AgentRegistry
+            registry = AgentRegistry(proj_root).discover()
+            
+            ql = query.lower()
+            best_agent = None
+            best_score = 0
+            
+            for name, agent in registry.items():
+                score = 0
+                if any(kw.lower() in ql for kw in agent.keywords):
+                    score += 5
+                if agent.name.lower() in ql:
+                    score += 10
+                if any(w in ql for w in agent.description.lower().split()):
+                    score += 1
+                if score > best_score:
+                    best_score = score
+                    best_agent = agent
+                    
+            if best_agent and best_score >= 2:
+                logger.info("Fallback dynamically routed to expert: %s (score=%d)", best_agent.name, best_score)
+                result_text = f"DYNAMIC ROUTING: Handing off to specialist '{best_agent.name}' from division '{best_agent.division}'.\nDescription: {best_agent.description}"
+                return SingularityResponse(result=result_text,
+                    personas_used=[f"EXPERT_{best_agent.name.upper()}"],
+                    confidence=min(0.5 + best_score/20.0, 0.95), latency_ms=(time.monotonic()-t0)*1000, 
+                    routing_method="dynamic_registry", query_hash=self._hash(query,{}))
+            else:
+                # SELF-EXPANSION: If no agent matches, forge one!
+                from jarvis_brainiac.agent_forge import trigger_forge
+                new_agent_slug = trigger_forge(proj_root, query)
+                logger.info("AgentForge triggered: Created new agent '%s'", new_agent_slug)
+                result_text = f"SELF-EXPANSION PROTOCOL: No existing agent could handle this. I have dynamically forged a new agent '{new_agent_slug}' and added it to my registry."
+                return SingularityResponse(result=result_text,
+                    personas_used=[f"FORGE_{new_agent_slug.upper()}"],
+                    confidence=0.8, latency_ms=(time.monotonic()-t0)*1000, 
+                    routing_method="agent_forge", query_hash=self._hash(query,{}))
+        except Exception as e:
+            logger.warning("Dynamic registry/forge lookup failed: %s", e)
+
         logger.info("Low scores — fallback to GPT+Google")
         merged = self.multi_persona_collaborate(query, ["gpt","google"])
         return SingularityResponse(result=merged,

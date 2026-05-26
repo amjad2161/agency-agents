@@ -1,0 +1,101 @@
+{
+  "plan_id": "plan_9a9f6bb1073c",
+  "goal": "Build a website",
+  "steps": [
+    {
+      "step_id": "step_5557e7d4c8e5",
+      "description": "Requirements for: Build a website",
+      "agent_type": "analyst",
+      "estimated_minutes": 60,
+      "status": "pending",
+      "dependencies": [],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 1
+    },
+    {
+      "step_id": "step_25819a067e0e",
+      "description": "Design for: Build a website",
+      "agent_type": "architect",
+      "estimated_minutes": 90,
+      "status": "pending",
+      "dependencies": [
+        "step_5557e7d4c8e5"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 2
+    },
+    {
+      "step_id": "step_4ae151ec89eb",
+      "description": "Implementation for: Build a website",
+      "agent_type": "developer",
+      "estimated_minutes": 180,
+      "status": "pending",
+      "dependencies": [
+        "step_25819a067e0e"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 2
+    },
+    {
+      "step_id": "step_0ce39c22cecc",
+      "description": "Testing for: Build a website",
+      "agent_type": "qa_engineer",
+      "estimated_minutes": 120,
+      "status": "pending",
+      "dependencies": [
+        "step_4ae151ec89eb"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 3
+    },
+    {
+      "step_id": "step_1b2ce3170376",
+      "description": "Deployment for: Build a website",
+      "agent_type": "devops",
+      "estimated_minutes": 60,
+      "status": "pending",
+      "dependencies": [
+        "step_0ce39c22cecc"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 3
+    }
+  ],
+  "estimated_duration_minutes": 510,
+  "required_agents": [
+    "analyst",
+    "architect",
+    "developer",
+    "qa_engineer",
+    "devops"
+  ],
+  "dependencies": {
+    "step_5557e7d4c8e5": [],
+    "step_25819a067e0e": [
+      "step_5557e7d4c8e5"
+    ],
+    "step_4ae151ec89eb": [
+      "step_25819a067e0e"
+    ],
+    "step_0ce39c22cecc": [
+      "step_4ae151ec89eb"
+    ],
+    "step_1b2ce3170376": [
+      "step_0ce39c22cecc"
+    ]
+  },
+  "status": "draft",
+  "created_at": "2026-04-29T06:51:04.512116+00:00",
+  "started_at": null,
+  "completed_at": null,
+  "metadata": {
+    "template": "software_project",
+    "constraints": {},
+    "version": "1.0"
+  }
+}

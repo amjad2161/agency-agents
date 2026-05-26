@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+<meta charset="UTF-8">
+<title>J.A.R.V.I.S — Supreme Brainiac Dashboard</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0f; font-family:'SF Mono','Fira Code',Consolas,monospace; color:#e2e8f0; font-size:12px; }
+
+.app { display:grid; grid-template-columns:220px 1fr 260px; grid-template-rows:48px 1fr; height:100vh; }
+
+/* Top bar */
+.topbar { grid-column:1/-1; background:#0d0d1a; border-bottom:1px solid #1e1e3a; display:flex; align-items:center; padding:0 16px; gap:16px; }
+.logo-icon { width:30px; height:30px; background:linear-gradient(135deg,#7c3aed,#2563eb); border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:16px; margin-right:4px; }
+.logo-text { font-size:14px; font-weight:800; letter-spacing:3px; color:#c084fc; }
+.logo-sub { font-size:9px; color:#475569; letter-spacing:1px; }
+.topbar-center { flex:1; display:flex; justify-content:center; gap:6px; }
+.tab { padding:5px 16px; border-radius:20px; font-size:10px; cursor:pointer; color:#64748b; border:1px solid transparent; }
+.tab.active { background:#1e1b4b; color:#c084fc; border-color:#7c3aed; }
+.status-pill { display:flex; align-items:center; gap:5px; background:#064e3b; border:1px solid #059669; border-radius:20px; padding:3px 10px; font-size:9px; color:#34d399; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+.dot { width:6px; height:6px; border-radius:50%; background:#34d399; animation:blink 2s infinite; }
+
+/* Sidebar */
+.sidebar { background:#0d0d1a; border-right:1px solid #1e1e3a; padding:12px 8px; overflow-y:auto; }
+.sidebar-section { font-size:9px; color:#475569; letter-spacing:1.5px; padding:10px 8px 5px; text-transform:uppercase; }
+.nav-item { display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:6px; cursor:pointer; color:#64748b; margin-bottom:2px; border:1px solid transparent; }
+.nav-item:hover { background:#1a1a2e; color:#94a3b8; }
+.nav-item.active { background:#1e1b4b; color:#c084fc; border-color:#3b2d6b; }
+.nav-item .icon { font-size:14px; width:18px; text-align:center; }
+.nav-item .label { font-size:10px; font-weight:500; flex:1; }
+.badge { background:#7c3aed; color:#fff; border-radius:10px; padding:1px 6px; font-size:8px; }
+.badge.green { background:#059669; }
+
+/* Main */
+.main { display:flex; flex-direction:column; overflow:hidden; }
+.chat-area { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:14px; }
+
+.msg { display:flex; gap:10px; }
+.msg.user { flex-direction:row-reverse; }
+.avatar { width:30px; height:30px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:13px; margin-top:2px; }
+.avatar.jarvis { background:linear-gradient(135deg,#7c3aed,#2563eb); }
+.avatar.user { background:#1e3a5f; font-size:10px; color:#60a5fa; font-weight:700; }
+.bubble { max-width:72%; padding:11px 14px; border-radius:12px; line-height:1.6; font-size:11px; }
+.bubble.jarvis { background:#1e1b4b; border:1px solid #3b2d6b; color:#e2e8f0; border-bottom-left-radius:3px; }
+.bubble.user { background:#1e3a5f; border:1px solid #2563eb; color:#bfdbfe; border-bottom-right-radius:3px; text-align:right; }
+.meta { font-size:9px; color:#475569; margin-top:5px; }
+.tag { display:inline-block; border-radius:4px; padding:1px 7px; font-size:8px; margin-top:5px; margin-right:4px; }
+.tag.route { background:#064e3b; border:1px solid #059669; color:#34d399; }
+.tag.expert { background:#451a03; border:1px solid #b45309; color:#fbbf24; }
+
+@keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+.thinking { display:flex; gap:4px; align-items:center; padding:12px 14px; background:#1e1b4b; border:1px solid #3b2d6b; border-radius:12px; border-bottom-left-radius:3px; width:fit-content; }
+.thinking span { width:6px; height:6px; border-radius:50%; background:#7c3aed; }
+.thinking span:nth-child(1){animation:bounce 1.2s 0s infinite}
+.thinking span:nth-child(2){animation:bounce 1.2s .2s infinite}
+.thinking span:nth-child(3){animation:bounce 1.2s .4s infinite}
+.thinking .thinking-text { font-size:9px; color:#475569; margin-left:8px; }
+
+/* Input */
+.input-area { padding:14px 20px; border-top:1px solid #1e1e3a; background:#0d0d1a; }
+.input-row { display:flex; gap:8px; align-items:center; background:#1a1a2e; border:1px solid #2d2d4e; border-radius:12px; padding:10px 14px; }
+.input-row input { flex:1; background:transparent; border:none; outline:none; color:#e2e8f0; font-size:11px; font-family:inherit; }
+.input-row input::placeholder { color:#475569; }
+.send-btn { background:#7c3aed; border:none; border-radius:8px; color:#fff; padding:6px 14px; font-size:11px; cursor:pointer; font-family:inherit; font-weight:600; }
+.input-tools { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.tool-chip { background:#1a1a2e; border:1px solid #2d2d4e; border-radius:6px; padding:3px 9px; font-size:9px; color:#64748b; cursor:pointer; }
+.tool-chip:hover { border-color:#7c3aed; color:#c084fc; }
+
+/* Right panel */
+.right-panel { background:#0d0d1a; border-left:1px solid #1e1e3a; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; }
+.panel-title { font-size:9px; color:#475569; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px; font-weight:600; }
+.section-card { background:#111122; border:1px solid #1e1e3a; border-radius:8px; padding:12px; }
+.metrics-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.metric { background:#0d0d1a; border-radius:6px; padding:9px; }
+.metric-val { font-size:20px; font-weight:800; color:#7c3aed; }
+.metric-label { font-size:8px; color:#475569; margin-top:2px; text-transform:uppercase; letter-spacing:.5px; }
+
+.health-grid { display:flex; flex-direction:column; gap:3px; }
+.health-row { display:flex; align-items:center; justify-content:space-between; padding:4px 8px; border-radius:5px; background:#0d0d1a; }
+.health-name { font-size:9px; color:#94a3b8; }
+.health-dot { width:7px; height:7px; border-radius:50%; }
+.health-dot.ok { background:#34d399; }
+
+.expert-list { display:flex; flex-direction:column; gap:4px; }
+.expert-row { display:flex; align-items:center; gap:7px; padding:5px 8px; background:#0d0d1a; border-radius:5px; }
+.expert-row .emo { font-size:13px; }
+.expert-row .en { font-size:9px; color:#94a3b8; flex:1; }
+.conf-bar { height:4px; background:#1e1e3a; border-radius:2px; width:55px; }
+.conf-fill { height:100%; border-radius:2px; background:#7c3aed; transition:width 1s ease; }
+.conf-val { font-size:8px; color:#7c3aed; width:24px; text-align:right; }
+
+.trace-log { display:flex; flex-direction:column; gap:3px; max-height:120px; overflow-y:auto; }
+.trace-row { display:flex; gap:6px; font-size:8px; }
+.trace-time { color:#7c3aed; white-space:nowrap; }
+.trace-event { color:#64748b; }
+
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-thumb { background:#2d2d4e; border-radius:2px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <div class="logo-text">J.A.R.V.I.S</div>
+        <div class="logo-sub">Supreme Brainiac Personal Agent · v4.0</div>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <div class="tab active">💬 Chat</div>
+      <div class="tab">📊 Dashboard</div>
+      <div class="tab">🤖 Agents</div>
+      <div class="tab">🧠 Memory</div>
+      <div class="tab">⚡ Evals</div>
+      <div class="tab">🛡️ Trust</div>
+      <div class="tab">📡 Trace</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="status-pill"><div class="dot"></div>LIVE · 642 tests ✓ · 0 failed</div>
+      <div style="font-size:9px;color:#475569;">amjad · origin/main 49cb210</div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">Core</div>
+    <div class="nav-item active"><span class="icon">💬</span><span class="label">Chat Interface</span><span class="badge">3</span></div>
+    <div class="nav-item"><span class="icon">🔗</span><span class="label">Unified Bridge</span><span class="badge green">ON</span></div>
+    <div class="nav-item"><span class="icon">🗺️</span><span class="label">Semantic Router</span></div>
+    <div class="nav-item"><span class="icon">🧠</span><span class="label">Vector Memory</span></div>
+    <div class="nav-item"><span class="icon">🔀</span><span class="label">LLM Router</span></div>
+    <div class="nav-item"><span class="icon">📺</span><span class="label">SSE Streaming</span></div>
+
+    <div class="sidebar-section">Expert Domains</div>
+    <div class="nav-item"><span class="icon">🩺</span><span class="label">Clinician</span><span class="badge green">✓</span></div>
+    <div class="nav-item"><span class="icon">⚖️</span><span class="label">Contracts Law</span><span class="badge green">✓</span></div>
+    <div class="nav-item"><span class="icon">📐</span><span class="label">Mathematics</span><span class="badge green">✓</span></div>
+    <div class="nav-item"><span class="icon">⚛️</span><span class="label">Physics</span><span class="badge green">✓</span></div>
+    <div class="nav-item"><span class="icon">🧠</span><span class="label">Psychology CBT</span><span class="badge green">✓</span></div>
+    <div class="nav-item"><span class="icon">📊</span><span class="label">Economics</span><span class="badge green">✓</span></div>
+    <div class="nav-item"><span class="icon">🧪</span><span class="label">Chemistry</span><span class="badge green">✓</span></div>
+    <div class="nav-item"><span class="icon">🔬</span><span class="label">Neuroscience</span><span class="badge green">✓</span></div>
+
+    <div class="sidebar-section">System</div>
+    <div class="nav-item"><span class="icon">🔧</span><span class="label">Tool Registry</span></div>
+    <div class="nav-item"><span class="icon">📡</span><span class="label">Tracing (OTEL)</span></div>
+    <div class="nav-item"><span class="icon">📦</span><span class="label">Sandbox</span></div>
+    <div class="nav-item"><span class="icon">🤖</span><span class="label">Multi-Agent</span></div>
+    <div class="nav-item"><span class="icon">🔄</span><span class="label">Autonomous Loop</span></div>
+    <div class="nav-item"><span class="icon">⚙️</span><span class="label">Settings</span></div>
+  </div>
+
+  <!-- MAIN CHAT -->
+  <div class="main">
+    <div class="chat-area">
+
+      <div class="msg user">
+        <div class="avatar user">AJ</div>
+        <div>
+          <div class="bubble user">כואב לי בצד ימין תחתון של הבטן. מה זה יכול להיות?</div>
+          <div class="meta" style="text-align:right;">12:03</div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <div class="avatar jarvis">⚡</div>
+        <div>
+          <div class="bubble jarvis">
+            כאב בפוסה אילייקה ימנית — ה-DDx הראשי שלי:<br><br>
+            <strong style="color:#34d399;">① אפנדיציטיס</strong> — Probability: 68%<br>
+            &nbsp;&nbsp;סימנים: McBurney point, rebound tenderness, חום &gt;37.8°<br>
+            &nbsp;&nbsp;Alvarado Score מוערך: 6/10 → ניתוח מומלץ<br><br>
+            <strong style="color:#fbbf24;">② בקע מפשעתי</strong> — 14%<br>
+            <strong style="color:#60a5fa;">③ כאב מוסקולוסקלטלי</strong> — 9%<br>
+            <strong style="color:#94a3b8;">④ אובריתיס / בעיה גינקולוגית</strong> — 6%<br><br>
+            <span style="color:#f87171;font-weight:700;">⚠️ פנה לחדר מיון עכשיו לאולטרסאונד + CT בטן.</span>
+          </div>
+          <div>
+            <span class="tag route">🗺️ routed → medical</span>
+            <span class="tag expert">🩺 expert: clinician · conf: 0.94</span>
+          </div>
+          <div class="meta">12:03:01 · 1.18s · gpt-4o · 312 tokens</div>
+        </div>
+      </div>
+
+      <div class="msg user">
+        <div class="avatar user">AJ</div>
+        <div>
+          <div class="bubble user">פתור: 3x² + 5x − 2 = 0 והראה שלבים</div>
+          <div class="meta" style="text-align:right;">12:07</div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <div class="avatar jarvis">⚡</div>
+        <div>
+          <div class="bubble jarvis">
+            <strong style="color:#60a5fa;">נוסחת ה-ABC:</strong> ax² + bx + c = 0, כאשר a=3, b=5, c=−2<br><br>
+            <strong>שלב 1:</strong> Δ = b² − 4ac = 25 − 4(3)(−2) = 25 + 24 = <strong style="color:#34d399;">49</strong><br>
+            <strong>שלב 2:</strong> √Δ = 7<br>
+            <strong>שלב 3:</strong><br>
+            &nbsp;&nbsp;x₁ = (−5 + 7) / 6 = 2/6 = <strong style="color:#c084fc;">⅓</strong><br>
+            &nbsp;&nbsp;x₂ = (−5 − 7) / 6 = −12/6 = <strong style="color:#c084fc;">−2</strong><br><br>
+            <strong>בדיקה:</strong> 3(⅑) + 5(⅓) − 2 = ⅓ + 5/3 − 2 = 6/3 − 2 = 0 ✓
+          </div>
+          <div>
+            <span class="tag route">🗺️ routed → mathematics</span>
+            <span class="tag expert">📐 expert: mathematics · conf: 0.97</span>
+          </div>
+          <div class="meta">12:07:14 · 0.82s · claude-3-5-sonnet · 198 tokens</div>
+        </div>
+      </div>
+
+      <div class="msg user">
+        <div class="avatar user">AJ</div>
+        <div>
+          <div class="bubble user">מהו פוטנציאל הפעולה הנוירולוגי וכיצד הוא מתפשט?</div>
+          <div class="meta" style="text-align:right;">12:11</div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <div class="avatar jarvis">⚡</div>
+        <div class="thinking">
+          <span></span><span></span><span></span>
+          <span class="thinking-text">מנתח · semantic_router → neuroscience · vector_store · expert:neuroscience...</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="input-area">
+      <div class="input-row">
+        <span style="color:#7c3aed;font-size:16px;">⚡</span>
+        <input type="text" placeholder="שאל את JARVIS — רפואה, משפט, מתמטיקה, פיזיקה, כלכלה, פסיכולוגיה, כימיה, נוירולוגיה...">
+        <button class="send-btn">שלח ↑</button>
+      </div>
+      <div class="input-tools">
+        <div class="tool-chip">🔧 Tools</div>
+        <div class="tool-chip">📁 File</div>
+        <div class="tool-chip">🖼️ Image</div>
+        <div class="tool-chip">📊 Eval Mode</div>
+        <div class="tool-chip">🧠 Memory</div>
+        <div class="tool-chip">📦 Sandbox</div>
+        <div class="tool-chip">⚡ SSE Stream</div>
+        <div class="tool-chip">🤖 Multi-Agent</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+
+    <div class="section-card">
+      <div class="panel-title">📊 System Metrics</div>
+      <div class="metrics-grid">
+        <div class="metric"><div class="metric-val">642</div><div class="metric-label">Tests ✓</div></div>
+        <div class="metric"><div class="metric-val">0</div><div class="metric-label">Failed</div></div>
+        <div class="metric"><div class="metric-val">52</div><div class="metric-label">Modules</div></div>
+        <div class="metric"><div class="metric-val">0.9s</div><div class="metric-label">Avg latency</div></div>
+        <div class="metric"><div class="metric-val">21</div><div class="metric-label">Subsystems</div></div>
+        <div class="metric"><div class="metric-val">8</div><div class="metric-label">Experts</div></div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="panel-title">🟢 Subsystem Health</div>
+      <div class="health-grid">
+        <div class="health-row"><span class="health-name">unified_bridge</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">llm_router</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">semantic_router</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">vector_store</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">tool_registry</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">tracing (OTEL)</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">streaming (SSE)</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">evals</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">prompt_optimizer</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">sandbox</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">multi_agent</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">aios_bridge</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">self_learner</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">meta_reasoner</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">autonomous_loop</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">tui</span><div class="health-dot ok"></div></div>
+        <div class="health-row"><span class="health-name">supreme_main</span><div class="health-dot ok"></div></div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="panel-title">🎯 Expert Routing — last query</div>
+      <div class="expert-list">
+        <div class="expert-row"><span class="emo">🩺</span><span class="en">clinician</span><div class="conf-bar"><div class="conf-fill" style="width:94%"></div></div><span class="conf-val">0.94</span></div>
+        <div class="expert-row"><span class="emo">📐</span><span class="en">mathematics</span><div class="conf-bar"><div class="conf-fill" style="width:10%"></div></div><span class="conf-val">0.10</span></div>
+        <div class="expert-row"><span class="emo">⚛️</span><span class="en">physics</span><div class="conf-bar"><div class="conf-fill" style="width:5%"></div></div><span class="conf-val">0.05</span></div>
+        <div class="expert-row"><span class="emo">🧪</span><span class="en">chemistry</span><div class="conf-bar"><div class="conf-fill" style="width:3%"></div></div><span class="conf-val">0.03</span></div>
+        <div class="expert-row"><span class="emo">📊</span><span class="en">economics</span><div class="conf-bar"><div class="conf-fill" style="width:2%"></div></div><span class="conf-val">0.02</span></div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="panel-title">📡 Live Trace Log</div>
+      <div class="trace-log" id="traceLog">
+        <div class="trace-row"><span class="trace-time">12:11:02.011</span><span class="trace-event">span:request START</span></div>
+        <div class="trace-row"><span class="trace-time">12:11:02.023</span><span class="trace-event">semantic_router → neuroscience (0.89)</span></div>
+        <div class="trace-row"><span class="trace-time">12:11:02.038</span><span class="trace-event">vector_store.search → 4 hits</span></div>
+        <div class="trace-row"><span class="trace-time">12:11:02.041</span><span class="trace-event">llm_router → claude-3-5-sonnet</span></div>
+        <div class="trace-row"><span class="trace-time">12:11:02.045</span><span class="trace-event">expert:neuroscience.analyze() START</span></div>
+        <div class="trace-row"><span class="trace-time">12:11:02.047</span><span class="trace-event">prompt_optimizer cache HIT</span></div>
+        <div class="trace-row"><span class="trace-time">12:11:02.051</span><span class="trace-event">tracing.span recorded</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Tab switching
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', function() {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+// Live trace animation
+const events = [
+  "llm complete ← 287 tokens",
+  "self_learner.record_interaction()",
+  "span:request END 1.21s ✓",
+  "span:request START",
+  "semantic_router → coding (0.91)",
+  "vector_store.search → 2 hits",
+  "tool_registry.execute() → bash",
+  "sandbox.run_python() START",
+  "sandbox.run_python() ← exit 0",
+  "span:request END 0.74s ✓",
+];
+let ei = 0;
+const log = document.getElementById('traceLog');
+setInterval(() => {
+  const now = new Date();
+  const ts = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}.${now.getMilliseconds().toString().padStart(3,'0').slice(0,3)}`;
+  const row = document.createElement('div');
+  row.className = 'trace-row';
+  row.innerHTML = `<span class="trace-time">${ts}</span><span class="trace-event">${events[ei % events.length]}</span>`;
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+  if (log.children.length > 20) log.removeChild(log.children[0]);
+  ei++;
+}, 1800);
+
+// Health dot pulse
+setInterval(() => {
+  const dots = document.querySelectorAll('.health-dot.ok');
+  const i = Math.floor(Math.random() * dots.length);
+  dots[i].style.opacity = '0.3';
+  setTimeout(() => { dots[i].style.opacity = '1'; }, 200);
+}, 2500);
+</script>
+</body>
+</html>

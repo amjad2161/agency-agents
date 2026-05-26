@@ -1,0 +1,90 @@
+{
+  "_doc": "Ω-SINGULARITY source-root registry. omega.py scans these roots in precedence order to build the unified persona+module registry. Each entry: {tag, root, kind, purpose}. Order matters — earlier in `precedence` arrays = wins on slug collision.",
+  "version": "1.0.0-omega",
+  "updated_at": "2026-05-03T13:30:00",
+  "owner": "Amjad Mobarsham <mobarsham@gmail.com>",
+  "roots": [
+    {
+      "tag": "AGENCY-LIVE",
+      "root": "..",
+      "kind": "agency",
+      "purpose": "Canonical AGENCY tree (this repo's parent). 87+ runtime modules + 339 personas / 17 domains.",
+      "git": "https://github.com/amjad2161/agency-agents.git"
+    },
+    {
+      "tag": "JBR-DOWNLOADS",
+      "root": "C:/Users/User/Downloads/jarvis brainiac",
+      "kind": "extra",
+      "purpose": "Extended JARVIS_OMEGA tree — adds experts/, bridges/, jbr/robotics/, prompt_optimizer, semantic_router, multi_agent, tool_registry, vector_store, streaming, tui, sandbox, evals, llm_router, tracing.",
+      "highlights": [
+        "runtime/agency/experts/ — 8 expert modules (chemistry, clinician, contracts_law, economics, mathematics, neuroscience, physics, psychology_cbt)",
+        "runtime/agency/bridges/ — blender, cadam, dobot, lyra2, matrix_wallpaper, metaverse",
+        "runtime/agency/jbr/robotics/ — robot_brain, motion_skills, vision_perception, world_model, ros2_bridge, simulation, rl_trainer",
+        "runtime/agency/llm_router.py · prompt_optimizer.py · semantic_router.py · sandbox.py · streaming.py · tool_registry.py · tracing.py · tui.py · vector_store.py · evals.py"
+      ]
+    },
+    {
+      "tag": "JBR-ONEDRIVE",
+      "root": "C:/Users/User/OneDrive/מסמכים/Claude/Projects/jarvis brainiac",
+      "kind": "jbr",
+      "purpose": "Live JBR mirror in OneDrive — newest persona authored mtime, includes science (3) + standup (1) extra domains. May be unavailable if OneDrive holds file locks.",
+      "note": "Hebrew-character path (מסמכים) — sandbox bind mount can fail when OneDrive holds file handles open. Fallback to AGENCY-LIVE."
+    },
+    {
+      "tag": "KIMI-SINGULARITY",
+      "root": "C:/Users/User/Downloads/Kimi_Agent_Full JARVIS Project Audit",
+      "kind": "kimi",
+      "purpose": "KIMI Agent audit + JARVIS_SINGULARITY snapshot. 30 expert subsystems, multi_agent_orchestrator, ReAct loop, multimodal output, local LLM/voice/vision/memory, VR.",
+      "key_files": [
+        "OMEGA_MERGE_RULES.md",
+        "OMEGA_SINGULARITY_BLUEPRINT.md",
+        "unify_singularity.py",
+        "JARVIS_SINGULARITY/runtime/agency/*.py",
+        "JARVIS_SINGULARITY/jarvis/*.py"
+      ]
+    },
+    {
+      "tag": "GODMODE-DESKTOP",
+      "root": "C:/Users/User/Desktop/_ORGANIZED/05_Extracted_Archives/extracted/GodMode-main",
+      "kind": "extra",
+      "purpose": "GodMode multi-LLM Electron browser app (third-party MIT). Useful as a UI front-end pattern reference; not a persona source.",
+      "ingested_as": "ui-pattern-reference",
+      "license": "MIT (third-party)"
+    },
+    {
+      "tag": "DESKTOP-ORGANIZED",
+      "root": "C:/Users/User/Desktop/_ORGANIZED",
+      "kind": "extra",
+      "purpose": "User's organized desktop archive — extracted projects, documents, Hebrew misc. Scanned for any *.md persona-style files; non-persona content (executables, binaries, personal docs) is ignored.",
+      "scan_only": ["*.md"],
+      "exclude": ["10_Hebrew_Misc/personal", "*.exe", "*.dll", "release/build", "node_modules"]
+    }
+  ],
+  "precedence": {
+    "personas":  ["JBR-ONEDRIVE", "AGENCY-LIVE", "JBR-DOWNLOADS", "KIMI-SINGULARITY", "DESKTOP-ORGANIZED"],
+    "runtime":   ["JBR-DOWNLOADS", "AGENCY-LIVE", "JBR-ONEDRIVE", "KIMI-SINGULARITY"],
+    "docs":      ["JBR-DOWNLOADS", "AGENCY-LIVE", "JBR-ONEDRIVE", "KIMI-SINGULARITY", "DESKTOP-ORGANIZED"],
+    "ui_patterns": ["GODMODE-DESKTOP"]
+  },
+  "domains": [
+    "academic", "design", "engineering", "finance", "game-development",
+    "jarvis", "marketing", "paid-media", "product", "project-management",
+    "sales", "science", "spatial-computing", "specialized", "standup",
+    "strategy", "support", "testing"
+  ],
+  "godskill_nav_tiers": [
+    "tier1_satellite",  "tier2_indoor",  "tier3_underwater",
+    "tier4_denied",     "tier5_fusion",  "tier6_ai",        "tier7_offline_data"
+  ],
+  "merge_rules_ref": "C:/Users/User/Downloads/Kimi_Agent_Full JARVIS Project Audit/OMEGA_MERGE_RULES.md",
+  "blueprint_ref":   "C:/Users/User/Downloads/Kimi_Agent_Full JARVIS Project Audit/OMEGA_SINGULARITY_BLUEPRINT.md",
+  "extension_policy": {
+    "_doc": "How to add a new source. Edit this file, add an entry under `roots`, then position it in the relevant `precedence` arrays. omega.py picks it up automatically — no rebuild required.",
+    "schema": {
+      "tag":     "UPPERCASE-TAG",
+      "root":    "absolute-path-or-relative-to-JARVIS_OMEGA-folder",
+      "kind":    "agency | jbr | kimi | extra",
+      "purpose": "one-line human description"
+    }
+  }
+}

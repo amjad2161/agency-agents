@@ -1,0 +1,159 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║           ANTIGRAVITY SYSTEM SOUL — MASTER RULES FILE          ║
+# ║         Applied globally across ALL projects & agents          ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# This file defines the identity, values, and operating principles
+# of this Antigravity installation — read by ALL agents on startup.
+
+## IDENTITY OF THIS INSTALLATION
+
+operator: "Amjad (amjad2161)"
+github: "https://github.com/amjad2161"
+workspace: "C:\\Users\\Mobar"
+antigravity_version: "2.0"
+installation_uuid: "247d1769-38cc-4bb4-8371-f97104f32f4e"
+
+## CORE PROJECTS — ALWAYS MAINTAIN CONTEXT
+
+projects:
+  JARVIS_BRAINIAC:
+    description: >
+      The supreme AGI integration system. A Python-based autonomous
+      multi-agent orchestrator that combines voice, vision, memory,
+      tools, and self-improvement loops. This is the MASTER SYSTEM.
+    path: "C:\\Users\\Mobar\\OneDrive\\Desktop\\jarvis brainiac"
+    repo: "https://github.com/amjad2161/agency-agents"
+    principles:
+      - Never break existing functionality when adding features
+      - Every module must be independently testable
+      - Memory persistence is NON-NEGOTIABLE
+      - The system must be able to explain itself
+
+  GANE_NAVIGATION:
+    description: >
+      G.A.N.E — Autonomous Navigation Environment. Next-generation
+      location and navigation system combining AI with spatial awareness.
+    repo: "https://github.com/Gane-nave/Gane"
+    principles:
+      - Real-time performance is critical
+      - Fallback mechanisms mandatory for all navigation decisions
+      - Privacy-first data handling
+
+  KIDGENIUS_ACADEMY:
+    description: >
+      Educational platform for children. Pixar-style aesthetics,
+      gamified learning, multiple subjects. Must be engaging and safe.
+    path: "C:\\Users\\Mobar\\kidgenius-academy"
+    design_language: "Pixar-style, rounded shapes, soft gradients, vibrant but safe colors"
+    principles:
+      - Child-safe content ALWAYS
+      - Maximum visual engagement
+      - Performance on low-end devices
+      - Accessibility first
+
+  MYTHOS_AUTONOMOUS:
+    description: >
+      Mythos — autonomous system for advanced decision-making
+      and self-governing workflows.
+    repo: "https://github.com/amjad2161/Mythos"
+
+## CODING STANDARDS (Applied by ALL agents)
+
+coding_standards:
+  language_preference:
+    - Python for backend/AI logic
+    - TypeScript/React for frontend
+    - Go for performance-critical services
+    - Rust for system-level components
+  
+  quality_gates:
+    - All functions must have type hints (Python) or types (TS)
+    - No function longer than 50 lines without justification
+    - Every module requires a docstring explaining purpose
+    - Tests mandatory for all business logic
+    - Error handling: never silent failures
+  
+  architecture_principles:
+    - Dependency injection over hard coupling
+    - Event-driven where possible
+    - API-first design
+    - Stateless services with explicit state management
+    - "Unix philosophy: do one thing extremely well"
+
+## DESIGN SYSTEM (For UI agents)
+
+design_system:
+  default_style: "Premium dark-mode glassmorphism"
+  fonts:
+    heading: "Outfit, Inter"
+    body: "Inter, system-ui"
+  color_philosophy: "Curated HSL palettes, never plain red/blue/green"
+  animations: "Subtle micro-animations always, 200-300ms transitions"
+  responsiveness: "Mobile-first, but desktop-excellence"
+  icons: "Lucide React or Phosphor Icons"
+  components: "Shadcn/ui base, heavily customized"
+
+## AGENT BEHAVIOR RULES
+
+agent_rules:
+  planning_first: true
+  show_implementation_plan_before_coding: true
+  ask_before_destructive_actions: true
+  auto_commit_policy: "never auto-commit without confirmation"
+  context_persistence: "always read existing code before writing new"
+  
+  forbidden_actions:
+    - "Delete files without explicit permission"
+    - "Change database schemas without migration plan"
+    - "Expose API keys in code"
+    - "Override working functionality without backup"
+  
+  mandatory_actions:
+    - "Check existing code before creating new files"
+    - "Run tests after every significant change"
+    - "Document all environment variable requirements"
+    - "Create reversible changes where possible"
+
+## MCP SERVERS PRIORITY ORDER
+
+mcp_priority:
+  1: "sequential-thinking"    # Always think before acting
+  2: "memory"                 # Persist context across sessions
+  3: "filesystem"             # Full file system access
+  4: "github-mcp-server"      # Code management
+  5: "context7"               # Live documentation
+  6: "chrome-devtools-mcp"    # Browser verification
+  7: "firebase-mcp-server"    # Backend services
+  8: "playwright"             # E2E testing
+
+## SKILL ACTIVATION PRIORITY
+
+skill_priority:
+  - "agency-jarvis-brainiac-personal-persistent-unrestrained"
+  - "agency-jarvis-core-omniscient-ai-brainiac"
+  - "agency-jarvis-omega-engineer"
+  - "agency-jarvis-autonomous-executor"
+  - "agency-jarvis-ai-machine-intelligence"
+  - "agency-jarvis-engineering"
+  - "agency-software-architect"
+  - "agency-senior-developer"
+
+## HARDWARE CONTEXT
+
+hardware:
+  workstation: "Lenovo ThinkStation PX"
+  gpu: "NVIDIA RTX 6000 Ada"
+  os: "Windows 11"
+  shell: "PowerShell 7"
+  node_version: "v26.1.0"
+  go_version: "1.26.3"
+  docker: "29.4.3"
+
+## COMMUNICATION STYLE
+
+communication:
+  language: "Hebrew preferred for explanations, English for code"
+  detail_level: "Maximum — always explain WHY not just WHAT"
+  emoji_usage: "Strategic — not excessive"
+  code_presentation: "Always syntax-highlighted, always with context"

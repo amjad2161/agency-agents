@@ -1,0 +1,569 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # required for sbom-action to attach SBOMs to release assets
+  packages: write
+  id-token: write   # cosign keyless OIDC
+  attestations: write
+
+jobs:
+  # Source-tree version fields (pyproject.toml, package.json) carry a "0.0.0"
+  # sentinel — the real release version is stamped into images at Docker
+  # build time via --build-arg VERSION=<tag>. No pre-tag sync step needed.
+  launcher:
+    name: Build Go launcher binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: clients/launcher/go.sum
+
+      - name: Run tests
+        working-directory: clients/launcher
+        run: go test ./...
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+          workdir: clients/launcher
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Multi-arch images that build well under QEMU (Python wheels, simple
+  # binaries). Web is split out below — its arm64 emulation cost dominated
+  # the release (~21 min for web alone). Sandbox + c2-sliver are also split
+  # out (docker-heavy) for the same reason: their Kali base + ~25-package
+  # apt layers turned out to be even worse under QEMU.
+  docker:
+    name: Build & push ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: decepticon-litellm
+            dockerfile: containers/litellm.Dockerfile
+            platforms: linux/amd64,linux/arm64
+          - image: decepticon-langgraph
+            dockerfile: containers/langgraph.Dockerfile
+            platforms: linux/amd64,linux/arm64
+          - image: decepticon-cli
+            dockerfile: containers/cli.Dockerfile
+            platforms: linux/amd64,linux/arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Build & push image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          platforms: ${{ matrix.platforms }}
+          push: true
+          provenance: mode=max
+          sbom: true
+          # Stamp the package version into images at build time. langgraph +
+          # cli Dockerfiles read this ARG to sed-patch pyproject.toml /
+          # package.json from the "0.0.0" sentinel; litellm ignores it
+          # (no ARG declared) which is harmless.
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+          # Only publish the version tag here — `:latest` is promoted by the
+          # publish-release job AFTER every image has been verified on GHCR,
+          # so a half-finished release never updates the moving tag.
+          tags: |
+            ghcr.io/purpleailab/${{ matrix.image }}:${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Cosign sign image (keyless)
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cosign sign --yes \
+            "ghcr.io/purpleailab/${{ matrix.image }}@${DIGEST}"
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ghcr.io/purpleailab/${{ matrix.image }}:${{ steps.version.outputs.version }}
+          format: cyclonedx-json
+          output-file: sbom-${{ matrix.image }}.cdx.json
+
+      # The OCI attestation is always attached to the image. The
+      # `--tlog-upload` flag controls whether the entry is also pushed to
+      # the public Sigstore Rekor transparency log.
+      #
+      # decepticon-sandbox: SBOM is ~7 MB (Kali rolling base + full pentest
+      # toolchain ⇒ thousands of dpkg components). Rekor's per-entry size
+      # cap (~5 MiB) deterministically rejects the upload, so we attach
+      # the attestation to the OCI artifact only. Verifiers can still run
+      # `cosign verify-attestation` against the registry; only the public
+      # transparency-log entry is omitted for this one image.
+      #
+      # All other images: keep the default Rekor upload, but wrap in a
+      # 5-attempt linear backoff to absorb transient Rekor 5xx without
+      # blocking the release. Final failure emits a workflow ::warning
+      # but does not fail the job — the image is already signed and the
+      # SBOM file is uploaded as a release artifact below.
+      - name: Attest SBOM with cosign
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -uo pipefail
+          target="ghcr.io/purpleailab/${{ matrix.image }}@${DIGEST}"
+          predicate="sbom-${{ matrix.image }}.cdx.json"
+          extra=()
+          if [ "${{ matrix.image }}" = "decepticon-sandbox" ]; then
+            extra+=(--tlog-upload=false)
+            echo "decepticon-sandbox: SBOM exceeds Rekor entry size cap; attaching attestation to OCI only (--tlog-upload=false)."
+          fi
+          for attempt in 1 2 3 4 5; do
+            echo "Attestation attempt ${attempt}/5 for ${target}"
+            if cosign attest --yes "${extra[@]}" \
+                --predicate "${predicate}" \
+                --type cyclonedx \
+                "${target}"; then
+              echo "Attestation succeeded on attempt ${attempt}."
+              exit 0
+            fi
+            if [ "${attempt}" -lt 5 ]; then
+              delay=$((30 * attempt))
+              echo "Attestation attempt ${attempt} failed; sleeping ${delay}s..."
+              sleep "${delay}"
+            fi
+          done
+          echo "::warning title=SBOM attestation skipped::cosign attest failed after 5 retries (Sigstore Rekor unavailable). Image is signed and SBOM artifact uploaded; transparency-log entry for the SBOM is missing and can be re-attested manually."
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.image }}
+          path: sbom-${{ matrix.image }}.cdx.json
+
+  # Sandbox + c2-sliver: split per platform onto native runners. Same
+  # rationale as docker-web below — these images sit on Kali rolling
+  # with heavy apt layers (Python, Node, sliver, ~25 dpkg postinst
+  # scripts), which under QEMU emulation pushed sandbox's arm64 build
+  # over 25 minutes. Native runners drop it to ~5 min. Per-image,
+  # per-platform digests are stitched into a manifest by
+  # docker-heavy-merge.
+  docker-heavy:
+    name: Build & push ${{ matrix.image }} (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: decepticon-sandbox
+            dockerfile: containers/sandbox.Dockerfile
+            platform: amd64
+            runs-on: ubuntu-latest
+          - image: decepticon-sandbox
+            dockerfile: containers/sandbox.Dockerfile
+            platform: arm64
+            runs-on: ubuntu-24.04-arm
+          - image: decepticon-c2-sliver
+            dockerfile: containers/c2-sliver.Dockerfile
+            platform: amd64
+            runs-on: ubuntu-latest
+          - image: decepticon-c2-sliver
+            dockerfile: containers/c2-sliver.Dockerfile
+            platform: arm64
+            runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/${{ matrix.platform }}
+          provenance: mode=max
+          sbom: true
+          outputs: type=image,name=ghcr.io/purpleailab/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.platform }}
+
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest='${{ steps.build.outputs.digest }}'
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.image }}-digest-${{ matrix.platform }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Per-image manifest assembly. Same retry+warning policy on the SBOM
+  # attestation as docker / docker-web-merge — see those for context.
+  # The sandbox-specific --tlog-upload=false fall-through (Rekor entry
+  # size cap on the Kali SBOM) is preserved here too.
+  docker-heavy-merge:
+    name: Merge ${{ matrix.image }} manifest + sign + SBOM
+    needs: docker-heavy
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [decepticon-sandbox, decepticon-c2-sliver]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: ${{ matrix.image }}-digest-*
+          merge-multiple: true
+
+      - name: Create multi-arch manifest
+        id: manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create \
+            --tag ghcr.io/purpleailab/${{ matrix.image }}:${{ steps.version.outputs.version }} \
+            $(printf 'ghcr.io/purpleailab/${{ matrix.image }}@sha256:%s ' *)
+          digest=$(docker buildx imagetools inspect \
+            ghcr.io/purpleailab/${{ matrix.image }}:${{ steps.version.outputs.version }} \
+            --format '{{json .Manifest}}' | jq -r '.digest')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Cosign sign manifest (keyless)
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          cosign sign --yes \
+            "ghcr.io/purpleailab/${{ matrix.image }}@${DIGEST}"
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ghcr.io/purpleailab/${{ matrix.image }}:${{ steps.version.outputs.version }}
+          format: cyclonedx-json
+          output-file: sbom-${{ matrix.image }}.cdx.json
+
+      - name: Attest SBOM with cosign
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          set -uo pipefail
+          target="ghcr.io/purpleailab/${{ matrix.image }}@${DIGEST}"
+          predicate="sbom-${{ matrix.image }}.cdx.json"
+          extra=()
+          if [ "${{ matrix.image }}" = "decepticon-sandbox" ]; then
+            extra+=(--tlog-upload=false)
+            echo "decepticon-sandbox: SBOM exceeds Rekor entry size cap; attaching attestation to OCI only (--tlog-upload=false)."
+          fi
+          for attempt in 1 2 3 4 5; do
+            echo "Attestation attempt ${attempt}/5 for ${target}"
+            if cosign attest --yes "${extra[@]}" \
+                --predicate "${predicate}" \
+                --type cyclonedx \
+                "${target}"; then
+              echo "Attestation succeeded on attempt ${attempt}."
+              exit 0
+            fi
+            if [ "${attempt}" -lt 5 ]; then
+              delay=$((30 * attempt))
+              echo "Attestation attempt ${attempt} failed; sleeping ${delay}s..."
+              sleep "${delay}"
+            fi
+          done
+          echo "::warning title=SBOM attestation skipped::cosign attest failed after 5 retries (Sigstore Rekor unavailable). Image is signed and SBOM artifact uploaded; transparency-log entry for the SBOM is missing and can be re-attested manually."
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.image }}
+          path: sbom-${{ matrix.image }}.cdx.json
+
+  # Web image: split per platform onto native runners. arm64 emulation
+  # used to dominate the release (~21 min for web alone vs <5 min for
+  # everything else). Each runner builds and pushes by digest only;
+  # docker-web-merge stitches the digests into a multi-arch manifest.
+  # Pattern: https://docs.docker.com/build/ci/github-actions/multi-platform/
+  docker-web:
+    name: Build & push decepticon-web (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: amd64
+            runs-on: ubuntu-latest
+          - platform: arm64
+            runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: containers/web.Dockerfile
+          platforms: linux/${{ matrix.platform }}
+          provenance: mode=max
+          sbom: true
+          # Stamps web + cli package.json with the release version at build
+          # time (web image embeds clients/cli for the terminal-server PTY).
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+          outputs: type=image,name=ghcr.io/purpleailab/decepticon-web,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=web-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=web-${{ matrix.platform }}
+
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest='${{ steps.build.outputs.digest }}'
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-digest-${{ matrix.platform }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  docker-web-merge:
+    name: Merge web manifest + sign + SBOM
+    needs: docker-web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: web-digest-*
+          merge-multiple: true
+
+      - name: Create multi-arch manifest
+        id: manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          # Same rule as the docker matrix: only the version tag here.
+          # `:latest` is promoted by publish-release after verification.
+          docker buildx imagetools create \
+            --tag ghcr.io/purpleailab/decepticon-web:${{ steps.version.outputs.version }} \
+            $(printf 'ghcr.io/purpleailab/decepticon-web@sha256:%s ' *)
+          digest=$(docker buildx imagetools inspect \
+            ghcr.io/purpleailab/decepticon-web:${{ steps.version.outputs.version }} \
+            --format '{{json .Manifest}}' | jq -r '.digest')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Cosign sign manifest (keyless)
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          cosign sign --yes \
+            "ghcr.io/purpleailab/decepticon-web@${DIGEST}"
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ghcr.io/purpleailab/decepticon-web:${{ steps.version.outputs.version }}
+          format: cyclonedx-json
+          output-file: sbom-decepticon-web.cdx.json
+
+      # Same retry+warning policy as the matrix attest step above; see comment there.
+      - name: Attest SBOM with cosign
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          set -uo pipefail
+          target="ghcr.io/purpleailab/decepticon-web@${DIGEST}"
+          predicate="sbom-decepticon-web.cdx.json"
+          for attempt in 1 2 3 4 5; do
+            echo "Attestation attempt ${attempt}/5 for ${target}"
+            if cosign attest --yes \
+                --predicate "${predicate}" \
+                --type cyclonedx \
+                "${target}"; then
+              echo "Attestation succeeded on attempt ${attempt}."
+              exit 0
+            fi
+            if [ "${attempt}" -lt 5 ]; then
+              delay=$((30 * attempt))
+              echo "Attestation attempt ${attempt} failed; sleeping ${delay}s..."
+              sleep "${delay}"
+            fi
+          done
+          echo "::warning title=SBOM attestation skipped::cosign attest failed after 5 retries (Sigstore Rekor unavailable). Image is signed and SBOM artifact uploaded; transparency-log entry for the SBOM is missing and can be re-attested manually."
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-decepticon-web
+          path: sbom-decepticon-web.cdx.json
+
+  # Atomic release gate. Waits until every Docker image AND the launcher
+  # binaries are pushed, verifies each :<version> manifest exists on GHCR,
+  # then promotes :<version> → :latest and flips the GitHub release from
+  # draft → published. Until this job succeeds:
+  #   - GitHub `releases/latest` keeps returning the previous version, so
+  #     the launcher's auto-update never points users at images that are
+  #     still mid-push.
+  #   - The :latest tag is not moved, so `${DECEPTICON_VERSION:-latest}`
+  #     fallbacks keep resolving to the previous (working) release.
+  publish-release:
+    name: Verify images & publish release
+    needs: [launcher, docker, docker-heavy-merge, docker-web-merge]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify all version-tagged images exist on GHCR
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          images=(
+            decepticon-litellm
+            decepticon-langgraph
+            decepticon-sandbox
+            decepticon-cli
+            decepticon-c2-sliver
+            decepticon-web
+          )
+          for img in "${images[@]}"; do
+            ref="ghcr.io/purpleailab/${img}:${VERSION}"
+            echo "Verifying ${ref}"
+            docker buildx imagetools inspect "${ref}" >/dev/null
+          done
+
+      - name: Promote :<version> → :latest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          images=(
+            decepticon-litellm
+            decepticon-langgraph
+            decepticon-sandbox
+            decepticon-cli
+            decepticon-c2-sliver
+            decepticon-web
+          )
+          for img in "${images[@]}"; do
+            src="ghcr.io/purpleailab/${img}:${VERSION}"
+            dst="ghcr.io/purpleailab/${img}:latest"
+            echo "Promoting ${src} → ${dst}"
+            docker buildx imagetools create --tag "${dst}" "${src}"
+          done
+
+      - name: Publish GitHub release (undraft)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "v${{ steps.version.outputs.version }}" --draft=false

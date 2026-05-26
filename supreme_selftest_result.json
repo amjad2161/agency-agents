@@ -1,0 +1,178 @@
+{
+  "timestamp": "2026-05-24T17:43:52Z",
+  "canonical": "C:\\Users\\Mobar\\OneDrive\\Desktop\\jarvis brainiac",
+  "workspace": "C:\\Users\\Mobar\\OneDrive\\Desktop\\jarvis brainiac",
+  "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+  "env": {
+    "OFFLINE_MODE": "1",
+    "ALLOW_ALL": "1",
+    "JARVIS_PERM_LEVEL": "GOD"
+  },
+  "passed": 27,
+  "failed": 0,
+  "total": 27,
+  "results": [
+    {
+      "test": "python_min_3.10",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    },
+    {
+      "test": "env_OFFLINE_MODE",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    },
+    {
+      "test": "env_ALLOW_ALL",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    },
+    {
+      "test": "env_PERM_GOD",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    },
+    {
+      "test": "canonical_dir_exists",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    },
+    {
+      "test": "supreme_module_exists",
+      "status": "PASS",
+      "ms": 2.7,
+      "detail": "True"
+    },
+    {
+      "test": "import_jarvis_brainiac",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "'jarvis_brainiac'"
+    },
+    {
+      "test": "import_jarvis_brainiac_agent_registry",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "'jarvis_brainiac.agent_registry'"
+    },
+    {
+      "test": "import_jarvis_brainiac_orchestrator",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "'jarvis_brainiac.orchestrator'"
+    },
+    {
+      "test": "import_jarvis_brainiac_memory",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "'jarvis_brainiac.memory'"
+    },
+    {
+      "test": "import_jarvis_brainiac_cloud_sync",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "'jarvis_brainiac.cloud_sync'"
+    },
+    {
+      "test": "import_agency",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "'agency'"
+    },
+    {
+      "test": "import_jarvis_singularity",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "'jarvis_singularity'"
+    },
+    {
+      "test": "import_jarvis_os",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "'jarvis_os'"
+    },
+    {
+      "test": "import_godskill_nav_v11",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "'godskill_nav_v11'"
+    },
+    {
+      "test": "majority_subsystems_loaded",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    },
+    {
+      "test": "supreme_module_loads",
+      "status": "PASS",
+      "ms": 3.0,
+      "detail": "<module 'jarvis_supreme' from 'C:\\\\Users\\\\Mobar\\\\OneDrive\\\\Desktop\\\\jarvis brainiac\\\\JARVIS_SUPREME.py'>"
+    },
+    {
+      "test": "supreme.boot_callable",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    },
+    {
+      "test": "supreme.health_callable",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    },
+    {
+      "test": "supreme.detect_llm_backend",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    },
+    {
+      "test": "supreme.boot_returns_report",
+      "status": "PASS",
+      "ms": 42936.0,
+      "detail": "True"
+    },
+    {
+      "test": "llm_backend_returns_dict",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    },
+    {
+      "test": "llm_backend_has_name",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    },
+    {
+      "test": "atomic_write_text",
+      "status": "PASS",
+      "ms": 14.1,
+      "detail": "True"
+    },
+    {
+      "test": "atomic_write_bytes",
+      "status": "PASS",
+      "ms": 22.5,
+      "detail": "True"
+    },
+    {
+      "test": "strip_utf8_bom_no_bom",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    },
+    {
+      "test": "workspace_writable",
+      "status": "PASS",
+      "ms": 0.0,
+      "detail": "True"
+    }
+  ]
+}

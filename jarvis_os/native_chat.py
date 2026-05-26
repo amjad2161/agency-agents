@@ -162,21 +162,28 @@ class JarvisChat(tk.Tk):
 
     def _ask(self, text):
         try:
-            payload = json.dumps({"message": text}).encode("utf-8")
+            payload = json.dumps({"query": text}).encode("utf-8")
             req = urllib.request.Request(
-                f"{AGENCY_URL}/api/run",
+                f"{AGENCY_URL}/api/singularity/route",
                 data=payload,
                 headers={"Content-Type": "application/json"},
             )
             with urllib.request.urlopen(req, timeout=RUN_TIMEOUT_S) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-            answer = (
-                data.get("text")
-                or data.get("response")
-                or data.get("output")
-                or data.get("message")
-                or json.dumps(data)
-            )
+            
+            # Extract output from SingularityResponse structure
+            result = data.get("result")
+            if isinstance(result, str):
+                answer = result
+            elif isinstance(result, dict):
+                answer = result.get("final_output") or result.get("answer") or result.get("code") or json.dumps(result)
+            else:
+                answer = json.dumps(data)
+                
+            action = data.get("action")
+            if action:
+                self._append_async("info", f"[Routed: {action}]\n")
+                
         except urllib.error.HTTPError as e:
             try:
                 body = e.read().decode("utf-8", "replace")

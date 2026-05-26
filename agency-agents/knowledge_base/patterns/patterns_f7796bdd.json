@@ -1,0 +1,115 @@
+[
+  {
+    "type": "function_definition",
+    "name": "process_data",
+    "args": "items: List[Dict[str, Any]]",
+    "return_hint": "List[Result]",
+    "docstring": "Process raw data into structured results.",
+    "snippet": "def process_data(items: List[Dict[str, Any]]) -> List[Result]:"
+  },
+  {
+    "type": "function_definition",
+    "name": "fetch_remote",
+    "args": "url: str",
+    "return_hint": "bytes",
+    "docstring": "",
+    "snippet": "def fetch_remote(url: str) -> bytes:"
+  },
+  {
+    "type": "for_loop",
+    "iterator": "item",
+    "iterable": "items",
+    "snippet": "for item in items:"
+  },
+  {
+    "type": "for_loop",
+    "iterator": "r",
+    "iterable": "results if r is not None]\n\n@retry(max_attempts=3)\nasync def fetch_remote(url",
+    "snippet": "for r in results if r is not None]\n\n@retry(max_attempts=3)\nasync def fetch_remote(url:"
+  },
+  {
+    "type": "conditional",
+    "keyword": "if",
+    "condition": "item.get(\"valid\")",
+    "snippet": "if item.get(\"valid\"):"
+  },
+  {
+    "type": "conditional",
+    "keyword": "if",
+    "condition": "r is not None]\n\n@retry(max_attempts=3)\nasync def fetch_remote(url",
+    "snippet": "if r is not None]\n\n@retry(max_attempts=3)\nasync def fetch_remote(url:"
+  },
+  {
+    "type": "decorator",
+    "name": "retry",
+    "args": "max_attempts=3",
+    "snippet": "@retry(max_attempts=3)"
+  },
+  {
+    "type": "context_manager",
+    "expression": "open(item[\"path\"]) as f",
+    "alias": "",
+    "snippet": "with open(item[\"path\"]) as f:"
+  },
+  {
+    "type": "context_manager",
+    "expression": "aiohttp.ClientSession() as session",
+    "alias": "",
+    "snippet": "with aiohttp.ClientSession() as session:"
+  },
+  {
+    "type": "context_manager",
+    "expression": "session.get(url) as resp",
+    "alias": "",
+    "snippet": "with session.get(url) as resp:"
+  },
+  {
+    "type": "list_comprehension",
+    "expression": "r for r in results if r is not None",
+    "snippet": "[r for r in results if r is not None]"
+  },
+  {
+    "type": "try_block",
+    "snippet": "try:"
+  },
+  {
+    "type": "except_clause",
+    "exception": "FileNotFoundError",
+    "alias": "",
+    "snippet": "except FileNotFoundError:"
+  },
+  {
+    "type": "async_function",
+    "name": "fetch_remote",
+    "args": "url: str",
+    "return_hint": "bytes",
+    "snippet": "async def fetch_remote(url: str) -> bytes:"
+  },
+  {
+    "type": "await_expression",
+    "expression": "resp.read()",
+    "snippet": "await resp.read()"
+  },
+  {
+    "type": "async_context_manager",
+    "expression": "aiohttp.ClientSession() as session",
+    "snippet": "async with aiohttp.ClientSession() as session:"
+  },
+  {
+    "type": "async_context_manager",
+    "expression": "session.get(url) as resp",
+    "snippet": "async with session.get(url) as resp:"
+  },
+  {
+    "type": "type_annotation",
+    "name": "items",
+    "hint": "List[Dict[str, Any]]",
+    "snippet": "items: List[Dict[str, Any]]"
+  },
+  {
+    "type": "type_annotation",
+    "name": "url",
+    "hint": "str",
+    "snippet": "url: str"
+  }
+]

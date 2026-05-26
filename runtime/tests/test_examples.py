@@ -27,13 +27,14 @@ def _example_env() -> dict[str, str]:
         **os.environ,
         "PYTHONPATH": pypath,
         "ANTHROPIC_API_KEY": "",  # ensure no key path
+        "PYTHONUTF8": "1",  # Force UTF-8 mode on Windows for subprocesses
     }
 
 
 def _run(script: str, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(EXAMPLES / script), *args],
-        capture_output=True, text=True, check=False, timeout=30,
+        capture_output=True, encoding="utf-8", check=False, timeout=30,
         env=_example_env(),
     )
 
@@ -46,7 +47,7 @@ def test_offline_examples_exit_zero(script):
     """01 and 02 do not need an API key. They should exit 0 on the real registry."""
     proc = subprocess.run(
         [sys.executable, str(EXAMPLES / script)],
-        capture_output=True, text=True, check=False, timeout=30,
+        capture_output=True, encoding="utf-8", check=False, timeout=30,
         env=_example_env(),
     )
     assert proc.returncode == 0, (
@@ -59,7 +60,7 @@ def test_offline_examples_have_expected_output():
     """Spot-check that the offline scripts actually print the kind of thing they claim to."""
     proc = subprocess.run(
         [sys.executable, str(EXAMPLES / "01_list_skills.py")],
-        capture_output=True, text=True, check=False, timeout=30,
+        capture_output=True, encoding="utf-8", check=False, timeout=30,
         env=_example_env(),
     )
     assert "Loaded" in proc.stdout
@@ -67,7 +68,7 @@ def test_offline_examples_have_expected_output():
 
     proc = subprocess.run(
         [sys.executable, str(EXAMPLES / "02_route_a_request.py"), "build a frontend"],
-        capture_output=True, text=True, check=False, timeout=30,
+        capture_output=True, encoding="utf-8", check=False, timeout=30,
         env=_example_env(),
     )
     # Planner falls back to keyword match; output should mention reason / shortlist.

@@ -19,6 +19,7 @@ Run:
 
 from __future__ import annotations
 import os, sys, json, threading, traceback, subprocess, math, time, queue, re
+from collections import deque
 from pathlib import Path
 from datetime import datetime
 
@@ -119,7 +120,7 @@ class AIBrain(QObject):
         self._agency = None
         self._ollama_url = "http://localhost:11434"
         self._ollama_model = None
-        self.history = []
+        self.history: deque = deque(maxlen=100)  # FIX: bounded to prevent memory leak
         self._init()
 
     def _init(self):
@@ -232,11 +233,9 @@ class AIBrain(QObject):
                         pass
             # Smart fallback
             self._smart_fallback(prompt, lang)
-        except Exception as e:
-            self.err.emit(f"{e}
-{traceback.format_exc()}")
-        finally:
-            self.done.emit()
+        except Exception as e:  # noqa: BLE001
+            self.err.emit(f"{e}\n{traceback.format_exc()}")
+            self.done.emit()  # FIX: moved from finally to prevent double-emit
 
     def _ollama(self, prompt: str, lang: str) -> bool:
         try:
@@ -272,7 +271,7 @@ class AIBrain(QObject):
         try:
             messages = [{"role": m["role"], "content": m["content"]} for m in self.history[-20:]]
             resp = self._client.messages.create(
-                model="claude-sonnet-4-5",
+                model="claude-opus-4-7",  # FIX: upgraded to latest model
                 max_tokens=2048,
                 system=self.system_prompt(),
                 messages=messages,
@@ -675,6 +674,10 @@ class StatusBar(QWidget):
 
 # ========================== MAIN WINDOW ==========================
 class JarvisBrainiac(QMainWindow):
+    # FIX [CRITICAL]: signal→slot connection is automatically QueuedConnection
+    # across thread boundaries — brain.run_prompt() will execute on brain_thread,
+    # NOT on the Qt main thread, preventing HUD freeze during LLM calls
+    _prompt_signal = pyqtSignal(str, str)
     def __init__(self):
         super().__init__()
         self.setWindowTitle("JARVIS BRAINIAC")
@@ -692,6 +695,8 @@ class JarvisBrainiac(QMainWindow):
         self.brain.err.connect(self._on_err)
         self.brain.status.connect(self._on_status)
         self.brain.speak.connect(self._on_speak)
+        # FIX: wire _prompt_signal → brain.run_prompt across thread boundary
+        self._prompt_signal.connect(self.brain.run_prompt)
 
         # TTS
         self.tts = TTSManager()
@@ -825,7 +830,7 @@ class JarvisBrainiac(QMainWindow):
             ("🌐 Lang", "__cycle_lang"),
             ("⚙️ Config", "__open_config"),
             ("💻 Shell !", "!Get-Process | Select -First 5"),
-            ("🔄 Restart", "__restart"),
+            ("📊 Dashboard", "__open_dashboard"),
         ]:
             b = QPushButton(label)
             b.setStyleSheet(
@@ -909,6 +914,8 @@ class JarvisBrainiac(QMainWindow):
         menu = QMenu()
         a_show = QAction("Summon JARVIS", self)
         a_show.triggered.connect(self._summon)
+        a_dash = QAction("📊 Open Dashboard", self)
+        a_dash.triggered.connect(lambda: self._quick("__open_dashboard"))
         a_mic = QAction("Toggle Mic", self)
         a_mic.triggered.connect(lambda: self._quick("__toggle_mic"))
         a_tts = QAction("Toggle TTS", self)
@@ -916,6 +923,7 @@ class JarvisBrainiac(QMainWindow):
         a_quit = QAction("Quit", self)
         a_quit.triggered.connect(QApplication.instance().quit)
         menu.addAction(a_show)
+        menu.addAction(a_dash)
         menu.addSeparator()
         menu.addAction(a_mic)
         menu.addAction(a_tts)
@@ -990,9 +998,48 @@ class JarvisBrainiac(QMainWindow):
                 QApplication.instance().quit()
             ))
             return
+        if text == "__open_dashboard":
+            self._append("[dashboard] checking status...\n", color=JARVIS_GOLD)
+            threading.Thread(target=self._launch_dashboard, daemon=True).start()
+            return
         # Real prompt
         self._append(f"\n[YOU/{lang}] {text}\n", color=JARVIS_TEXT)
-        QTimer.singleShot(0, lambda: self.brain.run_prompt(text, lang))
+        # FIX [CRITICAL]: emit signal so run_prompt executes on brain_thread,
+        # preventing 120s Ollama/Claude call from freezing the HUD
+        self._prompt_signal.emit(text, lang)
+
+    def _launch_dashboard(self):
+        import socket
+        import webbrowser
+        
+        host = "127.0.0.1"
+        port = 8765
+        running = False
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                running = True
+        except OSError:
+            pass
+            
+        if not running:
+            self._append("[dashboard] server not running on port 8765. Starting it...\n", color=JARVIS_GOLD)
+            try:
+                # Launch the navigation / dashboard server in background
+                server_file = str(ROOT / "godskill_server" / "server.py")
+                subprocess.Popen([sys.executable, server_file], 
+                                 stdout=subprocess.DEVNULL, 
+                                 stderr=subprocess.DEVNULL)
+                # Wait a bit for the server to bind the socket
+                time.sleep(1.2)
+            except Exception as e:
+                self._append(f"[dashboard error] failed to start server: {e}\n", color=JARVIS_ERR)
+                return
+                
+        self._append("[dashboard] opening http://127.0.0.1:8765/ in browser...\n", color=JARVIS_NEON)
+        try:
+            webbrowser.open("http://127.0.0.1:8765/")
+        except Exception as e:
+            self._append(f"[dashboard error] failed to open browser: {e}\n", color=JARVIS_ERR)
 
     def _quick(self, prompt):
         if not prompt:

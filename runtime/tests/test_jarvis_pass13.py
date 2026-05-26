@@ -96,7 +96,7 @@ class TestBatchRunner:
 
         assert run.output_path is not None
         assert run.output_path.exists()
-        content = run.output_path.read_text()
+        content = run.output_path.read_text(encoding="utf-8")
         assert "ans:q1" in content
         assert "ans:q2" in content
         assert "# Batch Run" in content
@@ -112,7 +112,7 @@ class TestBatchRunner:
         runner = BatchRunner(handler=_fail)
         run = runner.run_file(script)
 
-        content = run.output_path.read_text()
+        content = run.output_path.read_text(encoding="utf-8")
         assert "RuntimeError" in content or "test error" in content
 
     def test_run_prompts_parallel(self, tmp_path):
@@ -314,7 +314,7 @@ class TestExport:
             out = export_session(session_id=sid, fmt="md",
                                  output_path=tmp_path / "out.md")
 
-        content = out.read_text()
+        content = out.read_text(encoding="utf-8")
         assert "## Session" in content
         assert "**User**" in content
         assert "hello" in content
@@ -336,7 +336,7 @@ class TestExport:
             out = export_session(session_id=sid, fmt="html",
                                  output_path=tmp_path / "out.html")
 
-        content = out.read_text()
+        content = out.read_text(encoding="utf-8")
         assert "<!DOCTYPE html>" in content
         assert "JARVIS Chat" in content
         assert "test" in content
@@ -357,7 +357,7 @@ class TestExport:
             out = export_session(session_id=sid, fmt="json",
                                  output_path=tmp_path / "out.json")
 
-        data = json.loads(out.read_text())
+        data = json.loads(out.read_text(encoding="utf-8"))
         assert data["session_id"] == sid
         assert data["messages"][0]["content"] == "json test"
 
@@ -375,7 +375,7 @@ class TestExport:
              patch("agency.export.list_sessions", return_value=[session_path]):
             out = export_session(fmt="md", output_path=tmp_path / "out.md")
 
-        assert "recent" in out.read_text()
+        assert "recent" in out.read_text(encoding="utf-8")
 
     def test_export_raises_when_session_not_found(self, tmp_path):
         from agency.export import export_session
@@ -451,7 +451,7 @@ class TestDeadLetterQueue:
         dlq = DeadLetterQueue(path=tmp_path / "dlq.jsonl")
         dlq.push("x", error="err")
 
-        lines = (tmp_path / "dlq.jsonl").read_text().splitlines()
+        lines = (tmp_path / "dlq.jsonl").read_text(encoding="utf-8").splitlines()
         assert len(lines) == 1
         data = json.loads(lines[0])
         assert data["input"] == "x"
@@ -570,11 +570,14 @@ class TestDeadLetterQueue:
 def _invoke(args: list[str], input_text: str = "") -> tuple[int, str, str]:
     import subprocess
     import os
+    env = os.environ.copy()
+    env["PYTHONUTF8"] = "1"
     proc = subprocess.run(
         [sys.executable, "-m", "agency"] + args,
         input=input_text,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        env=env,
         cwd=str(Path(__file__).parent.parent),
         timeout=30,
     )

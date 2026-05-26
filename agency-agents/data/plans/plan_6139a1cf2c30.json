@@ -1,0 +1,101 @@
+{
+  "plan_id": "plan_6139a1cf2c30",
+  "goal": "Build a mobile app",
+  "steps": [
+    {
+      "step_id": "step_059ce55ad5ed",
+      "description": "Requirements for: Build a mobile app",
+      "agent_type": "analyst",
+      "estimated_minutes": 60,
+      "status": "pending",
+      "dependencies": [],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 1
+    },
+    {
+      "step_id": "step_583c343b79c8",
+      "description": "Design for: Build a mobile app",
+      "agent_type": "architect",
+      "estimated_minutes": 90,
+      "status": "pending",
+      "dependencies": [
+        "step_059ce55ad5ed"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 2
+    },
+    {
+      "step_id": "step_cba79b5ca426",
+      "description": "Implementation for: Build a mobile app",
+      "agent_type": "developer",
+      "estimated_minutes": 180,
+      "status": "pending",
+      "dependencies": [
+        "step_583c343b79c8"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 2
+    },
+    {
+      "step_id": "step_a2484eea00c8",
+      "description": "Testing for: Build a mobile app",
+      "agent_type": "qa_engineer",
+      "estimated_minutes": 120,
+      "status": "pending",
+      "dependencies": [
+        "step_cba79b5ca426"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 3
+    },
+    {
+      "step_id": "step_89f86ea87821",
+      "description": "Deployment for: Build a mobile app",
+      "agent_type": "devops",
+      "estimated_minutes": 60,
+      "status": "pending",
+      "dependencies": [
+        "step_a2484eea00c8"
+      ],
+      "result": null,
+      "actual_minutes": 0,
+      "priority": 3
+    }
+  ],
+  "estimated_duration_minutes": 510,
+  "required_agents": [
+    "analyst",
+    "architect",
+    "developer",
+    "qa_engineer",
+    "devops"
+  ],
+  "dependencies": {
+    "step_059ce55ad5ed": [],
+    "step_583c343b79c8": [
+      "step_059ce55ad5ed"
+    ],
+    "step_cba79b5ca426": [
+      "step_583c343b79c8"
+    ],
+    "step_a2484eea00c8": [
+      "step_cba79b5ca426"
+    ],
+    "step_89f86ea87821": [
+      "step_a2484eea00c8"
+    ]
+  },
+  "status": "draft",
+  "created_at": "2026-04-28T21:33:40.683660+00:00",
+  "started_at": null,
+  "completed_at": null,
+  "metadata": {
+    "template": "software_project",
+    "constraints": {},
+    "version": "1.0"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "name": "jarvis-omega",
+  "version": "1.0.0-omega",
+  "codename": "Ω-SINGULARITY",
+  "built_at": "2026-05-03T13:30:00",
+  "owner": "Amjad Mobarsham <mobarsham@gmail.com>",
+  "license": "MIT",
+  "git": "https://github.com/amjad2161/agency-agents.git",
+  "entry_point": "omega.py",
+  "launchers": ["LAUNCH_OMEGA.bat", "LAUNCH_OMEGA.sh", "LAUNCH_OMEGA.ps1"],
+  "config": "sources.json",
+  "verification": "VERIFICATION.json",
+  "blueprint":   "../../Downloads/Kimi_Agent_Full JARVIS Project Audit/OMEGA_SINGULARITY_BLUEPRINT.md",
+  "merge_rules": "../../Downloads/Kimi_Agent_Full JARVIS Project Audit/OMEGA_MERGE_RULES.md",
+  "domains": [
+    "academic", "design", "engineering", "finance", "game-development",
+    "jarvis", "marketing", "paid-media", "product", "project-management",
+    "sales", "science", "spatial-computing", "specialized", "standup",
+    "strategy", "support", "testing"
+  ],
+  "personas_target": "≥ 340 unique slugs (gate G2 ≥ 300)",
+  "runtime_modules_target": "≥ 87 (AGENCY core) + 30 (JBR) + 12 (extras) ≈ 130",
+  "godskill_navigation": {
+    "version": "v11.0",
+    "tiers": 7,
+    "accuracy_targets": {
+      "outdoor_satellite": "±0.5 m (RTK ±2 cm)",
+      "indoor":            "±1 m (UWB ±10 cm)",
+      "underwater":        "±0.3 % distance",
+      "denied":            "±2–3 m"
+    }
+  },
+  "acceptance_gates": {
+    "G1_compile":      "all runtime/agency/*.py compile (≤ 5 errors)",
+    "G2_registry":     "≥ 300 unique persona slugs",
+    "G4_import":       "from omega import Omega works",
+    "G7_unique":       "no duplicate {domain}/{name} slugs",
+    "G8_provenance":   "every persona's abs path resolves on disk",
+    "G9_godskill":     "all 7 nav-tier dirs scaffolded",
+    "G10_manifest":    "MANIFEST + 3 launchers + sources.json present"
+  },
+  "continuous_improvement": {
+    "cadence": "weekly",
+    "sources":  ["arXiv", "GitHub", "Tesla", "Waymo", "NASA-JPL", "Google", "Apple"],
+    "topics":   ["SLAM", "VIO", "sensor-fusion", "neural-nav", "RTK", "UWB", "VSLAM", "celestial-nav"],
+    "gate":     "≥ 80 % test coverage on every PR",
+    "spec":     "OMEGA_MERGE_RULES.md § R10"
+  },
+  "source_roots_summary": [
+    {"tag": "AGENCY-LIVE",       "root": "..",                                                        "kind": "agency"},
+    {"tag": "JBR-DOWNLOADS",     "root": "C:/Users/User/Downloads/jarvis brainiac",                   "kind": "extra"},
+    {"tag": "JBR-ONEDRIVE",      "root": "C:/Users/User/OneDrive/מסמכים/Claude/Projects/jarvis brainiac", "kind": "jbr"},
+    {"tag": "KIMI-SINGULARITY",  "root": "C:/Users/User/Downloads/Kimi_Agent_Full JARVIS Project Audit", "kind": "kimi"},
+    {"tag": "GODMODE-DESKTOP",   "root": "C:/Users/User/Desktop/_ORGANIZED/05_Extracted_Archives/extracted/GodMode-main", "kind": "extra"},
+    {"tag": "DESKTOP-ORGANIZED", "root": "C:/Users/User/Desktop/_ORGANIZED",                          "kind": "extra"}
+  ]
+}

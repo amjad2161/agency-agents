@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://fonts.gstatic.com; connect-src 'self' http://127.0.0.1:* http://localhost:* https://api.github.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com data:;">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="JARVIS SINGULARITY ONE — Unified collective intelligence. GitHub brain + JARVIS Brainiac merged into one."/>
+  <title>⚡ JARVIS SINGULARITY ONE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- ═══════════════ BACKGROUND LAYERS ═══════════════ -->
+<canvas id="bg-canvas"></canvas>
+<div id="hex-grid"></div>
+
+<!-- ═══════════════ BOOT SCREEN ═══════════════ -->
+<div id="boot-screen">
+  <canvas id="boot-orb"></canvas>
+  <div id="boot-text">
+    <div class="boot-line" data-delay="0">JARVIS SINGULARITY ONE</div>
+    <div class="boot-line" data-delay="400">INITIALIZING COLLECTIVE INTELLIGENCE...</div>
+    <div class="boot-line" data-delay="900">LOADING: BRAINIAC ENGINE ████████ 100%</div>
+    <div class="boot-line" data-delay="1300">LOADING: AGENCY RUNTIME  ████████ 100%</div>
+    <div class="boot-line" data-delay="1700">LOADING: GITHUB SCANNER  ████████ 100%</div>
+    <div class="boot-line" data-delay="2100">LOADING: NEURAL CORE     ████████ 100%</div>
+    <div class="boot-line" data-delay="2500">SUBSYSTEMS: 9/9 ONLINE · AGENTS: 144+ · GOD MODE: ACTIVE</div>
+    <div class="boot-line boot-ready" data-delay="3000">■ ALL SYSTEMS ONLINE — SINGULARITY ACHIEVED ■</div>
+  </div>
+</div>
+
+<!-- ═══════════════ HEADER ═══════════════ -->
+<header id="header">
+  <div class="hdr-left">
+    <div id="mini-orb-wrap">
+      <canvas id="mini-orb"></canvas>
+    </div>
+    <div class="brand">
+      <h1 id="brand-title">JARVIS SINGULARITY ONE</h1>
+      <span class="brand-sub">BRAINIAC · AGENCY · GITHUB · GOD MODE · v∞.0</span>
+    </div>
+  </div>
+
+  <div class="hdr-center">
+    <div class="status-bar">
+      <span class="s-chip s-online" id="s-status"><span class="dot"></span>ONLINE</span>
+      <span class="s-chip" id="s-subsys">9/9 SUBSYSTEMS</span>
+      <span class="s-chip" id="s-agents">144+ AGENTS</span>
+      <span class="s-chip" id="s-mode">GOD MODE</span>
+      <span class="s-chip" id="s-llm">OLLAMA: AUTO</span>
+    </div>
+  </div>
+
+  <div class="hdr-right">
+    <div class="hdr-stat" id="h-repos"><span class="hdr-val" id="hv-repos">0</span><span class="hdr-lbl">REPOS</span></div>
+    <div class="hdr-stat" id="h-nodes"><span class="hdr-val" id="hv-nodes">0</span><span class="hdr-lbl">NODES</span></div>
+    <div class="hdr-stat" id="h-power"><span class="hdr-val" id="hv-power">0</span><span class="hdr-lbl">POWER</span></div>
+    <div class="hdr-stat" id="h-syn"><span class="hdr-val" id="hv-syn">0</span><span class="hdr-lbl">SYNERGIES</span></div>
+    <div class="hdr-clock" id="hdr-clock">00:00:00</div>
+  </div>
+</header>
+
+<!-- ═══════════════ MAIN LAYOUT ═══════════════ -->
+<main id="main">
+
+  <!-- ─── LEFT COLUMN ─── -->
+  <aside id="left-col">
+
+    <!-- BRAIN ORB -->
+    <div class="panel glass-panel" id="orb-panel">
+      <div class="panel-hdr"><span class="p-icon">🧠</span>NEURAL CORE</div>
+      <div id="orb-wrap">
+        <canvas id="brain-orb"></canvas>
+        <div id="orb-ring1"></div>
+        <div id="orb-ring2"></div>
+        <div id="orb-ring3"></div>
+        <div id="orb-state">IDLE</div>
+        <div id="orb-tag">J·A·R·V·I·S</div>
+      </div>
+    </div>
+
+    <!-- NEURALINK PANEL -->
+    <div class="panel glass-panel" id="neuralink-panel">
+      <div class="panel-hdr"><span class="p-icon">⚡</span>NEURALINK BCI · 4-CH · 1024Hz</div>
+      <canvas id="neuralink-canvas"></canvas>
+    </div>
+
+    <!-- DIAGNOSTIC -->
+    <div class="panel glass-panel" id="diag-panel">
+      <div class="panel-hdr"><span class="p-icon">📡</span>DIAGNOSTIC</div>
+      <div id="diag-bars">
+        <div class="diag-row" data-sys="BRAINIAC"><span class="dr-lbl">BRAINIAC</span><div class="dr-bar"><div class="dr-fill" style="width:100%"></div></div><span class="dr-val">100%</span></div>
+        <div class="diag-row" data-sys="AGENCY"><span class="dr-lbl">AGENCY</span><div class="dr-bar"><div class="dr-fill" style="width:100%"></div></div><span class="dr-val">100%</span></div>
+        <div class="diag-row" data-sys="GODSKILL"><span class="dr-lbl">GODSKILL</span><div class="dr-bar"><div class="dr-fill" style="width:96%"></div></div><span class="dr-val">96%</span></div>
+        <div class="diag-row" data-sys="OMEGA"><span class="dr-lbl">OMEGA</span><div class="dr-bar"><div class="dr-fill" style="width:100%"></div></div><span class="dr-val">100%</span></div>
+        <div class="diag-row" data-sys="OLLAMA"><span class="dr-lbl">OLLAMA</span><div class="dr-bar"><div class="dr-fill dr-detecting"></div></div><span class="dr-val">...</span></div>
+        <div class="diag-row" data-sys="MEMORY"><span class="dr-lbl">MEMORY</span><div class="dr-bar"><div class="dr-fill" style="width:100%"></div></div><span class="dr-val">100%</span></div>
+        <div class="diag-row" data-sys="GITHUB"><span class="dr-lbl">GITHUB</span><div class="dr-bar"><div class="dr-fill" style="width:85%"></div></div><span class="dr-val">85%</span></div>
+        <div class="diag-row" data-sys="NEURAL"><span class="dr-lbl">NEURAL NET</span><div class="dr-bar"><div class="dr-fill" style="width:100%"></div></div><span class="dr-val">100%</span></div>
+        <div class="diag-row" data-sys="SINGULARITY"><span class="dr-lbl">SINGULARITY</span><div class="dr-bar"><div class="dr-fill dr-gold" style="width:100%"></div></div><span class="dr-val">ACTIVE</span></div>
+      </div>
+      <div id="live-log">
+        <div class="ll-title">LIVE LOG</div>
+        <div id="ll-lines"></div>
+      </div>
+    </div>
+
+    <!-- SCANNER -->
+    <div class="panel glass-panel" id="scanner-panel">
+      <div class="panel-hdr"><span class="p-icon">🔍</span>GITHUB SCANNER</div>
+      <div class="scanner-body">
+        <input id="scan-q" type="text" placeholder="topic / keyword..." autocomplete="off"/>
+        <div class="scan-row">
+          <select id="scan-lang">
+            <option value="">All Languages</option>
+            <option value="javascript">JavaScript</option>
+            <option value="python">Python</option>
+            <option value="typescript">TypeScript</option>
+            <option value="rust">Rust</option>
+            <option value="go">Go</option>
+            <option value="java">Java</option>
+            <option value="cpp">C++</option>
+          </select>
+          <select id="scan-stars">
+            <option value="500">500+ ⭐</option>
+            <option value="1000" selected>1K+ ⭐</option>
+            <option value="5000">5K+ ⭐</option>
+            <option value="10000">10K+ ⭐</option>
+          </select>
+        </div>
+        <button id="scan-btn" class="btn-fire">⚡ SCAN & ABSORB</button>
+        <button id="scan-trending" class="btn-secondary">🔥 TRENDING</button>
+      </div>
+      <div id="scan-results">
+        <div class="sr-hdr"><span>Results</span><span id="sr-count" class="badge">0</span></div>
+        <div id="sr-list"><div class="empty-st"><span>🛸</span><p>Scan to absorb knowledge</p></div></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─── CENTER: NEURAL NETWORK ─── -->
+  <section id="center">
+    <canvas id="neural-canvas"></canvas>
+
+    <!-- Floating node inspector -->
+    <div id="node-inspector" class="glass-float" style="display:none">
+      <button id="ni-close">✕</button>
+      <div id="ni-content"></div>
+    </div>
+
+    <!-- Essence panel overlay -->
+    <div id="essence-overlay" class="glass-float" style="display:none">
+      <button id="eo-close">✕</button>
+      <div id="eo-content"></div>
+    </div>
+
+    <!-- Canvas controls -->
+    <div id="canvas-ctrl">
+      <button class="cc-btn" id="cc-zi" title="Zoom In">+</button>
+      <button class="cc-btn" id="cc-zo" title="Zoom Out">−</button>
+      <button class="cc-btn" id="cc-rs" title="Reset">⟲</button>
+      <button class="cc-btn" id="cc-lb" title="Labels">Aa</button>
+      <button class="cc-btn" id="cc-ph" title="Physics">⚛</button>
+    </div>
+
+    <!-- Legend -->
+    <div id="legend">
+      <div class="leg-item"><span class="leg-dot" style="background:#00f0ff"></span>Frontend</div>
+      <div class="leg-item"><span class="leg-dot" style="background:#a855f7"></span>Backend</div>
+      <div class="leg-item"><span class="leg-dot" style="background:#f472b6"></span>AI/ML</div>
+      <div class="leg-item"><span class="leg-dot" style="background:#22d3ee"></span>DevOps</div>
+      <div class="leg-item"><span class="leg-dot" style="background:#facc15"></span>Data</div>
+      <div class="leg-item"><span class="leg-dot" style="background:#34d399"></span>Mobile</div>
+      <div class="leg-item"><span class="leg-dot" style="background:#fb923c"></span>Systems</div>
+    </div>
+
+    <!-- Neural stats overlay -->
+    <div id="neural-stats">
+      <span id="ns-nodes">0 nodes</span>
+      <span id="ns-edges">0 edges</span>
+      <span id="ns-fps">60 fps</span>
+    </div>
+  </section>
+
+  <!-- ─── RIGHT COLUMN ─── -->
+  <aside id="right-col">
+
+    <!-- SYNERGY ENGINE -->
+    <div class="panel glass-panel" id="synergy-panel">
+      <div class="panel-hdr"><span class="p-icon">✨</span>SYNERGY ENGINE</div>
+      <div id="synergy-list"><div class="empty-st"><span>🌀</span><p>Scan repos to reveal synergies</p></div></div>
+    </div>
+
+    <!-- ESSENCE VIEWER -->
+    <div class="panel glass-panel" id="essence-panel">
+      <div class="panel-hdr"><span class="p-icon">🧬</span>DNA ESSENCE</div>
+      <div id="essence-view"><div class="empty-st"><span>🔬</span><p>Click a node to extract essence</p></div></div>
+    </div>
+
+    <!-- SINGULARITY ROUTING -->
+    <div class="panel glass-panel" id="singularity-panel">
+      <div class="panel-hdr"><span class="p-icon">🎯</span>SINGULARITY ROUTER</div>
+      <div id="singularity-router-view">
+        <div class="empty-st">
+          <span>🔮</span>
+          <p>Send a query in Chat to view routing logs</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- MEMORY & SKILLS -->
+    <div class="panel glass-panel" id="memory-panel">
+      <div class="panel-hdr"><span class="p-icon">💾</span>MEMORY · SKILLS</div>
+      <div id="memory-list">
+        <div class="mem-item"><span class="mem-key">USER</span><span class="mem-val">Sir (Amjad)</span></div>
+        <div class="mem-item"><span class="mem-key">VERSION</span><span class="mem-val">v∞.0-singularity</span></div>
+        <div class="mem-item"><span class="mem-key">FILES</span><span class="mem-val">33,784</span></div>
+        <div class="mem-item"><span class="mem-key">AGENTS</span><span class="mem-val">144+</span></div>
+        <div class="mem-item"><span class="mem-key">PERM</span><span class="mem-val">GOD MODE</span></div>
+        <div class="mem-item"><span class="mem-key">WAKE</span><span class="mem-val">jarvis / ג'רוויס</span></div>
+      </div>
+      <div class="mem-input-row">
+        <input id="mem-key-in" placeholder="key" type="text"/>
+        <input id="mem-val-in" placeholder="value" type="text"/>
+        <button id="mem-save" class="btn-micro">SAVE</button>
+      </div>
+    </div>
+
+  </aside>
+</main>
+
+<!-- ═══════════════ CHAT / COMMAND ═══════════════ -->
+<footer id="chat-panel">
+  <div id="chat-hdr">
+    <span class="p-icon">💬</span>
+    <span>JARVIS COMMAND INTERFACE</span>
+    <div class="chat-hdr-right">
+      <button id="btn-voice" class="btn-voice" title="Voice Input">🎤</button>
+      <button id="btn-shell" class="btn-micro-hdr" title="Shell Mode">!CMD</button>
+      <button id="btn-agents" class="btn-micro-hdr">AGENTS</button>
+      <button id="btn-github" class="btn-micro-hdr">GITHUB</button>
+      <button id="btn-screen" class="btn-micro-hdr">SCREEN</button>
+      <button id="btn-status" class="btn-micro-hdr">STATUS</button>
+      <div class="chat-status"><span class="dot live"></span>CONNECTED</div>
+    </div>
+  </div>
+  <div id="chat-messages"></div>
+  <div id="chat-input-row">
+    <input id="chat-input" type="text" placeholder="Speak ('Jarvis...'), type a command, or ! for shell..."/>
+    <button id="chat-send" class="btn-send">➤</button>
+  </div>
+</footer>
+
+<!-- ═══════════════ AGENT CONTROL CENTER MODAL ═══════════════ -->
+<div id="agents-modal" class="modal-overlay" style="display:none">
+  <div class="modal-content glass-panel">
+    <div class="modal-hdr">
+      <h3>🤖 AGENT CONTROL CENTER</h3>
+      <button id="am-close" class="btn-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="agents-left-col">
+        <input id="agent-search" type="text" placeholder="Search agents..." autocomplete="off"/>
+        <div id="agents-list-container">
+          <div class="empty-st"><span>🛸</span><p>Loading agent registry...</p></div>
+        </div>
+      </div>
+      <div class="agents-right-col">
+        <div id="selected-agent-details">
+          <div class="empty-agent-state">
+            <h4>Select an agent to interact</h4>
+            <p>Choose an agent from the list to view its description, tools, and run commands.</p>
+          </div>
+        </div>
+        <div id="agent-run-panel" style="display:none" class="agent-run-panel">
+          <textarea id="agent-task-input" placeholder="Enter task for the agent..."></textarea>
+          <button id="btn-run-agent" class="btn-fire">⚡ EXECUTE AGENT</button>
+          <div id="agent-run-result" style="display:none">
+            <h5>EXECUTION OUTPUT</h5>
+            <pre id="agent-output-text">Output will appear here...</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="brain.js"></script>
+</body>
+</html>

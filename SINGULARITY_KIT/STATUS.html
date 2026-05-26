@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS SINGULARITY - Status</title>
+<style>
+:root {
+    --bg: #0a0e1a;
+    --bg-card: #131826;
+    --fg: #e6edf3;
+    --fg-dim: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --border: #30363d;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    background: linear-gradient(135deg, #0a0e1a 0%, #161b27 100%);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+    padding: 32px 16px;
+}
+.wrap { max-width: 1200px; margin: 0 auto; }
+header {
+    text-align: center;
+    margin-bottom: 48px;
+    padding: 32px;
+    background: var(--bg-card);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+header h1 {
+    font-size: 36px;
+    background: linear-gradient(90deg, #58a6ff, #3fb950);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+}
+header p { color: var(--fg-dim); font-size: 14px; }
+.status-pill {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 16px;
+}
+.status-pill.green { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid var(--green); }
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+}
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: border-color 0.2s, transform 0.2s;
+}
+.card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.card h3 { font-size: 14px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.card .value { font-size: 28px; font-weight: 700; color: var(--accent); }
+.card .sub { font-size: 12px; color: var(--fg-dim); margin-top: 4px; }
+
+section { margin-bottom: 40px; }
+h2 {
+    font-size: 22px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg-card);
+    border-radius: 8px;
+    overflow: hidden;
+}
+th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+th { background: rgba(255,255,255,0.03); color: var(--fg-dim); font-size: 12px; text-transform: uppercase; }
+tr:last-child td { border-bottom: none; }
+code {
+    background: rgba(255,255,255,0.06);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: "SF Mono", Monaco, Consolas, monospace;
+}
+.green { color: var(--green); }
+.orange { color: var(--orange); }
+.red { color: var(--red); }
+.dim { color: var(--fg-dim); }
+
+ul.bullets { list-style: none; padding-left: 0; }
+ul.bullets li { padding: 8px 0; border-bottom: 1px solid var(--border); }
+ul.bullets li::before { content: "▸ "; color: var(--accent); margin-right: 8px; }
+ul.bullets li:last-child { border-bottom: none; }
+
+.cmd {
+    background: #0a0e1a;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: "SF Mono", Monaco, Consolas, monospace;
+    font-size: 13px;
+    overflow-x: auto;
+    color: var(--green);
+    margin: 12px 0;
+}
+.cmd .comment { color: var(--fg-dim); }
+
+footer {
+    text-align: center;
+    color: var(--fg-dim);
+    font-size: 12px;
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+<h1>JARVIS SINGULARITY</h1>
+<p>Unified canonical source for AGENCY + KIMI Agent + JARVIS forks</p>
+<p style="margin-top: 4px;"><code>C:\Users\User\JARVIS_SINGULARITY</code></p>
+<span class="status-pill green">UNIFIED · 2026-05-03 17:14</span>
+</header>
+
+<section>
+<h2>Merge stats</h2>
+<div class="grid">
+<div class="card">
+<h3>Sources processed</h3>
+<div class="value">6</div>
+<div class="sub">All 6 forks merged</div>
+</div>
+<div class="card">
+<h3>Top-level entries</h3>
+<div class="value">209</div>
+<div class="sub">Folders + files at root</div>
+</div>
+<div class="card">
+<h3>Manifest size</h3>
+<div class="value">6.3 MB</div>
+<div class="sub">~60,000 file decisions logged</div>
+</div>
+<div class="card">
+<h3>Runtime</h3>
+<div class="value">14 min</div>
+<div class="sub">17:00 → 17:14</div>
+</div>
+<div class="card">
+<h3>Storage saved</h3>
+<div class="value">~46 GB</div>
+<div class="sub">Excluded LLM blobs + nested zips</div>
+</div>
+<div class="card">
+<h3>Git</h3>
+<div class="value green">main</div>
+<div class="sub">Local · 1 commit · no remote</div>
+</div>
+</div>
+</section>
+
+<section>
+<h2>Sources merged (priority order)</h2>
+<table>
+<thead><tr><th>#</th><th>Source</th><th>Path</th><th>Size</th><th>Role</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>agency</td><td><code>C:\Users\User\agency</code></td><td>4.1 GB</td><td>Active spine</td></tr>
+<tr><td>2</td><td>kimi-audit</td><td><code>...\Kimi_Agent_Full JARVIS Project Audit</code></td><td>24 GB</td><td>Audit dump (23GB blobs dropped)</td></tr>
+<tr><td>3</td><td>downloads-jarvis-brain</td><td><code>...\Downloads\jarvis brainiac</code></td><td>23 GB</td><td>Extended fork (zips dropped)</td></tr>
+<tr><td>4</td><td>agency-agents-main</td><td><code>...\Downloads\agency-agents-main</code></td><td>33 MB</td><td>Public stock</td></tr>
+<tr><td>5</td><td>jarvis</td><td><code>...\Downloads\jarvis</code></td><td>26 MB</td><td>Slim variant</td></tr>
+<tr><td>6</td><td>kimi-audit-2</td><td><code>...\Kimi_Agent…000. (2)</code></td><td>12 MB</td><td>Partial audit dup</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Core packages</h2>
+<table>
+<thead><tr><th>Path</th><th>Purpose</th><th>Entry</th></tr></thead>
+<tbody>
+<tr><td><code>jarvis_brainiac/</code></td><td>Brain orchestrator + agent registry</td><td><code>python -m jarvis_brainiac</code></td></tr>
+<tr><td><code>jarvis_os/</code></td><td>Native chat + hotkey + tray</td><td><code>python -m jarvis_os</code></td></tr>
+<tr><td><code>godskill_server/</code></td><td>MCP-style godskill server</td><td><code>python godskill_server/server.py</code></td></tr>
+<tr><td><code>godskill_nav_v11/</code></td><td>Multi-tier positioning system</td><td>7 tier subdirs</td></tr>
+<tr><td><code>JARVIS_OMEGA/</code></td><td>Convergence layer</td><td><code>python JARVIS_OMEGA/omega.py</code></td></tr>
+<tr><td><code>runtime/</code></td><td>Agency runtime (CLI: <code>agency</code>)</td><td><code>pip install -e ./runtime</code></td></tr>
+<tr><td><code>agents/</code></td><td>144+ specialist personas, 16 divisions</td><td>—</td></tr>
+<tr><td><code>bridges/</code></td><td>External integrations (15+ bridges)</td><td>—</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Quick commands</h2>
+<div class="cmd">
+<span class="comment">:: 1. Verify structure + smoke imports</span>
+LAUNCH_VERIFY.cmd
+<br><br>
+<span class="comment">:: 2. Bootstrap Python venv + install runtime + smoke test</span>
+LAUNCH_POST_MERGE_SETUP.cmd
+<br><br>
+<span class="comment">:: 3. Auto-generate AGENT_INDEX.md (144+ personas)</span>
+LAUNCH_AGENT_INDEX.cmd
+<br><br>
+<span class="comment">:: 4. Re-merge any time (idempotent)</span>
+LAUNCH_MERGE.cmd
+<br><br>
+<span class="comment">:: 5. When ready for GitHub</span>
+cd C:\Users\User\JARVIS_SINGULARITY
+git remote add origin https://github.com/&lt;you&gt;/jarvis-singularity.git
+git push -u origin main
+git tag -a v0.1.0-singularity -m "Post-merge baseline"
+</div>
+</section>
+
+<section>
+<h2>What got dropped (intentionally)</h2>
+<ul class="bullets">
+<li>23 GB Ollama LLM weight blobs (<code>sha256-*</code> in <code>blobs/</code>)</li>
+<li>23 GB nested zip backups (>100MB cap)</li>
+<li>All <code>*.gguf</code>, <code>*.bin</code>, <code>*.pt</code>, <code>*.pth</code>, <code>*.safetensors</code>, <code>*.onnx</code>, <code>*.bundle</code></li>
+<li>All <code>*.iso</code>, <code>*.exe</code>, <code>*.msi</code> binaries</li>
+<li>Build/cache: <code>__pycache__</code>, <code>.venv</code>, <code>node_modules</code>, <code>dist</code>, <code>build</code>, <code>*.egg-info</code>, <code>.pytest_cache</code>, <code>.mypy_cache</code>, <code>.ruff_cache</code>, <code>target</code></li>
+<li>IDE: <code>.idea</code>, <code>.vscode-test</code></li>
+<li>Source-side <code>.git</code> histories (fresh git in destination)</li>
+</ul>
+<p style="margin-top:8px;color:var(--fg-dim);font-size:13px;">All 6 source folders are <strong class="green">untouched</strong>. Drop policy applies only to destination.</p>
+</section>
+
+<section>
+<h2>Next moves</h2>
+<table>
+<thead><tr><th>Priority</th><th>Action</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td class="green">P0</td><td>Run LAUNCH_VERIFY + LAUNCH_POST_MERGE_SETUP</td><td>Confirm Python imports work end-to-end</td></tr>
+<tr><td class="green">P1</td><td>git remote add origin + push</td><td>Backup + collaboration</td></tr>
+<tr><td class="orange">P2</td><td>Resolve nested JARVIS_SINGULARITY/ archive</td><td>Decide keep-as-historical vs promote-to-top</td></tr>
+<tr><td class="orange">P3</td><td>Reconcile <code>jarvis_brainiac/</code> vs <code>.jarvis_brainiac/</code></td><td>Package vs runtime state separation</td></tr>
+<tr><td class="dim">P4</td><td>LAUNCH_AGENT_INDEX.cmd</td><td>Generate AGENT_INDEX.md (144+ links)</td></tr>
+<tr><td class="dim">P5</td><td>End-to-end runtime test (<code>agency serve</code>)</td><td>Full system live test</td></tr>
+<tr><td class="dim">P6</td><td>godskill_nav_v11 tier audit</td><td>Verify all 7 navigation tiers populated</td></tr>
+<tr><td class="dim">P7</td><td>Bridges import audit</td><td>Confirm 15+ bridges import cleanly</td></tr>
+<tr><td class="dim">P8</td><td>git tag v0.1.0-singularity</td><td>Lock the baseline</td></tr>
+<tr><td class="dim">P9</td><td>Schedule nightly re-merge</td><td>Continuous singularity</td></tr>
+</tbody>
+</table>
+</section>
+
+<footer>
+<p>JARVIS SINGULARITY · Generated by MERGE_SINGULARITY.ps1 v1.2 · 2026-05-03</p>
+<p style="margin-top:4px;">All sources retained · Merge is idempotent · Rollback safe</p>
+</footer>
+
+</div>
+</body>
+</html>

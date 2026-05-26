@@ -24,12 +24,16 @@ AGENCY_API_KEY = os.getenv("AGENCY_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
 
 def _invoke(args: list[str], input_text: str = "") -> tuple[int, str, str]:
     """Run the agency CLI in a subprocess and return (returncode, stdout, stderr)."""
+    import os
+    env = os.environ.copy()
+    env["PYTHONUTF8"] = "1"
     proc = subprocess.run(
         [sys.executable, "-m", "agency"] + args,
         input=input_text,
         capture_output=True,
-        text=True,
-        cwd=os.path.join(os.path.dirname(__file__), ".."),
+        encoding="utf-8",
+        env=env,
+        cwd=str(Path(__file__).parent.parent),
         timeout=30,
     )
     return proc.returncode, proc.stdout, proc.stderr
@@ -43,7 +47,7 @@ def _invoke(args: list[str], input_text: str = "") -> tuple[int, str, str]:
 def test_web_fetch_no_longer_uses_client_send_stream():
     """Confirm the old broken pattern is gone from tools.py source."""
     tools_path = os.path.join(os.path.dirname(__file__), "..", "agency", "tools.py")
-    src = open(tools_path).read()
+    src = open(tools_path, encoding="utf-8").read()
     assert "client.send(req, stream=True)" not in src, (
         "Old httpx pattern still present — httpx 0.28+ Response has no __enter__"
     )
@@ -52,7 +56,7 @@ def test_web_fetch_no_longer_uses_client_send_stream():
 def test_web_fetch_uses_client_stream_context_manager():
     """Confirm the correct client.stream() pattern is present."""
     tools_path = os.path.join(os.path.dirname(__file__), "..", "agency", "tools.py")
-    src = open(tools_path).read()
+    src = open(tools_path, encoding="utf-8").read()
     assert 'client.stream("GET", url)' in src, (
         "Expected client.stream(\"GET\", url) context manager in _web_fetch"
     )
@@ -61,7 +65,7 @@ def test_web_fetch_uses_client_stream_context_manager():
 def test_web_fetch_no_manual_resp_close():
     """With client.stream() the context manager closes the response; no resp.close() needed."""
     tools_path = os.path.join(os.path.dirname(__file__), "..", "agency", "tools.py")
-    src = open(tools_path).read()
+    src = open(tools_path, encoding="utf-8").read()
     # The _web_fetch function itself should not call resp.close() explicitly
     # (the old code did: resp.close() before continuing to next redirect hop)
     import ast
@@ -346,12 +350,13 @@ def test_api_smoke_subprocess_chat():
     """agency chat --no-banner exits cleanly with a real API key."""
     env = os.environ.copy()
     env["ANTHROPIC_API_KEY"] = AGENCY_API_KEY
+    env["PYTHONUTF8"] = "1"  # Force UTF-8 on Windows
     proc = subprocess.run(
         [sys.executable, "-m", "agency", "chat", "--no-banner",
          "--model", "claude-haiku-4-5-20251001"],
         input="ping\nexit\n",
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         env=env,
         timeout=60,
         cwd=os.path.join(os.path.dirname(__file__), ".."),
@@ -369,7 +374,7 @@ def test_cli_py_parses_cleanly():
     """cli.py must be valid Python after all Pass 11 edits."""
     import ast
     cli_path = os.path.join(os.path.dirname(__file__), "..", "agency", "cli.py")
-    src = open(cli_path).read()
+    src = open(cli_path, encoding="utf-8").read()
     # raises SyntaxError if broken
     ast.parse(src)
 
@@ -378,7 +383,7 @@ def test_tools_py_parses_cleanly():
     """tools.py must be valid Python after httpx fix."""
     import ast
     p = os.path.join(os.path.dirname(__file__), "..", "agency", "tools.py")
-    ast.parse(open(p).read())
+    ast.parse(open(p, encoding="utf-8").read())
 
 
 def test_imports_do_not_crash():

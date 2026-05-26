@@ -78,7 +78,7 @@ def main():
         )
         return
 
-    print("JARVIS hotkey listener — Win+J → open chat. Ctrl+C to stop.")
+    print("JARVIS hotkey listener — Win+J -> open chat. Ctrl+C to stop.")
     try:
         keyboard.add_hotkey("windows+j", open_native_chat)
     except Exception:

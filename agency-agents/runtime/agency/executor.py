@@ -1,0 +1,608 @@
+"""Run a skill against a user request with a tool-use loop."""
+
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Iterator
+
+from .llm import AnthropicLLM
+from .logging import get_logger, timed
+from .memory import MemoryStore, Session
+from .lessons import load_lessons_text
+from .profile import load_profile_text
+from .skills import Skill, SkillRegistry
+from .tools import Tool, ToolContext, builtin_tools, tools_by_name, ToolResult
+
+MAX_TURNS = 12  # safety cap on tool-use iterations
+
+
+def _summarize_server_tool_result(block: Any) -> dict:
+    """Compact a server-side tool result block into an event payload.
+
+    The SDK returns richly-nested objects (web_search results, code-execution
+    stdout/stderr, MCP results). We surface enough to render a line of UI
+    without attempting to deeply parse every variant.
+    """
+    content = getattr(block, "content", None)
+    if content is None:
+        return {"type": block.type, "content": None}
+    if isinstance(content, str):
+        return {"type": block.type, "content": content}
+    # Try to stringify list-of-blocks / pydantic-model forms.
+    if hasattr(content, "model_dump"):
+        return {"type": block.type, "content": content.model_dump()}
+    try:
+        return {"type": block.type, "content": list(content)[:5]}
+    except Exception:  # noqa: BLE001
+        return {"type": block.type, "content": repr(content)[:500]}
+def _image_content_block(spec: str) -> dict[str, Any]:
+    """Convert an image string into an Anthropic API content block.
+
+    Accepts:
+      - "data:image/<type>;base64,<payload>"  → base64 source block
+      - "http(s)://..."                       → url source block
+    Anything else raises ValueError so the caller surfaces a clear
+    error to the user instead of producing a garbage payload.
+    """
+    s = (spec or "").strip()
+    if s.startswith("data:"):
+        # data:image/png;base64,XXXX
+        try:
+            header, payload = s.split(",", 1)
+        except ValueError as e:
+            raise ValueError(f"malformed data URL: {s[:64]}…") from e
+        # header is "data:image/png;base64"
+        media_type = header.split(":", 1)[1].split(";", 1)[0] or "image/png"
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": payload,
+            },
+        }
+    if s.startswith("http://") or s.startswith("https://"):
+        return {"type": "image", "source": {"type": "url", "url": s}}
+    raise ValueError(
+        f"unrecognized image spec (must be data: URL or http(s) URL): {s[:64]}…"
+    )
+
+
+MAX_DELEGATION_DEPTH = 2  # A → B → C is allowed; A → B → C → D is not
+PARALLEL_SAFE_TOOLS = frozenset({
+    "read_file", "list_dir", "list_skills", "extract_doc", "web_fetch",
+})  # tools with no side effects; safe to fan out
+
+
+@dataclass
+class ExecutionEvent:
+    kind: str  # "text" | "tool_use" | "tool_result" | "stop" | "usage"
+    payload: Any = None
+
+
+@dataclass
+class Usage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
+
+    def add(self, sdk_usage: Any) -> None:
+        """Fold an SDK `response.usage` into this accumulator.
+
+        The SDK usage object has attributes; we use getattr to stay tolerant
+        of older/newer SDK versions and stubs in tests.
+        """
+        for attr in (
+            "input_tokens", "output_tokens",
+            "cache_creation_input_tokens", "cache_read_input_tokens",
+        ):
+            val = getattr(sdk_usage, attr, None)
+            if isinstance(val, int):
+                setattr(self, attr, getattr(self, attr) + val)
+
+    def as_dict(self) -> dict[str, int]:
+        return {
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "cache_creation_input_tokens": self.cache_creation_input_tokens,
+            "cache_read_input_tokens": self.cache_read_input_tokens,
+        }
+
+
+@dataclass
+class ExecutionResult:
+    text: str
+    turns: int
+    events: list[ExecutionEvent] = field(default_factory=list)
+    usage: Usage = field(default_factory=Usage)
+
+
+class _ProfileDefault:
+    """Marker type for the default-load-from-disk sentinel on Executor."""
+    __slots__ = ()
+
+
+_PROFILE_DEFAULT = _ProfileDefault()
+
+
+class _LessonsDefault:
+    """Marker for the lessons-default-load-from-disk sentinel."""
+    __slots__ = ()
+
+
+_LESSONS_DEFAULT = _LessonsDefault()
+
+
+class Executor:
+    """One Executor per agent loop. Reuse across turns of a session."""
+
+    llm: "AnthropicLLM"  # always set in __init__; never None
+
+    def __init__(
+        self,
+        registry: SkillRegistry,
+        llm: AnthropicLLM,
+        memory: MemoryStore | None = None,
+        tools: list[Tool] | None = None,
+        workdir: Path | None = None,
+        delegation_depth: int = 0,
+        profile: "str | None | _ProfileDefault" = _PROFILE_DEFAULT,
+        lessons: "str | None | _LessonsDefault" = _LESSONS_DEFAULT,
+    ):
+        self.registry = registry
+        self.llm = llm
+        self.memory = memory
+        self.tools = tools if tools is not None else builtin_tools()
+        self._tool_index = tools_by_name(self.tools)
+        self.ctx = ToolContext.from_env(workdir=workdir)
+        self._delegation_depth = delegation_depth
+
+        # Profile resolution.
+        # - profile=_PROFILE_DEFAULT (the default sentinel): load lazily from
+        #   disk on the first run()/stream() call. Means tests don't pay the
+        #   IO cost up front, and a developer's local ~/.agency/profile.md
+        #   doesn't leak into Executor-construction-only tests.
+        # - profile=None: explicit opt-out; no profile block is sent.
+        # - profile="...": use the provided string verbatim.
+        if isinstance(profile, _ProfileDefault):
+            self._profile_resolved: bool = False
+            self._profile: str | None = None
+        elif profile is None or isinstance(profile, str):
+            self._profile_resolved = True
+            self._profile = profile
+        else:
+            raise TypeError(
+                "profile must be a str, None, or omitted; got "
+                f"{type(profile).__name__}"
+            )
+
+        # Lessons resolution — same lazy / opt-out / verbatim shape as profile.
+        if isinstance(lessons, _LessonsDefault):
+            self._lessons_resolved: bool = False
+            self._lessons: str | None = None
+        elif lessons is None or isinstance(lessons, str):
+            self._lessons_resolved = True
+            self._lessons = lessons
+        else:
+            raise TypeError(
+                "lessons must be a str, None, or omitted; got "
+                f"{type(lessons).__name__}"
+            )
+
+        # Inject sibling-skill summary so the `list_skills` tool can describe them.
+        summary_lines = [
+            f"- {s.slug}: {s.name} ({s.category}) — {s.description}"
+            for s in registry.all()
+        ]
+        setattr(self.ctx, "_skills_summary", "\n".join(summary_lines))
+        setattr(self.ctx, "_delegate_runner", self._delegate)
+
+    def _resolve_profile(self) -> str | None:
+        """Load the profile from disk on first use; cached thereafter."""
+        if not self._profile_resolved:
+            self._profile = load_profile_text()
+            self._profile_resolved = True
+        return self._profile
+
+    def _resolve_lessons(self) -> str | None:
+        """Load the lessons file from disk on first use; cached thereafter."""
+        if not self._lessons_resolved:
+            self._lessons = load_lessons_text()
+            self._lessons_resolved = True
+        return self._lessons
+
+    def _bind_session_to_ctx(self, session: Session | None) -> None:
+        if session is None:
+            setattr(self.ctx, "_plan_root", None)
+            setattr(self.ctx, "_plan_session_id", None)
+            return
+        plan_root = Path.home() / ".agency" / "plans"
+        setattr(self.ctx, "_plan_root", plan_root)
+        setattr(self.ctx, "_plan_session_id", session.session_id)
+
+    def _delegate(self, slug: str, request: str) -> str:
+        if self._delegation_depth >= MAX_DELEGATION_DEPTH:
+            raise RecursionError(
+                f"Delegation depth {self._delegation_depth} exceeds cap {MAX_DELEGATION_DEPTH}."
+            )
+        sub_skill = self.registry.by_slug(slug)
+        if sub_skill is None:
+            raise KeyError(slug)
+        sub = Executor(
+            self.registry, self.llm, memory=None, tools=self.tools,
+            workdir=self.ctx.workdir, delegation_depth=self._delegation_depth + 1,
+            profile=self._resolve_profile(),  # subagent gets the same user context
+            lessons=self._resolve_lessons(),  # …and the same cross-session memory
+        )
+        return sub.run(sub_skill, request).text
+
+    def _run_via_managed_agents(self, skill: Skill, user_message: str,
+                                session: Session | None) -> ExecutionResult:
+        """Forward a request to Anthropic's hosted managed-agents
+        infrastructure. Streams events back, normalizes them into our
+        ExecutionEvent shape, and returns a regular ExecutionResult so
+        the rest of the runtime is backend-agnostic.
+
+        Activated by AGENCY_BACKEND=managed_agents. The persona's
+        full system prompt (with profile + lessons prelude) is sent
+        as the agent's system message; the user's message is the
+        first event. Tool runs happen in Anthropic's container, not
+        on the user's machine.
+        """
+        from . import managed_agents as _ma
+
+        # Build the same system payload we'd send locally so the
+        # managed agent inherits the persona, profile, and lessons.
+        system_blocks = AnthropicLLM.cached_system(
+            skill.system_prompt,
+            profile=self._resolve_profile(),
+            lessons=self._resolve_lessons(),
+        )
+        system_text = "\n\n---\n\n".join(b["text"] for b in system_blocks)
+
+        backend = _ma.default_backend(
+            name=skill.slug,
+            model=getattr(self.llm.config, "model", "claude-opus-4-7"),
+            system=system_text,
+        )
+
+        events: list[ExecutionEvent] = []
+        text_parts: list[str] = []
+        sess_id = session.session_id if session else None
+        try:
+            for ev in backend.run(user_message, session_id=sess_id):
+                if ev.kind == "text":
+                    text_parts.append(ev.payload)
+                    events.append(ExecutionEvent("text", ev.payload))
+                elif ev.kind == "tool_use":
+                    events.append(ExecutionEvent("tool_use", ev.payload))
+                elif ev.kind == "tool_result":
+                    events.append(ExecutionEvent("tool_result", ev.payload))
+                elif ev.kind == "stop":
+                    events.append(ExecutionEvent("stop", ev.payload))
+                    break
+                elif ev.kind == "error":
+                    events.append(ExecutionEvent("error", ev.payload))
+                    break
+                elif ev.kind == "status":
+                    # Surface the new session_id back to the caller via
+                    # the events stream so a UI can save it.
+                    events.append(ExecutionEvent("status", ev.payload))
+        except Exception as e:  # noqa: BLE001 — surface to caller
+            events.append(ExecutionEvent("error", {
+                "message": f"managed-agents backend failed: {e}",
+            }))
+
+        final_text = "".join(text_parts).strip()
+        return ExecutionResult(
+            text=final_text,
+            turns=1,  # the managed runner counts internally; we see one round-trip
+            events=events,
+            usage=Usage(),  # backend doesn't surface per-call usage in the same shape
+        )
+
+    def run(self, skill: Skill, user_message: str, session: Session | None = None,
+            images: list[str] | None = None) -> ExecutionResult:
+        # Backend switch: when AGENCY_BACKEND=managed_agents is set,
+        # delegate the whole execution to Anthropic's hosted runner
+        # instead of looping locally. This is purely opt-in and falls
+        # back transparently if the SDK doesn't support it.
+        from . import managed_agents as _ma
+
+        if _ma.is_enabled():
+            return self._run_via_managed_agents(skill, user_message, session)
+
+        events: list[ExecutionEvent] = []
+        text_parts: list[str] = []
+        usage = Usage()
+
+        self._bind_session_to_ctx(session)
+        messages = self._initial_messages(session, user_message, images=images)
+        system = AnthropicLLM.cached_system(skill.system_prompt, profile=self._resolve_profile(), lessons=self._resolve_lessons())
+        tool_defs = self._tool_defs_for(skill)
+
+        turns = 0
+        for _ in range(MAX_TURNS):
+            turns += 1
+            response = self.llm.messages_create(
+                system=system,
+                messages=messages,
+                tools=tool_defs,
+            )
+            if getattr(response, "usage", None) is not None:
+                usage.add(response.usage)
+
+            assistant_blocks = [self._block_to_dict(b) for b in response.content]
+            messages.append({"role": "assistant", "content": assistant_blocks})
+
+            tool_uses = [b for b in response.content if getattr(b, "type", None) == "tool_use"]
+            for block in response.content:
+                btype = getattr(block, "type", None)
+                if btype == "text":
+                    text_parts.append(block.text)
+                    events.append(ExecutionEvent("text", block.text))
+                elif btype == "tool_use":
+                    events.append(ExecutionEvent("tool_use", {"name": block.name, "input": block.input}))
+                elif btype in ("server_tool_use", "mcp_tool_use"):
+                    events.append(ExecutionEvent(btype, {
+                        "name": getattr(block, "name", None),
+                        "input": getattr(block, "input", None),
+                    }))
+                elif btype and btype.endswith("_tool_result"):
+                    # web_search_tool_result, code_execution_tool_result, etc.
+                    events.append(ExecutionEvent(btype, _summarize_server_tool_result(block)))
+
+            # pause_turn = server-side loop hit its iteration cap; resume by looping.
+            if response.stop_reason == "pause_turn":
+                continue
+            if response.stop_reason != "tool_use" or not tool_uses:
+                events.append(ExecutionEvent("stop", response.stop_reason))
+                break
+
+            tool_outputs = self._execute_tools(tool_uses)
+            tool_results = []
+            for use, result in zip(tool_uses, tool_outputs):
+                events.append(ExecutionEvent("tool_result", {
+                    "name": use.name,
+                    "is_error": result.is_error,
+                    "content": result.content,
+                }))
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": use.id,
+                    "content": result.content,
+                    "is_error": result.is_error,
+                })
+            messages.append({"role": "user", "content": tool_results})
+        else:
+            events.append(ExecutionEvent("stop", "max_turns_exceeded"))
+
+        final_text = "\n".join(text_parts).strip()
+        events.append(ExecutionEvent("usage", usage.as_dict()))
+
+        if self.memory is not None and session is not None:
+            session.append("user", user_message)
+            session.append("assistant", final_text)
+            self.memory.save(session)
+
+        return ExecutionResult(text=final_text, turns=turns, events=events, usage=usage)
+
+    def stream(self, skill: Skill, user_message: str, session: Session | None = None,
+               images: list[str] | None = None) -> Iterator[ExecutionEvent]:
+        """Yield events as they happen.
+
+        Emits `text_delta` events for each token chunk from the model and
+        `tool_use` / `tool_result` / `stop` events at turn boundaries. If the
+        underlying LLM doesn't support streaming, falls back to `run()` and
+        yields the buffered events.
+        """
+        if not hasattr(self.llm, "messages_stream"):
+            result = self.run(skill, user_message, session=session)
+            yield from result.events
+            return
+
+        self._bind_session_to_ctx(session)
+        text_parts: list[str] = []
+        usage = Usage()
+        messages = self._initial_messages(session, user_message, images=images)
+        system = AnthropicLLM.cached_system(skill.system_prompt, profile=self._resolve_profile(), lessons=self._resolve_lessons())
+        tool_defs = self._tool_defs_for(skill)
+
+        # `try/finally` guarantees memory persistence even if an SDK error or
+        # tool crash aborts mid-stream — a partial answer is saved so the next
+        # turn can continue or the user can see what happened.
+        try:
+            yield from self._stream_turns(
+                skill, messages, system, tool_defs, text_parts, usage,
+            )
+        finally:
+            if self.memory is not None and session is not None:
+                session.append("user", user_message)
+                session.append("assistant", "\n".join(text_parts).strip())
+                self.memory.save(session)
+
+    def _stream_turns(
+        self,
+        skill: Skill,
+        messages: list[dict[str, Any]],
+        system: list[dict[str, Any]],
+        tool_defs: list[dict[str, Any]],
+        text_parts: list[str],
+        usage: Usage,
+    ) -> Iterator[ExecutionEvent]:
+        """Inner loop extracted so the outer stream() can wrap it in try/finally."""
+        for _ in range(MAX_TURNS):
+            with self.llm.messages_stream(
+                system=system, messages=messages, tools=tool_defs,
+            ) as stream:
+                for event in stream:
+                    etype = getattr(event, "type", None)
+                    if etype == "content_block_delta":
+                        delta = getattr(event, "delta", None)
+                        if getattr(delta, "type", None) == "text_delta" and delta is not None:
+                            yield ExecutionEvent("text_delta", delta.text)
+                final = stream.get_final_message()
+                if getattr(final, "usage", None) is not None:
+                    usage.add(final.usage)
+
+            assistant_blocks = [self._block_to_dict(b) for b in final.content]
+            messages.append({"role": "assistant", "content": assistant_blocks})
+
+            tool_uses = [b for b in final.content if getattr(b, "type", None) == "tool_use"]
+            for block in final.content:
+                btype = getattr(block, "type", None)
+                if btype == "text":
+                    text_parts.append(block.text)
+                elif btype == "tool_use":
+                    yield ExecutionEvent("tool_use", {"name": block.name, "input": block.input})
+                elif btype in ("server_tool_use", "mcp_tool_use"):
+                    yield ExecutionEvent(btype, {
+                        "name": getattr(block, "name", None),
+                        "input": getattr(block, "input", None),
+                    })
+                elif btype and btype.endswith("_tool_result"):
+                    yield ExecutionEvent(btype, _summarize_server_tool_result(block))
+
+            if final.stop_reason == "pause_turn":
+                continue
+            if final.stop_reason != "tool_use" or not tool_uses:
+                yield ExecutionEvent("stop", final.stop_reason)
+                break
+
+            tool_results = []
+            for use in tool_uses:
+                result = self._run_tool(use.name, use.input)
+                yield ExecutionEvent("tool_result", {
+                    "name": use.name,
+                    "is_error": result.is_error,
+                    "content": result.content,
+                })
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": use.id,
+                    "content": result.content,
+                    "is_error": result.is_error,
+                })
+            messages.append({"role": "user", "content": tool_results})
+        else:
+            yield ExecutionEvent("stop", "max_turns_exceeded")
+
+        yield ExecutionEvent("usage", usage.as_dict())
+
+    # ----- helpers -----
+
+    def _tool_defs_for(self, skill: Skill) -> list[dict[str, Any]]:
+        """Build the tool list the API sees for this skill, honoring its policy."""
+        return [t.to_anthropic() for t in self.tools if skill.tool_is_allowed(t.name)]
+
+    def _initial_messages(
+        self,
+        session: Session | None,
+        user_message: str,
+        images: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        messages: list[dict[str, Any]] = []
+        if session is not None:
+            for turn in session.turns:
+                messages.append({"role": turn.role, "content": turn.text})
+        if images:
+            # Multimodal user turn: text + 1..N image content blocks.
+            # Each image entry can be a data URL ("data:image/png;base64,...")
+            # or an http(s) URL — both shapes are accepted by the Anthropic
+            # API as image content sources.
+            blocks: list[dict[str, Any]] = [
+                {"type": "text", "text": user_message},
+            ]
+            for img in images:
+                blocks.append(_image_content_block(img))
+            messages.append({"role": "user", "content": blocks})
+        else:
+            messages.append({"role": "user", "content": user_message})
+        return messages
+
+    def _execute_tools(self, tool_uses: list[Any]) -> list[Any]:
+        """Run all tool calls in a turn. Fan out parallel-safe ones; serialize the rest.
+
+        Tool calls are grouped into runs of contiguous parallel-safe calls; each
+        group runs on a threadpool, and mutating calls execute inline. This
+        preserves the ordering the model requested (so a read-then-write in one
+        turn still happens in the right order).
+        """
+        results: list[Any] = [None] * len(tool_uses)
+        i = 0
+        while i < len(tool_uses):
+            if tool_uses[i].name in PARALLEL_SAFE_TOOLS:
+                j = i
+                while j < len(tool_uses) and tool_uses[j].name in PARALLEL_SAFE_TOOLS:
+                    j += 1
+                group = tool_uses[i:j]
+                if len(group) == 1:
+                    results[i] = self._run_tool(group[0].name, group[0].input)
+                else:
+                    # Cap the wall-clock wait per future; each tool already has
+                    # its own timeout via ToolContext, but a runaway / deadlocked
+                    # tool shouldn't freeze the whole turn.
+                    per_future_timeout = max(self.ctx.timeout_s * 2, 60)
+                    with ThreadPoolExecutor(max_workers=min(4, len(group))) as pool:
+                        futures = [pool.submit(self._run_tool, u.name, u.input) for u in group]
+                        for k, fut in enumerate(futures):
+                            try:
+                                results[i + k] = fut.result(timeout=per_future_timeout)
+                            except FuturesTimeoutError:
+                                from .tools import ToolResult
+                                results[i + k] = ToolResult(
+                                    f"Parallel tool '{group[k].name}' exceeded "
+                                    f"{per_future_timeout}s wall-clock cap.",
+                                    is_error=True,
+                                )
+                i = j
+            else:
+                results[i] = self._run_tool(tool_uses[i].name, tool_uses[i].input)
+                i += 1
+        return results
+
+    def _run_tool(self, name: str, args: dict[str, Any]) -> Any:
+        log = get_logger()
+        tool = self._tool_index.get(name)
+        if tool is None:
+            log.warning("tool.unknown name=%s", name)
+            from .tools import ToolResult
+            return ToolResult(f"Unknown tool: {name}", is_error=True)
+        with timed("tool.run", name=name) as fields:
+            try:
+                result = tool.func(args, self.ctx)
+            except PermissionError as e:
+                from .tools import ToolResult
+                log.warning("tool.permission_error name=%s err=%s", name, e)
+                fields["is_error"] = True
+                return ToolResult(str(e), is_error=True)
+            except Exception as e:  # noqa: BLE001 - surface tool errors to the model
+                from .tools import ToolResult
+                log.exception("tool.unhandled name=%s", name)
+                fields["is_error"] = True
+                return ToolResult(f"Tool error: {type(e).__name__}: {e}", is_error=True)
+            fields["is_error"] = result.is_error
+        if result.is_error:
+            log.info("tool.error name=%s preview=%r", name, result.content[:120])
+        return result
+
+    @staticmethod
+    def _block_to_dict(block: Any) -> dict[str, Any]:
+        btype = getattr(block, "type", None)
+        if btype == "text":
+            return {"type": "text", "text": block.text}
+        if btype == "tool_use":
+            return {"type": "tool_use", "id": block.id, "name": block.name, "input": block.input}
+        if btype == "thinking":
+            d = {"type": "thinking", "thinking": getattr(block, "thinking", "")}
+            sig = getattr(block, "signature", None)
+            if sig:
+                d["signature"] = sig
+            return d
+        # Fallback for any other block type — preserve raw via model_dump if available.
+        if hasattr(block, "model_dump"):
+            return block.model_dump()
+        return {"type": str(btype)}
