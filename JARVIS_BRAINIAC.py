@@ -75,8 +75,13 @@ DEFAULT_CONFIG = {
     "language": "auto",        # auto | en | he | ar
     "personality": "friend",   # friend | butler | concise
     "god_mode": True,
-    "anthropic_api_key": "",
     "user_name": "Sir",
+    # LLM provider priority (all FREE — no paid API needed):
+    # ollama → groq → gemini → huggingface → local
+    # Optional free env vars:
+    #   GROQ_API_KEY     (free at console.groq.com)
+    #   GEMINI_API_KEY   (free at aistudio.google.com)
+    #   HF_TOKEN         (free at huggingface.co)
 }
 
 def load_config():
@@ -99,13 +104,19 @@ CFG = load_config()
 # ========================== AI BACKEND ==========================
 class AIBrain(QObject):
     """
-    Routes prompts to (in order, no API key required):
-    1. Ollama (local, http://localhost:11434) — primary
-    2. Anthropic Claude (only if ANTHROPIC_API_KEY set)
-    3. jarvis_brainiac.orchestrator
-    4. agency.run / route
-    5. God-mode shell ('!cmd ...')
-    6. Smart conversational fallback (no LLM needed)
+    Routes prompts through FreeLLM — 100% free, no paid API keys.
+
+    Provider priority (all free):
+        1. Ollama       — local, offline, zero cost (BEST)
+                          Install: https://ollama.com
+                          Models:  ollama pull llama3.3
+        2. Groq         — cloud, free tier, ultra-fast
+                          env: GROQ_API_KEY (free at console.groq.com)
+        3. Gemini Flash — cloud, free tier (Google)
+                          env: GEMINI_API_KEY (free at aistudio.google.com)
+        4. HuggingFace  — cloud, free tier
+                          env: HF_TOKEN (free at huggingface.co)
+        5. Smart Local  — pattern-matching, always available, zero network
     """
     chunk = pyqtSignal(str)
     done  = pyqtSignal()
@@ -115,65 +126,36 @@ class AIBrain(QObject):
 
     def __init__(self):
         super().__init__()
-        self._client = None
+        self._llm = None
         self._brainiac = None
         self._agency = None
-        self._ollama_url = "http://localhost:11434"
-        self._ollama_model = None
-        self.history: deque = deque(maxlen=100)  # FIX: bounded to prevent memory leak
+        self.history: deque = deque(maxlen=100)
         self._init()
 
     def _init(self):
-        # Ollama (preferred — local, no key)
-        self._init_ollama()
-        # Anthropic (optional)
+        # FreeLLM — primary AI engine (100% free)
         try:
-            import anthropic
-            api_key = os.environ.get("ANTHROPIC_API_KEY") or CFG.get("anthropic_api_key", "")
-            if api_key:
-                self._client = anthropic.Anthropic(api_key=api_key)
-                self.status.emit("anthropic:online")
-        except Exception:
-            pass
-        # Brainiac
+            from jarvis_brainiac.free_llm import FreeLLM
+            self._llm = FreeLLM()
+            avail = self._llm.initialize()
+            primary = next((k for k, v in avail.items() if v), "local")
+            self.status.emit(f"llm:{primary}:online")
+        except Exception as e:
+            self.status.emit(f"llm:fallback ({e})")
+        # Brainiac orchestrator
         try:
             import jarvis_brainiac
             self._brainiac = jarvis_brainiac
             self.status.emit("brainiac:online")
         except Exception:
             self.status.emit("brainiac:offline")
-        # Agency
+        # Agency runtime
         try:
             import agency
             self._agency = agency
             self.status.emit("agency:online")
         except Exception:
             self.status.emit("agency:offline")
-
-    def _init_ollama(self):
-        try:
-            import urllib.request, json as _json
-            req = urllib.request.Request(self._ollama_url + "/api/tags")
-            with urllib.request.urlopen(req, timeout=2) as r:
-                data = _json.loads(r.read())
-            models = [m.get("name") for m in data.get("models", []) if m.get("name")]
-            if models:
-                # Prefer llama / qwen / mistral if available
-                preferred = ["llama3.2", "llama3.1", "llama3", "qwen2.5", "qwen", "mistral", "phi3", "gemma2"]
-                for p in preferred:
-                    for m in models:
-                        if p in m.lower():
-                            self._ollama_model = m
-                            break
-                    if self._ollama_model:
-                        break
-                if not self._ollama_model:
-                    self._ollama_model = models[0]
-                self.status.emit(f"ollama:online ({self._ollama_model})")
-            else:
-                self.status.emit("ollama:no-models")
-        except Exception as e:
-            self.status.emit(f"ollama:offline")
 
     def system_prompt(self):
         name = CFG.get("user_name", "Sir")
@@ -202,15 +184,11 @@ class AIBrain(QObject):
             if prompt.startswith("/"):
                 self._run_command(prompt[1:].strip())
                 return
-            # Try Ollama first (local, no key)
-            if self._ollama_model:
-                if self._ollama(prompt, lang):
-                    return
-            # Try Anthropic if configured
-            if self._client:
-                self._claude(prompt, lang)
+            # FreeLLM — primary (free, no API key required)
+            if self._llm:
+                self._free_llm_chat(prompt, lang)
                 return
-            # Brainiac
+            # Brainiac fallback
             if self._brainiac and hasattr(self._brainiac, 'orchestrator'):
                 orch = self._brainiac.orchestrator
                 if hasattr(orch, 'run'):
@@ -219,7 +197,7 @@ class AIBrain(QObject):
                     self.speak.emit(str(out)[:300])
                     self.done.emit()
                     return
-            # Agency
+            # Agency fallback
             if self._agency:
                 run_fn = getattr(self._agency, 'run', None) or getattr(self._agency, 'route', None)
                 if run_fn:
@@ -231,58 +209,33 @@ class AIBrain(QObject):
                         return
                     except Exception:
                         pass
-            # Smart fallback
+            # Smart local fallback
             self._smart_fallback(prompt, lang)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             self.err.emit(f"{e}\n{traceback.format_exc()}")
-            self.done.emit()  # FIX: moved from finally to prevent double-emit
+            self.done.emit()
 
-    def _ollama(self, prompt: str, lang: str) -> bool:
+    def _free_llm_chat(self, prompt: str, lang: str):
+        """Use FreeLLM — streams from Ollama if available, else full response."""
         try:
-            import urllib.request, json as _json
-            messages = [{"role": "system", "content": self.system_prompt()}]
-            for m in self.history[-12:]:
-                messages.append(m)
-            payload = _json.dumps({
-                "model": self._ollama_model,
-                "messages": messages,
-                "stream": False,
-                "options": {"temperature": 0.7, "num_predict": 600}
-            }).encode("utf-8")
-            req = urllib.request.Request(
-                self._ollama_url + "/api/chat",
-                data=payload,
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req, timeout=120) as r:
-                data = _json.loads(r.read())
-            text = data.get("message", {}).get("content", "")
-            if not text:
-                return False
-            self.history.append({"role": "assistant", "content": text})
-            self.chunk.emit(text)
-            self.speak.emit(text[:400])
-            return True
+            system = self.system_prompt()
+            history_msgs = list(self.history)[:-1]  # exclude the last user msg we just added
+            full_response = []
+            for token in self._llm.stream_chat(prompt, history=history_msgs, system=system):
+                full_response.append(token)
+                self.chunk.emit(token)
+            text = "".join(full_response)
+            if text.strip():
+                self.history.append({"role": "assistant", "content": text})
+                self.speak.emit(text[:400])
+            else:
+                # Empty response — use local fallback
+                self._smart_fallback(prompt, lang)
         except Exception as e:
-            self.err.emit(f"[ollama] {e}")
-            return False
-
-    def _claude(self, prompt: str, lang: str):
-        try:
-            messages = [{"role": m["role"], "content": m["content"]} for m in self.history[-20:]]
-            resp = self._client.messages.create(
-                model="claude-opus-4-7",  # FIX: upgraded to latest model
-                max_tokens=2048,
-                system=self.system_prompt(),
-                messages=messages,
-            )
-            text = "".join(b.text for b in resp.content if hasattr(b, "text"))
-            self.history.append({"role": "assistant", "content": text})
-            self.chunk.emit(text)
-            self.speak.emit(text[:400])
-        except Exception as e:
-            self.err.emit(f"Claude: {e}")
+            self.err.emit(f"[free_llm] {e}")
             self._smart_fallback(prompt, lang)
+        finally:
+            self.done.emit()
 
     def _god_mode_shell(self, cmd: str):
         if not CFG.get("god_mode", True):

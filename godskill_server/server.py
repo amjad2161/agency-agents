@@ -11,10 +11,13 @@ FIXES applied (Code Review 2026-05-23):
   - [MEDIUM]   get_json(force=True, silent=True) everywhere to avoid BadRequest
 """
 from __future__ import annotations
+import logging
 import os
 import sys
 import json
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 AGENCY = Path(__file__).parent.parent
 sys.path.insert(0, str(AGENCY / 'runtime'))
@@ -432,16 +435,354 @@ def api_memory_recall():
         return jsonify({'error': str(e)}), 500
 
 
+
+# ── IdeaToAgents Pipeline ─────────────────────────────────────────────────────
+try:
+    from jarvis_brainiac.idea_pipeline import IdeaPipeline
+    _pipeline = IdeaPipeline(output_base=AGENCY / 'generated_projects')
+except Exception as _pl_err:
+    _pipeline = None
+    log.warning("IdeaPipeline not loaded: %s", _pl_err)
+
+
+@app.route('/api/pipeline/analyze', methods=['POST', 'OPTIONS'])
+def api_pipeline_analyze():
+    """Analyze an idea and return the agent team + project type."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    if _pipeline is None:
+        return jsonify({'error': 'IdeaPipeline not available'}), 500
+    data = request.get_json(force=True, silent=True) or {}
+    idea = (data.get('idea') or '').strip()
+    if not idea:
+        return jsonify({'error': 'idea is required'}), 400
+    try:
+        from jarvis_brainiac.idea_pipeline import IdeaAnalyzer, AgentTeamBuilder
+        domains, project_type = IdeaAnalyzer().analyze(idea)
+        team = AgentTeamBuilder().build_team(domains)
+        return jsonify({
+            'idea': idea,
+            'project_type': project_type,
+            'domains': domains,
+            'team': [
+                {
+                    'agent': m.agent_name,
+                    'domain': m.domain,
+                    'role': m.role,
+                    'maintenance': m.maintenance_frequency,
+                }
+                for m in team
+            ],
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/pipeline/scaffold', methods=['POST', 'OPTIONS'])
+def api_pipeline_scaffold():
+    """Run the full IdeaToAgents pipeline and return the scaffold + README."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    if _pipeline is None:
+        return jsonify({'error': 'IdeaPipeline not available'}), 500
+    data = request.get_json(force=True, silent=True) or {}
+    idea = (data.get('idea') or '').strip()
+    if not idea:
+        return jsonify({'error': 'idea is required'}), 400
+    try:
+        write = bool(data.get('write_to_disk', False))
+        result = _pipeline.run(idea, write_to_disk=write)
+        out = result.to_dict()
+        # Truncate scaffold content for API response to avoid huge payloads
+        out['scaffold'] = [
+            {'path': f['path'], 'description': f['description']}
+            for f in out['scaffold']
+        ]
+        return jsonify(out)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/pipeline/maintenance', methods=['POST', 'OPTIONS'])
+def api_pipeline_maintenance():
+    """Return only the maintenance plan for an idea."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    if _pipeline is None:
+        return jsonify({'error': 'IdeaPipeline not available'}), 500
+    data = request.get_json(force=True, silent=True) or {}
+    idea = (data.get('idea') or '').strip()
+    if not idea:
+        return jsonify({'error': 'idea is required'}), 400
+    try:
+        result = _pipeline.run(idea, write_to_disk=False)
+        return jsonify({'maintenance_plan': result.maintenance_plan})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── 3D AI Website Builder ─────────────────────────────────────────────────────
+try:
+    from jarvis_brainiac.website_builder import WebsiteBuilder, STYLE_PRESETS
+    _website_builder = WebsiteBuilder(output_dir=AGENCY / 'generated_websites')
+except Exception as _wb_err:
+    _website_builder = None
+    STYLE_PRESETS = {}
+    log.warning("WebsiteBuilder not loaded: %s", _wb_err)
+
+
+@app.route('/api/website/brief', methods=['POST', 'OPTIONS'])
+def api_website_brief():
+    """Parse a brief and return the design system (colors, fonts, style)."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    if _website_builder is None:
+        return jsonify({'error': 'WebsiteBuilder not available'}), 500
+    data = request.get_json(force=True, silent=True) or {}
+    brief = (data.get('brief') or '').strip()
+    if not brief:
+        return jsonify({'error': 'brief is required'}), 400
+    try:
+        from jarvis_brainiac.website_builder import BriefParser
+        parsed = BriefParser().parse(brief)
+        return jsonify(parsed.to_dict())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/website/generate', methods=['POST', 'OPTIONS'])
+def api_website_generate():
+    """Generate a full 3D website from a brief. Returns HTML."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    if _website_builder is None:
+        return jsonify({'error': 'WebsiteBuilder not available'}), 500
+    data = request.get_json(force=True, silent=True) or {}
+    brief = (data.get('brief') or '').strip()
+    if not brief:
+        return jsonify({'error': 'brief is required'}), 400
+    style = data.get('style')  # optional override
+    try:
+        html, parsed = _website_builder.build(brief, style_override=style)
+        return jsonify({
+            'html': html,
+            'style': parsed.style,
+            'industry': parsed.industry,
+            'hero_message': parsed.hero_message,
+            'scene_type': parsed.scene_type,
+            'size_bytes': len(html.encode('utf-8')),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/website/templates', methods=['GET'])
+def api_website_templates():
+    """List all available style presets for the website builder."""
+    return jsonify({
+        name: {
+            'accent': p['accent'],
+            'bg': p['bg'],
+            'scene': p['scene'],
+            'fonts': [p['font_heading'], p['font_body']],
+            'keywords': p['keywords'][:5],
+        }
+        for name, p in STYLE_PRESETS.items()
+    })
+
+
+
+# ── Free LLM (no API keys required) ──────────────────────────────────────────
+try:
+    from jarvis_brainiac.free_llm import FreeLLM as _FreeLLM
+    _free_llm = _FreeLLM()
+    _free_llm.initialize()
+except Exception as _fllm_err:
+    _free_llm = None
+    log.warning("FreeLLM not loaded: %s", _fllm_err)
+
+
+@app.route('/api/llm/status', methods=['GET'])
+def api_llm_status():
+    """Show which free LLM providers are available."""
+    if _free_llm is None:
+        return jsonify({'error': 'FreeLLM not loaded'}), 500
+    return jsonify(_free_llm.status())
+
+
+@app.route('/api/llm/chat', methods=['POST', 'OPTIONS'])
+def api_llm_chat():
+    """
+    Chat with JARVIS using the best available free LLM.
+    Body: { "message": "...", "system": "...", "history": [...] }
+    """
+    if request.method == 'OPTIONS':
+        return '', 204
+    if _free_llm is None:
+        return jsonify({'error': 'FreeLLM not loaded'}), 500
+    data = request.get_json(force=True, silent=True) or {}
+    message = (data.get('message') or '').strip()
+    if not message:
+        return jsonify({'error': 'message is required'}), 400
+    system = data.get('system', '')
+    history = data.get('history', [])
+    try:
+        resp = _free_llm.chat(message, history=history, system=system)
+        return jsonify({
+            'text': resp.text,
+            'provider': resp.provider,
+            'model': resp.model,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── Unified Memory Engine endpoints ──────────────────────────────────────────
+
+_unified_mem = None
+
+def _get_unified_mem():
+    global _unified_mem
+    if _unified_mem is None:
+        try:
+            from jarvis_brainiac.unified_memory_engine import get_memory
+            _unified_mem = get_memory()
+        except Exception as e:
+            log.warning("UnifiedMemoryEngine unavailable: %s", e)
+    return _unified_mem
+
+
+@app.route('/api/unified/stats', methods=['GET'])
+def api_unified_stats():
+    """Complete statistics: requirements, timeline, completion %."""
+    mem = _get_unified_mem()
+    if not mem:
+        return jsonify({'error': 'unified memory unavailable'}), 503
+    return jsonify(mem.stats())
+
+
+@app.route('/api/unified/requirements', methods=['GET'])
+def api_unified_requirements():
+    """Get all requirements. Optional filters: epoch, status, source."""
+    mem = _get_unified_mem()
+    if not mem:
+        return jsonify({'error': 'unified memory unavailable'}), 503
+    epoch = request.args.get('epoch', type=int)
+    status = request.args.get('status')
+    source = request.args.get('source')
+    reqs = mem.get_requirements(epoch=epoch, status=status, source=source)
+    return jsonify({'requirements': reqs, 'total': len(reqs)})
+
+
+@app.route('/api/unified/search', methods=['GET', 'POST'])
+def api_unified_search():
+    """Full-text search across all requirements and memory entries.
+    GET: ?q=query  POST: {"query": "...", "type": "requirements|memory|all"}
+    """
+    mem = _get_unified_mem()
+    if not mem:
+        return jsonify({'error': 'unified memory unavailable'}), 503
+    data = request.get_json(force=True, silent=True) or {}
+    query = data.get('query') or request.args.get('q', '')
+    search_type = data.get('type', 'all')
+
+    if not query:
+        return jsonify({'error': 'query required'}), 400
+
+    result = {}
+    if search_type in ('requirements', 'all'):
+        result['requirements'] = mem.search_requirements(query)
+    if search_type in ('memory', 'all'):
+        hits = mem.recall(query)
+        result['memory'] = [
+            {'entry_id': h.entry_id, 'type': h.entry_type,
+             'title': h.title, 'snippet': h.snippet, 'score': h.score}
+            for h in hits
+        ]
+    return jsonify(result)
+
+
+@app.route('/api/unified/timeline', methods=['GET'])
+def api_unified_timeline():
+    """Full chronological project timeline."""
+    mem = _get_unified_mem()
+    if not mem:
+        return jsonify({'error': 'unified memory unavailable'}), 503
+    return jsonify({'timeline': mem.get_timeline()})
+
+
+@app.route('/api/unified/remember', methods=['POST'])
+def api_unified_remember():
+    """Store an arbitrary memory entry.
+    Body: {"title": "...", "content": "...", "type": "event", "importance": 5, "tags": []}
+    """
+    mem = _get_unified_mem()
+    if not mem:
+        return jsonify({'error': 'unified memory unavailable'}), 503
+    data = request.get_json(force=True, silent=True) or {}
+    title = data.get('title', '').strip()
+    content = data.get('content', '').strip()
+    if not title or not content:
+        return jsonify({'error': 'title and content required'}), 400
+    entry_id = mem.remember(
+        title=title,
+        content=content,
+        entry_type=data.get('type', 'event'),
+        importance=int(data.get('importance', 5)),
+        tags=data.get('tags', []),
+        metadata=data.get('metadata', {}),
+    )
+    return jsonify({'entry_id': entry_id, 'status': 'stored'})
+
+
+@app.route('/api/unified/add_requirement', methods=['POST'])
+def api_unified_add_requirement():
+    """Add a new user requirement.
+    Body: {"text": "...", "epoch": 5, "status": "open", "source": "session"}
+    """
+    mem = _get_unified_mem()
+    if not mem:
+        return jsonify({'error': 'unified memory unavailable'}), 503
+    data = request.get_json(force=True, silent=True) or {}
+    text = data.get('text', '').strip()
+    if not text:
+        return jsonify({'error': 'text required'}), 400
+    req_id = mem.add_requirement(
+        text=text,
+        epoch=int(data.get('epoch', 5)),
+        status=data.get('status', 'open'),
+        source=data.get('source', 'api'),
+        tags=data.get('tags', []),
+        notes=data.get('notes', ''),
+    )
+    return jsonify({'req_id': req_id, 'status': 'stored'})
+
+
+@app.route('/api/unified/export', methods=['GET'])
+def api_unified_export():
+    """Export complete memory as JSON."""
+    mem = _get_unified_mem()
+    if not mem:
+        return jsonify({'error': 'unified memory unavailable'}), 503
+    import json
+    return app.response_class(
+        response=mem.export_json(),
+        status=200,
+        mimetype='application/json'
+    )
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     host = '127.0.0.1'
     port = int(os.environ.get('GODSKILL_PORT', 8765))
-    print(f'GODSKILL Navigation Server running at http://{host}:{port}')
+    log.info("GODSKILL Navigation Server running at http://%s:%s", host, port)
     app.config['AGENCY_ROOT'] = str(AGENCY)
     # FIX [HIGH]: Heartbeat wrapped — server starts even if heartbeat fails
     try:
         from jarvis_brainiac.heartbeat import start_heartbeat
         start_heartbeat(AGENCY, interval=300)
     except Exception as _hb_err:
-        print(f'[WARNING] Heartbeat could not start: {_hb_err}')
+        log.warning("Heartbeat could not start: %s", _hb_err)
     app.run(host=host, port=port, debug=False, use_reloader=False)
+

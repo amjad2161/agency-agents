@@ -1,18 +1,48 @@
-# Ensure consistent line endings across platforms
+# Normalize all text files to LF on commit; checkout on Windows gets CRLF
+* text=auto eol=lf
+
+# Python source files — always LF
+*.py text eol=lf
+
+# Docs / config — always LF
 *.md text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
 *.sh text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+*.toml text eol=lf
+*.rst text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
 
-# Windows-only scripts must ship with CRLF or cmd.exe and Notepad
-# behave erratically. We mark them `-text` so git treats the bytes
-# as opaque — no LF normalization on commit, no CRLF conversion on
-# checkout. Whatever CRLF/LF mix we commit is what raw URL downloads
-# (which serve the index blob directly) deliver. Without this, files
-# checked into the repo with CRLF would be silently normalized to
-# LF in the index and the raw URL would serve LF — defeating the
-# whole point on Windows.
-*.bat   -text
-*.cmd   -text
-*.ps1   -text
-*.psm1  -text
+# Windows-only scripts — keep CRLF as-is (no LF conversion)
+*.bat -text
+*.cmd -text
+*.ps1 -text
+*.psm1 -text
+
+# Binary files — never touch line endings
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.mp4 binary
+*.webm binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.bundle binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary

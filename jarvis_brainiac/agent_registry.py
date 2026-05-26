@@ -4,12 +4,15 @@ across all divisions. Provides keyword/semantic lookup for the Orchestrator.
 """
 from __future__ import annotations
 
+import logging
 import re
 import json
 import hashlib
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Iterable, Optional
+
+log = logging.getLogger(__name__)
 
 
 DIVISIONS = (
@@ -60,8 +63,14 @@ class AgentRegistry:
                     name: Agent(**data) for name, data in cached.items()
                 }
                 return self.agents
-            except Exception:
-                pass  # fall through to fresh scan
+            except Exception as e:
+                # HR-002 FIX: delete corrupted cache so next run starts fresh
+                log.warning("AgentRegistry: corrupted cache (%s), deleting and rescanning", e)
+                try:
+                    self.cache_file.unlink()
+                except OSError:
+                    pass
+                # fall through to fresh scan
 
         for div in DIVISIONS:
             div_path = self.root / div
@@ -73,13 +82,18 @@ class AgentRegistry:
                     if agent:
                         self.agents[agent.name] = agent
                 except Exception as exc:  # pragma: no cover — keep scan resilient
-                    print(f"[registry] skip {md}: {exc}")
+                    log.warning("AgentRegistry: skip %s: %s", md, exc)
 
         self._persist()
         return self.agents
 
     def _parse_agent(self, path: Path, division: str) -> Optional[Agent]:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        # HR-009 FIX: proper UnicodeDecodeError handling — skip corrupted files
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as e:
+            log.warning("AgentRegistry: encoding error in %s: %s — skipping", path, e)
+            return None
         if not text.strip():
             return None
         sha = hashlib.sha256(text.encode("utf-8")).hexdigest()

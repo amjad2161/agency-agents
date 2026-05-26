@@ -17,16 +17,26 @@ FIXES (Code Review 2026-05-23):
   - [MEDIUM] Tags stored as JSON array instead of CSV → commas in tag values safe
   - [LOW]    id field added to MemoryEntry + to_dict() so callers can reference/delete entries
   - [LOW]    FTS5 recall wraps query in quotes to handle special chars gracefully
+
+FIXES (2026-05-27):
+  - [CRITICAL] isolation_level=None (autocommit) on all connections — fixes read-isolation
+               bug where new connections snapshotted DB before INSERT was visible
+  - [CRITICAL] recall() LIKE fallback now correctly searches both content and tags columns
+  - [MEDIUM]   Removed debug print statements; using stdlib logging at DEBUG level instead
+  - [LOW]      forget() no longer calls commit() in autocommit mode (was a no-op, now clean)
 """
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -53,7 +63,7 @@ class UnifiedMemory:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.dir / "memory.db"
         self.fallback_path = self.dir / "memory.jsonl"
-        # FIX [MEDIUM]: single write lock — prevents "database is locked" under threads
+        # Single write lock — prevents "database is locked" under concurrent threads
         self._lock = threading.Lock()
         self._init_db()
 
@@ -61,8 +71,10 @@ class UnifiedMemory:
     def _init_db(self) -> None:
         try:
             # isolation_level=None = autocommit — no implicit transactions
+            # CR-003 FIX: WAL journal for better concurrent reads under Flask
             con = sqlite3.connect(self.db_path, isolation_level=None)
-            con.execute("PRAGMA journal_mode=DELETE")
+            con.execute("PRAGMA journal_mode=WAL")
+            con.execute("PRAGMA synchronous=NORMAL")
             con.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS memory (
@@ -73,6 +85,8 @@ class UnifiedMemory:
                     ts TEXT NOT NULL,
                     source TEXT
                 );
+                CREATE INDEX IF NOT EXISTS memory_ts_idx ON memory(ts DESC);
+                CREATE INDEX IF NOT EXISTS memory_kind_idx ON memory(kind);
                 CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
                     content, tags, content='memory', content_rowid='id'
                 );
@@ -94,24 +108,25 @@ class UnifiedMemory:
             )
             con.close()
             self._mode = "sqlite-fts5"
+            log.debug("UnifiedMemory: SQLite FTS5+WAL backend initialised at %s", self.db_path)
         except sqlite3.OperationalError:
-            # FTS5 not available — fall back
+            # FTS5 not available — fall back to JSONL
             self._mode = "jsonl"
+            log.warning("UnifiedMemory: FTS5 unavailable, using JSONL fallback at %s", self.fallback_path)
 
     def _connect(self) -> sqlite3.Connection:
         # isolation_level=None = autocommit: every SELECT sees latest committed data.
-        # This fixes the read-isolation problem where a new connection's implicit
-        # deferred transaction would snapshot the DB before the INSERT was visible.
         con = sqlite3.connect(self.db_path, check_same_thread=False, isolation_level=None)
         con.row_factory = sqlite3.Row
-        con.execute("PRAGMA journal_mode=DELETE")
+        con.execute("PRAGMA journal_mode=WAL")  # CR-003 FIX: WAL
+        con.execute("PRAGMA synchronous=NORMAL")
         return con
 
     # --------------------------------------------------------------- public API
     def remember(self, kind: str, content: str,
                  tags: Optional[list[str]] = None,
                  source: str = "") -> MemoryEntry:
-        # FIX [MEDIUM]: tags stored as JSON array — commas in values are safe
+        """Store a memory entry and return it with its assigned id."""
         tags_list = tags or []
         entry = MemoryEntry(
             kind=kind,
@@ -122,8 +137,8 @@ class UnifiedMemory:
         )
         if self._mode == "sqlite-fts5":
             tags_json = json.dumps(tags_list)
-            with self._lock:  # FIX [MEDIUM]: serialize writes
-                con = self._connect()  # autocommit mode — no explicit commit needed
+            with self._lock:  # serialize writes to prevent "database is locked"
+                con = self._connect()  # autocommit — no explicit commit needed
                 cur = con.execute(
                     "INSERT INTO memory (kind, content, tags, ts, source) "
                     "VALUES (?, ?, ?, ?, ?)",
@@ -131,27 +146,41 @@ class UnifiedMemory:
                      entry.ts, entry.source),
                 )
                 entry.id = cur.lastrowid
-                # No con.commit() needed — isolation_level=None means autocommit
                 con.close()
-                print(f"[DEBUG REMEMBER] Inserted row id: {entry.id}, tags: {tags_json}, db_path: {self.db_path}")
+            log.debug("remember: inserted id=%s kind=%s tags=%s", entry.id, kind, tags_json)
         else:
             with self._lock:
                 with self.fallback_path.open("a", encoding="utf-8") as f:
                     f.write(json.dumps(entry.to_dict()) + "\n")
-                print(f"[DEBUG REMEMBER] Appended fallback line, fallback_path: {self.fallback_path}")
+            log.debug("remember: appended to JSONL fallback")
         return entry
 
-    def recall(self, query: str, kind: Optional[str] = None,
+    def recall(self, query: str = "", kind: Optional[str] = None,
                limit: int = 10) -> list[MemoryEntry]:
-        print(f"\n[DEBUG RECALL] Mode: {self._mode}, Query: '{query}', db_path: {self.db_path}, fallback_path: {self.fallback_path}")
+        """Search memory for entries matching query (FTS5 or LIKE fallback).
+        If query is empty, returns the most recent `limit` entries by timestamp.
+        """
+        log.debug("recall: mode=%s query=%r kind=%r limit=%s", self._mode, query, kind, limit)
         if self._mode == "sqlite-fts5":
             con = self._connect()
+            # MR-005 FIX: empty string → return most recent entries by recency
+            if not query or not query.strip():
+                sql = "SELECT * FROM memory"
+                params: list = []
+                if kind:
+                    sql += " WHERE kind = ?"
+                    params.append(kind)
+                sql += " ORDER BY ts DESC LIMIT ?"
+                params.append(limit)
+                rows = con.execute(sql, params).fetchall()
+                con.close()
+                return [self._row_to_entry(r) for r in rows]
+            # Quote the query to handle special FTS5 characters safely
+            safe_q = '"{}"'.format(query.replace('"', '""'))
             sql = (
                 "SELECT m.* FROM memory_fts JOIN memory m ON memory_fts.rowid = m.id "
                 "WHERE memory_fts MATCH ? "
             )
-            # FIX [LOW]: quote the query to handle special FTS5 chars safely
-            safe_q = '"{}"'.format(query.replace('"', '""'))
             params: list = [safe_q]
             if kind:
                 sql += "AND m.kind = ? "
@@ -160,21 +189,21 @@ class UnifiedMemory:
             params.append(limit)
             try:
                 rows = con.execute(sql, params).fetchall()
-                print(f"[DEBUG RECALL] FTS5 MATCH rows count: {len(rows)}")
-                # Fallback to LIKE on tags/content if MATCH returns empty (e.g. tokenizer mismatch)
+                log.debug("recall: FTS5 MATCH returned %d rows", len(rows))
+                # Fallback to LIKE on tags/content if MATCH returns empty
+                # (e.g. FTS5 tokenizer strips special chars in short tokens)
                 if not rows:
                     like_sql = "SELECT * FROM memory WHERE (content LIKE ? OR tags LIKE ?)"
-                    like_params = [f"%{query}%", f"%{query}%"]
+                    like_params: list = [f"%{query}%", f"%{query}%"]
                     if kind:
                         like_sql += " AND kind = ?"
                         like_params.append(kind)
                     like_sql += " ORDER BY ts DESC LIMIT ?"
                     like_params.append(limit)
                     rows = con.execute(like_sql, like_params).fetchall()
-                    print(f"[DEBUG RECALL] Fallback LIKE rows count: {len(rows)}")
-            except sqlite3.OperationalError as e:
-                print(f"[DEBUG RECALL] sqlite3.OperationalError: {e}")
-                # Fallback: simple LIKE if FTS syntax fails (e.g. empty query)
+                    log.debug("recall: LIKE fallback returned %d rows", len(rows))
+            except sqlite3.OperationalError as exc:
+                log.warning("recall: FTS5 error (%s), falling back to LIKE", exc)
                 like_sql = "SELECT * FROM memory WHERE (content LIKE ? OR tags LIKE ?)"
                 like_params = [f"%{query}%", f"%{query}%"]
                 if kind:
@@ -183,17 +212,14 @@ class UnifiedMemory:
                 like_sql += " ORDER BY ts DESC LIMIT ?"
                 like_params.append(limit)
                 rows = con.execute(like_sql, like_params).fetchall()
-                print(f"[DEBUG RECALL] Error Fallback LIKE rows count: {len(rows)}")
+                log.debug("recall: error LIKE fallback returned %d rows", len(rows))
             con.close()
             return [self._row_to_entry(r) for r in rows]
         else:
-            print(f"[DEBUG RECALL] Reading fallback file exists: {self.fallback_path.exists()}")
             if not self.fallback_path.exists():
                 return []
-            entries = []
-            file_content = self.fallback_path.read_text(encoding="utf-8")
-            print(f"[DEBUG RECALL] fallback file content lines: {len(file_content.splitlines())}")
-            for line in file_content.splitlines():
+            entries: list[MemoryEntry] = []
+            for line in self.fallback_path.read_text(encoding="utf-8").splitlines():
                 try:
                     data = json.loads(line)
                     e = MemoryEntry(
@@ -205,27 +231,29 @@ class UnifiedMemory:
                     if kind and e.kind != kind:
                         continue
                     # Match query against content or any of the tags
-                    if query.lower() in e.content.lower() or any(query.lower() in t.lower() for t in e.tags):
+                    q_lower = query.lower()
+                    if q_lower in e.content.lower() or any(q_lower in t.lower() for t in e.tags):
                         entries.append(e)
                 except Exception as exc:
-                    print(f"[DEBUG RECALL] json parse error: {exc}")
+                    log.debug("recall: JSONL parse error: %s", exc)
                     continue
-            print(f"[DEBUG RECALL] Fallback JSONL matched count: {len(entries)}")
+            log.debug("recall: JSONL matched %d entries", len(entries))
             return entries[-limit:]
 
     def forget(self, entry_id: int) -> bool:
-        """Delete a memory entry by its id. Returns True if deleted."""
+        """Delete a memory entry by its id. Returns True if a row was deleted."""
         if self._mode == "sqlite-fts5":
             with self._lock:
-                con = self._connect()
+                con = self._connect()  # autocommit — no commit() needed
                 cur = con.execute("DELETE FROM memory WHERE id = ?", (entry_id,))
                 deleted = cur.rowcount > 0
-                con.commit()
                 con.close()
+            log.debug("forget: id=%s deleted=%s", entry_id, deleted)
             return deleted
-        return False  # JSONL mode doesn't support targeted deletion
+        return False  # JSONL mode does not support targeted deletion
 
     def stats(self) -> dict:
+        """Return summary statistics for the memory store."""
         if self._mode == "sqlite-fts5":
             con = self._connect()
             total = con.execute("SELECT COUNT(*) FROM memory").fetchone()[0]
@@ -244,7 +272,7 @@ class UnifiedMemory:
 
     @staticmethod
     def _row_to_entry(row: sqlite3.Row) -> MemoryEntry:
-        # FIX [MEDIUM]: tags are now JSON; fall back to CSV split for legacy DBs
+        # Tags are now stored as JSON; fall back to CSV split for legacy DBs
         raw_tags = row["tags"] or ""
         try:
             tags = json.loads(raw_tags) if raw_tags.startswith("[") else [t for t in raw_tags.split(",") if t]

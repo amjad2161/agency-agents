@@ -1,3 +1,4 @@
+import atexit
 import time
 import threading
 import logging
@@ -23,12 +24,17 @@ class SingularityHeartbeat:
 
     # ── lazy loaders ──────────────────────────────────────────────────────────
     def _get_omni(self):
+        """CR-004 FIX: Use FreeLLM instead of dead OmniModelSingularity.
+        OmniModelSingularity was Claude-based and was removed in REQ-063.
+        FreeLLM is the correct 100%-free replacement.
+        """
         if self._omni is None:
             try:
-                from runtime.agency.singularity_core import OmniModelSingularity
-                self._omni = OmniModelSingularity(enable_caching=False)
+                from jarvis_brainiac.free_llm import get_llm
+                self._omni = get_llm()
+                log.info("[HEARTBEAT] FreeLLM loaded as reflection engine")
             except Exception as e:
-                log.warning("[HEARTBEAT] Could not load OmniModelSingularity: %s", e)
+                log.warning("[HEARTBEAT] Could not load FreeLLM: %s", e)
         return self._omni
 
     def _get_memory(self):
@@ -75,9 +81,10 @@ class SingularityHeartbeat:
             log.warning("[HEARTBEAT] Memory unavailable — skipping reflection.")
             return
 
-        # Recall recent memories (query="" returns latest rows by recency)
+        # MR-005 FIX: empty string → memory.recall returns latest N entries by recency
         try:
-            recent = memory.recall("jarvis", limit=5)
+            recent = memory.recall("", limit=5)
+
         except Exception as e:
             log.warning("[HEARTBEAT] recall() failed: %s", e)
             return
@@ -98,17 +105,12 @@ class SingularityHeartbeat:
         )
 
         try:
-            # route_request() returns SingularityResponse, not a dict
-            resp = omni.route_request(query)
-            result = resp.result
-            if hasattr(result, "to_dict"):
-                result_dict = result.to_dict()
-                insight = (result_dict.get("final_output")
-                           or result_dict.get("conclusion")
-                           or result_dict.get("answer")
-                           or str(result_dict))
-            else:
-                insight = str(result) if result else "No insights generated."
+            # CR-004 FIX: FreeLLM.chat() returns LLMResponse with .text attribute
+            llm_resp = omni.chat(
+                query,
+                system="You are JARVIS, an autonomous AI. Reflect concisely on pending tasks."
+            )
+            insight = llm_resp.text if hasattr(llm_resp, "text") else str(llm_resp)
 
             log.info("[HEARTBEAT] Self-Reflection complete (%d bytes).", len(insight))
 
@@ -130,3 +132,5 @@ def start_heartbeat(root_path, interval: int = 300) -> None:
     if _heartbeat is None:
         _heartbeat = SingularityHeartbeat(root_path)
         _heartbeat.start(interval)
+        # LR-004 FIX: register stop() with atexit for clean shutdown
+        atexit.register(_heartbeat.stop)
