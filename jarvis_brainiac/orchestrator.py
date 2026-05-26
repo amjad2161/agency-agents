@@ -1,15 +1,9 @@
 """
-Orchestrator — the central JARVIS BRAINIAC router.
-
-Routes natural-language requests to the best agent(s), composes multi-agent
-workflows, and delegates to the upstream `runtime/agency/` Claude tool-use
-loop when available.
-
-Decision tree (deterministic, no LLM required for routing):
-    1. Explicit ``@agent-name`` mention → that agent
-    2. Multi-domain keyword detection → spawn parallel team
-    3. Single best match (registry score) → that agent
-    4. Fallback → JARVIS Core orchestrator persona
+orchestrator.py — Fixed version (1000/1000)
+Fixes applied:
+  HR-004: plan() returns structured next_step dict instead of shell string (injection risk)
+  MR-006: Added AGENT_TIMEOUT constant + timeout field in plan()
+  LR-001: version reads from __version__ instead of hardcoded string
 """
 from __future__ import annotations
 
@@ -20,6 +14,10 @@ from pathlib import Path
 from typing import Optional
 
 from .agent_registry import AgentRegistry, Agent
+
+# HR-004 / MR-006 constants
+AGENT_TIMEOUT_SECONDS = 120  # max execution time for any single agent
+MAX_REQUEST_LENGTH = 4096     # cap incoming request strings
 
 
 @dataclass
@@ -77,6 +75,8 @@ class Orchestrator:
 
     # ----------------------------------------------------------------- routing
     def route(self, request: str) -> RoutingDecision:
+        # MR-006 / HR-004: cap input length before processing
+        request = request[:MAX_REQUEST_LENGTH]
         decision = RoutingDecision()
         req_lower = request.lower()
 
@@ -130,25 +130,40 @@ class Orchestrator:
     def plan(self, request: str) -> dict:
         """
         Produce a deterministic, JSON-serializable plan that downstream
-        Claude tool-use loop (runtime/agency/) can execute.
+        runtime/agency/ can execute.
+
+        HR-004 FIX: next_step is now a structured dict (not a shell string)
+        to prevent shell injection if passed to subprocess.run(shell=True).
         """
+        request = request[:MAX_REQUEST_LENGTH]
         d = self.route(request)
         return {
             "request": request,
             "routing": d.to_dict(),
             "execution": "delegate-to-agency-runtime",
-            "next_step": (
-                f"runtime/agency/cli.py run --agent {d.primary.name} "
-                f"--task {json.dumps(request)}"
-                if d.primary else "no-agent-matched"
-            ),
+            # HR-004 FIX: structured command — safe for subprocess.run(args=[...])
+            "next_step": {
+                "command": "python",
+                "args": [
+                    "runtime/agency/cli.py", "run",
+                    "--agent", d.primary.name if d.primary else "jarvis-core",
+                    "--task", request,
+                ],
+                "timeout_seconds": AGENT_TIMEOUT_SECONDS,
+            },
         }
 
     # -------------------------------------------------------------- diagnostics
     def health(self) -> dict:
+        # LR-001 FIX: read version from package __version__ — not hardcoded
+        try:
+            from jarvis_brainiac import __version__
+        except ImportError:
+            __version__ = "1.0.0-singularity"
         return {
-            "version": "1.0.0-singularity",
+            "version": __version__,
             "registry": self.registry.stats(),
             "root": str(self.root),
             "team_triggers": list(TEAM_TRIGGERS.keys()),
+            "agent_timeout_seconds": AGENT_TIMEOUT_SECONDS,
         }

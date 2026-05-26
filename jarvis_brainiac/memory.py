@@ -255,14 +255,16 @@ class UnifiedMemory:
     def stats(self) -> dict:
         """Return summary statistics for the memory store."""
         if self._mode == "sqlite-fts5":
-            con = self._connect()
-            total = con.execute("SELECT COUNT(*) FROM memory").fetchone()[0]
-            by_kind = dict(
-                con.execute(
-                    "SELECT kind, COUNT(*) FROM memory GROUP BY kind"
-                ).fetchall()
-            )
-            con.close()
+            # LR-005 FIX: acquire lock for consistent read during concurrent writes
+            with self._lock:
+                con = self._connect()
+                total = con.execute("SELECT COUNT(*) FROM memory").fetchone()[0]
+                by_kind = dict(
+                    con.execute(
+                        "SELECT kind, COUNT(*) FROM memory GROUP BY kind"
+                    ).fetchall()
+                )
+                con.close()
             return {"mode": self._mode, "total": total, "by_kind": by_kind}
         else:
             n = 0
@@ -272,12 +274,13 @@ class UnifiedMemory:
 
     @staticmethod
     def _row_to_entry(row: sqlite3.Row) -> MemoryEntry:
-        # Tags are now stored as JSON; fall back to CSV split for legacy DBs
-        raw_tags = row["tags"] or ""
+        # MR-012 FIX: removed legacy CSV tag parsing — all DBs use JSON arrays.
+        # Old CSV format was used before 2026-04-01 WAL migration.
+        raw_tags = row["tags"] or "[]"
         try:
-            tags = json.loads(raw_tags) if raw_tags.startswith("[") else [t for t in raw_tags.split(",") if t]
+            tags = json.loads(raw_tags)
         except (json.JSONDecodeError, ValueError):
-            tags = [t for t in raw_tags.split(",") if t]
+            tags = []  # broken tags — default to empty
         return MemoryEntry(
             kind=row["kind"],
             content=row["content"],

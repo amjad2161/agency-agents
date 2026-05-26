@@ -8,9 +8,13 @@ import logging
 import re
 import json
 import hashlib
+import time
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Iterable, Optional
+
+# LR-003: cache TTL — rescan after 24 hours even without force=True
+REGISTRY_CACHE_TTL_SECONDS = 86400  # 24 hours
 
 log = logging.getLogger(__name__)
 
@@ -57,20 +61,26 @@ class AgentRegistry:
     def discover(self, force: bool = False) -> dict[str, Agent]:
         """Scan all division dirs, parse frontmatter, build index."""
         if not force and self.cache_file.exists():
-            try:
-                cached = json.loads(self.cache_file.read_text(encoding="utf-8"))
-                self.agents = {
-                    name: Agent(**data) for name, data in cached.items()
-                }
-                return self.agents
-            except Exception as e:
-                # HR-002 FIX: delete corrupted cache so next run starts fresh
-                log.warning("AgentRegistry: corrupted cache (%s), deleting and rescanning", e)
+            # LR-003 FIX: respect TTL — rescan if cache is older than 24 hours
+            cache_age = time.time() - self.cache_file.stat().st_mtime
+            if cache_age > REGISTRY_CACHE_TTL_SECONDS:
+                log.info("AgentRegistry: cache expired (%.1fh old), rescanning", cache_age / 3600)
+            else:
                 try:
-                    self.cache_file.unlink()
-                except OSError:
-                    pass
-                # fall through to fresh scan
+                    cached = json.loads(self.cache_file.read_text(encoding="utf-8"))
+                    self.agents = {
+                        name: Agent(**data) for name, data in cached.items()
+                    }
+                    log.debug("AgentRegistry: loaded %d agents from cache", len(self.agents))
+                    return self.agents
+                except Exception as e:
+                    # HR-002 FIX: delete corrupted cache so next run starts fresh
+                    log.warning("AgentRegistry: corrupted cache (%s), deleting and rescanning", e)
+                    try:
+                        self.cache_file.unlink()
+                    except OSError:
+                        pass
+                    # fall through to fresh scan
 
         for div in DIVISIONS:
             div_path = self.root / div
@@ -113,10 +123,32 @@ class AgentRegistry:
             path=str(path.relative_to(self.root)),
             description=meta.get("description", "")[:500],
             color=meta.get("color", ""),
-            tools=[t.strip() for t in meta.get("tools", "").split(",") if t.strip()],
+            # MR-007 FIX: support both YAML list format and comma-separated
+            tools=self._parse_tools(meta.get("tools", "")),
             keywords=keywords[:30],
             sha256=sha,
         )
+
+    @staticmethod
+    def _parse_tools(raw: str) -> list[str]:
+        """Parse tools field from either YAML list or comma-separated string.
+        
+        Supports:
+          tools: computer, bash, browser          # comma-separated
+          tools:\n  - computer\n  - bash          # YAML list
+        """
+        if not raw or not raw.strip():
+            return []
+        # YAML list format: contains newlines or starts with '-'
+        if "\n" in raw or raw.strip().startswith("-"):
+            tools = []
+            for line in raw.splitlines():
+                t = line.strip().lstrip("-").strip().strip('"').strip("'")
+                if t:
+                    tools.append(t)
+            return tools
+        # Comma-separated format
+        return [t.strip() for t in raw.split(",") if t.strip()]
 
     @staticmethod
     def _extract_keywords(body: str) -> list[str]:
@@ -169,8 +201,13 @@ class AgentRegistry:
         by_div: dict[str, int] = {}
         for a in self.agents.values():
             by_div[a.division] = by_div.get(a.division, 0) + 1
+        cache_age_hours = None
+        if self.cache_file.exists():
+            cache_age_hours = round((time.time() - self.cache_file.stat().st_mtime) / 3600, 1)
         return {
             "total_agents": len(self.agents),
             "by_division": by_div,
             "cache_path": str(self.cache_file),
+            "cache_age_hours": cache_age_hours,
+            "cache_ttl_hours": REGISTRY_CACHE_TTL_SECONDS // 3600,
         }

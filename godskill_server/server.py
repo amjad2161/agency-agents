@@ -26,6 +26,8 @@ sys.path.insert(0, str(AGENCY))
 from flask import Flask, jsonify, request
 
 app = Flask('godskill', static_folder=str(AGENCY / 'dashboard'), static_url_path='')
+# LR-010 FIX: set request body size limit to prevent memory exhaustion
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB
 
 try:
     import JARVIS_SUPREME
@@ -764,7 +766,7 @@ def api_unified_export():
     mem = _get_unified_mem()
     if not mem:
         return jsonify({'error': 'unified memory unavailable'}), 503
-    import json
+    # MR-013 FIX: removed inline 'import json' — json is already imported at top
     return app.response_class(
         response=mem.export_json(),
         status=200,
