@@ -102,3 +102,5 @@ supreme_selftest_result.json
 .bash_write_test_2
 .write_test_2
 CUsersUser*.log
+
+.aider.conf.yml
