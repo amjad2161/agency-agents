@@ -32,7 +32,10 @@ class TestUnifiedMemoryEngine:
             UnifiedMemoryEngine, Requirement, MemoryEntry, SearchResult,
             get_memory, quick_search, quick_remember, EPOCHS, BUILTIN_REQUIREMENTS
         )
-        assert len(EPOCHS) == 5
+        # EPOCHS has 6 entries: 0 (Pre-existing) + epochs 1-5
+        assert len(EPOCHS) == 6
+        assert 0 in EPOCHS  # Pre-existing Systems
+        assert 5 in EPOCHS  # Unified Singularity
         assert len(BUILTIN_REQUIREMENTS) >= 88
 
     def test_all_88_requirements_seeded(self, mem):
@@ -193,7 +196,8 @@ class TestUnifiedMemoryEngine:
     def test_stats_per_epoch(self, mem):
         stats = mem.stats()
         per_epoch = stats['per_epoch']
-        assert len(per_epoch) == 5
+        # 6 epochs total: 0 (Pre-existing) + epochs 1-5
+        assert len(per_epoch) == 6
         for epoch_num in range(1, 6):
             assert epoch_num in per_epoch
             assert per_epoch[epoch_num]['total'] >= 1
