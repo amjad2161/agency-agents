@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agency-singularity-2030"
+version = "0.1.0"
+description = "Unified control-plane catalog and orchestration blueprint for the attached autonomous AI repositories."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+singularity-nexus = "singularity_nexus.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["singularity_nexus*"]
+
+[tool.setuptools.package-data]
+singularity_nexus = ["catalog/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

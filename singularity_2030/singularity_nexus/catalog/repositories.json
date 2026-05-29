@@ -1,0 +1,328 @@
+{
+  "modules": [
+    {
+      "slug": "agency-agents",
+      "name": "The Agency",
+      "repo_path": "..",
+      "layer": "agent-runtime",
+      "maturity": "production-shaped",
+      "vision": "A large library of persona-driven specialists plus a Python runtime that routes work to the right agent.",
+      "stack": ["Markdown personas", "Python", "FastAPI", "Anthropic SDK", "Click", "Pydantic"],
+      "capabilities": ["agent-orchestration", "skill-registry", "cross-harness-portability", "multi-agent-routing"],
+      "integration_modes": ["persona-catalog", "runtime-cli", "fastapi-service", "harness-install"],
+      "run_profiles": ["full-stack-ai-ops", "real-world-autonomy"],
+      "commands": ["pip install -e runtime", "agency list", "agency run \"review this repo\"", "agency serve"],
+      "risks": ["Large runtime surface", "Optional external keys", "Duplicate nested tree increases repository noise"]
+    },
+    {
+      "slug": "amjad2161",
+      "name": "BRAINIAC AI",
+      "repo_path": "../../amjad2161",
+      "layer": "ai-control-plane",
+      "maturity": "tested-api",
+      "vision": "A FastAPI autonomous intelligence platform exposing reasoning, navigation, communications, telemetry, security, creative, and vision modules.",
+      "stack": ["Python", "FastAPI", "Anthropic", "OpenAI", "LangChain", "Redis", "Prometheus", "Grafana"],
+      "capabilities": ["agent-orchestration", "real-world-operations", "observability", "security-analysis", "navigation-intelligence"],
+      "integration_modes": ["http-api", "cli", "docker-compose", "module-library"],
+      "run_profiles": ["full-stack-ai-ops", "real-world-autonomy"],
+      "commands": ["pip install -e .", "pytest -q", "python -m brainiac.cli serve", "docker compose up"],
+      "risks": ["Heavy dependency manifest", "Requires LLM provider keys for full behavior", "Marketing scope exceeds default local deployment"]
+    },
+    {
+      "slug": "anthropic-quickstarts",
+      "name": "Anthropic Quickstarts",
+      "repo_path": "../../anthropic-quickstarts",
+      "layer": "reference-implementation",
+      "maturity": "example-suite",
+      "vision": "Starter applications demonstrating Claude chat, tool use, financial analysis, customer support, and computer use.",
+      "stack": ["Next.js", "React", "TypeScript", "Python", "Streamlit", "Docker", "Anthropic SDK"],
+      "capabilities": ["reference-patterns", "tool-use", "computer-use", "chat-applications"],
+      "integration_modes": ["template-source", "example-app", "docker-demo"],
+      "run_profiles": ["full-stack-ai-ops", "research-to-runtime"],
+      "commands": ["npm install && npm run dev", "pytest", "docker run ghcr.io/anthropics/anthropic-quickstarts:computer-use-demo-latest"],
+      "risks": ["Demo dependencies may lag current SDK", "Computer use has explicit security warnings", "Some demos require AWS Bedrock setup"]
+    },
+    {
+      "slug": "anthropic-sdk-typescript",
+      "name": "Anthropic TypeScript SDK",
+      "repo_path": "../../anthropic-sdk-typescript",
+      "layer": "sdk",
+      "maturity": "official-client",
+      "vision": "Official TypeScript and JavaScript client for the Anthropic API across Node, browser, Deno, Bun, Bedrock, and Vertex variants.",
+      "stack": ["TypeScript", "Yarn", "Jest", "OpenAPI", "Node", "Deno", "Bun"],
+      "capabilities": ["llm-sdk", "streaming", "tool-use", "cloud-provider-adapters"],
+      "integration_modes": ["library-dependency", "example-source", "typed-api-contract"],
+      "run_profiles": ["full-stack-ai-ops", "research-to-runtime"],
+      "commands": ["yarn install", "yarn build", "yarn test", "yarn lint"],
+      "risks": ["Generated surface changes with API drift", "Browser use requires strict key handling", "Tests depend on mock server setup"]
+    },
+    {
+      "slug": "auto-save-sync",
+      "name": "Auto Save Sync",
+      "repo_path": "../../auto-save-sync",
+      "layer": "domain-application",
+      "maturity": "product-prototype",
+      "vision": "A mobile-first Hebrew and English timesheet application with anonymous auth, offline sync, manager dashboards, and server-side pay calculation.",
+      "stack": ["Vite", "React", "TypeScript", "Supabase", "Deno Edge Functions", "Tailwind", "shadcn/ui"],
+      "capabilities": ["domain-specific-execution", "offline-first", "supabase-application", "human-operations"],
+      "integration_modes": ["web-app", "supabase-backend", "pwa", "quality-target"],
+      "run_profiles": ["full-stack-ai-ops"],
+      "commands": ["npm install", "npm run dev", "npm run build", "npm run test", "npm run lint"],
+      "risks": ["README and CI drift from actual app", "Minimal test coverage", "Supabase secrets and RLS require hardening"]
+    },
+    {
+      "slug": "autonomous-trading-engine",
+      "name": "TradingCore",
+      "repo_path": "../../autonomous-trading-engine",
+      "layer": "domain-application",
+      "maturity": "high-risk-prototype",
+      "vision": "A Hebrew-heavy autonomous Gate.io trading platform for scanning, execution, backtesting, scalping, and AI trading chat.",
+      "stack": ["Vite", "React", "TypeScript", "Supabase", "Deno Edge Functions", "Gate.io", "PWA"],
+      "capabilities": ["domain-specific-execution", "real-world-operations", "financial-automation", "simulation-and-backtest"],
+      "integration_modes": ["web-app", "supabase-functions", "exchange-api", "operator-console"],
+      "run_profiles": ["real-world-autonomy"],
+      "commands": ["npm install", "npm run dev", "npm run build", "npm run test", "npm run lint"],
+      "risks": ["Real-money trading risk", "Edge functions disable JWT verification", "Open RLS policies", "Placeholder tests only"]
+    },
+    {
+      "slug": "claude-code",
+      "name": "Claude Code Public Assets",
+      "repo_path": "../../claude-code",
+      "layer": "harness-extension",
+      "maturity": "official-extension-assets",
+      "vision": "Public Claude Code plugins, settings, MDM examples, and GitHub automation assets for agentic coding workflows.",
+      "stack": ["Markdown", "JSON", "Python examples", "TypeScript scripts", "GitHub Actions"],
+      "capabilities": ["harness-plugins", "enterprise-rollout", "workflow-templates", "agentic-coding"],
+      "integration_modes": ["plugin-template", "settings-template", "mdm-reference"],
+      "run_profiles": ["full-stack-ai-ops", "research-to-runtime"],
+      "commands": ["claude", "npx ts-node scripts/sweep.ts"],
+      "risks": ["Not the CLI source", "Plugins assume Claude Code runtime", "Some examples are unsupported community assets"]
+    },
+    {
+      "slug": "claude-code-abc",
+      "name": "Claude Code ABC",
+      "repo_path": "../../claude-code-abc",
+      "layer": "research-archive",
+      "maturity": "research-only",
+      "vision": "An unofficial mirrored source snapshot useful for studying agentic CLI architecture, tools, MCP, memory, and TUI patterns.",
+      "stack": ["TypeScript", "React Ink", "Commander", "Bun-oriented imports", "Anthropic SDK"],
+      "capabilities": ["reference-patterns", "agentic-cli-research", "tool-orchestration-research", "mcp-research"],
+      "integration_modes": ["read-only-reference", "architecture-study"],
+      "run_profiles": ["research-to-runtime"],
+      "commands": ["npm install && npm run build && node dist/main.js"],
+      "risks": ["Proprietary/legal risk", "Incomplete build config", "Stale relative to shipped CLI", "No test suite"]
+    },
+    {
+      "slug": "comfyui",
+      "name": "ComfyUI",
+      "repo_path": "../../ComfyUI",
+      "layer": "creative-runtime",
+      "maturity": "large-upstream",
+      "vision": "A node-graph runtime and UI for image, video, 3D, and audio generation workflows.",
+      "stack": ["Python", "PyTorch", "aiohttp", "SQLAlchemy", "Alembic", "Frontend package"],
+      "capabilities": ["creative-generation", "workflow-graphs", "gpu-inference", "media-pipelines"],
+      "integration_modes": ["http-workflow-api", "headless-batch", "ui-runtime", "custom-nodes"],
+      "run_profiles": ["full-stack-ai-ops"],
+      "commands": ["pip install -r requirements.txt", "python main.py", "python main.py --enable-manager", "pytest tests/inference"],
+      "risks": ["GPU and model-weight requirements", "Custom node compatibility drift", "External API nodes require keys and billing"]
+    },
+    {
+      "slug": "cors-anywhere",
+      "name": "CORS Anywhere",
+      "repo_path": "../../cors-anywhere",
+      "layer": "infrastructure",
+      "maturity": "small-stable-stale",
+      "vision": "A minimal CORS reverse proxy for local development and controlled browser integration tests.",
+      "stack": ["Node.js", "http-proxy", "proxy-from-env", "Mocha", "Supertest"],
+      "capabilities": ["dev-proxy", "integration-testing", "web-compatibility"],
+      "integration_modes": ["local-proxy", "test-helper", "dev-server"],
+      "run_profiles": ["full-stack-ai-ops", "real-world-autonomy"],
+      "commands": ["npm install", "node server.js", "npm test", "npm run test-coverage"],
+      "risks": ["Open proxy abuse if misconfigured", "Old dependencies", "Not a production API gateway"]
+    },
+    {
+      "slug": "dji-owner",
+      "name": "SkyCore",
+      "repo_path": "../../Dji-owner",
+      "layer": "domain-application",
+      "maturity": "alpha-realworld",
+      "vision": "A drone-operations platform and legal pilot playbook spanning simulator, Tello, MAVLink, and DJI bridge adapters.",
+      "stack": ["Python", "Click", "Pydantic", "FastAPI optional", "MAVSDK optional", "MQTT optional", "Docker Compose"],
+      "capabilities": ["real-world-operations", "drone-ops", "navigation-intelligence", "telemetry", "simulation-and-backtest"],
+      "integration_modes": ["cli", "http-api", "simulator", "hardware-adapter", "mission-template"],
+      "run_profiles": ["real-world-autonomy"],
+      "commands": ["pip install -e \".[api,analytics]\"", "skycore serve --backend simulator", "docker compose up", "pytest"],
+      "risks": ["Alpha maturity", "Real hardware bridge is external", "Regulatory and safety constraints", "Many optional heavy extras"]
+    },
+    {
+      "slug": "everything-claude-code",
+      "name": "Everything Claude Code",
+      "repo_path": "../../everything-claude-code",
+      "layer": "quality-harness",
+      "maturity": "production-grade-plugin",
+      "vision": "A production-ready AI coding plugin with agents, skills, hooks, rules, MCP configs, tests, and installation profiles.",
+      "stack": ["Node.js", "Markdown", "JSON", "Yarn", "Python helpers", "Rust alpha"],
+      "capabilities": ["agent-orchestration", "quality-gates", "skill-registry", "hooks", "mcp-configs", "cross-harness-portability"],
+      "integration_modes": ["plugin-install", "workflow-library", "hook-runtime", "quality-gate"],
+      "run_profiles": ["full-stack-ai-ops", "real-world-autonomy", "research-to-runtime"],
+      "commands": ["npm install", "./install.sh --profile full", "npm test", "npm run harness:audit"],
+      "risks": ["Large cognitive surface", "Rules require separate install path", "Some command surfaces are legacy"]
+    },
+    {
+      "slug": "mythos",
+      "name": "Mythos",
+      "repo_path": "../../Mythos",
+      "layer": "agent-runtime",
+      "maturity": "tested-core",
+      "vision": "A general-purpose autonomous AI agent that plans goals, executes tools, monitors loops, stores memory, and concludes work.",
+      "stack": ["Python", "Anthropic", "OpenAI", "pytest", "setuptools"],
+      "capabilities": ["agent-orchestration", "tool-enabled-autonomy", "memory", "planner-executor-loop"],
+      "integration_modes": ["cli", "library", "tool-registry", "automation-brain"],
+      "run_profiles": ["full-stack-ai-ops", "real-world-autonomy"],
+      "commands": ["pip install -e \".[dev]\"", "python main.py --provider stub \"goal\"", "mythos \"goal\"", "pytest"],
+      "risks": ["Shell tool is unsafe without sandboxing", "No domain tools by default", "Default Opus model can be costly"]
+    },
+    {
+      "slug": "skills",
+      "name": "Anthropic Agent Skills",
+      "repo_path": "../../skills",
+      "layer": "skill-standard",
+      "maturity": "reference-content",
+      "vision": "Official reference implementation of Agent Skills with SKILL.md instructions and optional scripts/resources.",
+      "stack": ["Markdown", "YAML frontmatter", "Python scripts", "Shell scripts", "Claude Code plugin metadata"],
+      "capabilities": ["skill-registry", "reference-patterns", "document-automation", "cross-harness-portability"],
+      "integration_modes": ["skill-template", "plugin-source", "document-tooling"],
+      "run_profiles": ["full-stack-ai-ops", "research-to-runtime"],
+      "commands": ["/plugin install document-skills@anthropic-agent-skills", "python skills/docx/ooxml/scripts/pack.py"],
+      "risks": ["Reference content rather than framework", "License split for document skills", "No repo-level test runner"]
+    },
+    {
+      "slug": "superagi",
+      "name": "SuperAGI",
+      "repo_path": "../../SuperAGI",
+      "layer": "agent-platform",
+      "maturity": "large-self-hosted",
+      "vision": "A dev-first platform to build, deploy, and run autonomous agents with toolkits, vector memory, workflows, GUI, and marketplace integrations.",
+      "stack": ["Python", "FastAPI", "Celery", "PostgreSQL", "Redis", "Next.js", "Nginx", "Docker Compose"],
+      "capabilities": ["agent-orchestration", "tool-marketplace", "vector-memory", "workflow-runtime", "human-operations"],
+      "integration_modes": ["docker-stack", "http-api", "gui", "toolkit-extension"],
+      "run_profiles": ["full-stack-ai-ops"],
+      "commands": ["cp config_template.yaml config.yaml", "docker compose -f docker-compose.yaml up --build", "cd gui && npm run dev"],
+      "risks": ["Heavy ops footprint", "Aged dependency pins", "External key and marketplace coupling"]
+    },
+    {
+      "slug": "system-prompts-and-models-of-ai-tools",
+      "name": "System Prompts and Models of AI Tools",
+      "repo_path": "../../system-prompts-and-models-of-ai-tools",
+      "layer": "research-archive",
+      "maturity": "read-only-archive",
+      "vision": "A community-curated archive of captured system prompts and tool schemas from AI coding products.",
+      "stack": ["Text", "JSON", "YAML", "Markdown"],
+      "capabilities": ["prompt-research", "tool-schema-research", "reference-patterns", "competitive-analysis"],
+      "integration_modes": ["read-only-reference", "eval-baseline", "prompt-diff-source"],
+      "run_profiles": ["research-to-runtime"],
+      "commands": ["read-only archive"],
+      "risks": ["Unknown provenance", "Potential legal and ToS concerns", "Stale snapshots", "No validation tooling"]
+    },
+    {
+      "slug": "tradingboy",
+      "name": "Tradingboy",
+      "repo_path": "../../tradingboy",
+      "layer": "placeholder",
+      "maturity": "stub",
+      "vision": "A placeholder for a future lightweight trading bot or CLI companion to the autonomous trading engine.",
+      "stack": ["README only"],
+      "capabilities": ["financial-automation", "future-bot-shell", "domain-specific-execution"],
+      "integration_modes": ["future-cli", "thin-client", "placeholder-contract"],
+      "run_profiles": ["real-world-autonomy"],
+      "commands": ["no runnable commands yet"],
+      "risks": ["No implementation", "Scope overlaps autonomous-trading-engine until boundaries are defined"]
+    }
+  ],
+  "integration_edges": [
+    {
+      "source": "everything-claude-code",
+      "target": "agency-agents",
+      "mode": "quality-governed-persona-runtime",
+      "contract": "ECC provides repeatable engineering workflows and gates; Agency provides domain specialists and routing."
+    },
+    {
+      "source": "skills",
+      "target": "everything-claude-code",
+      "mode": "skill-format-standardization",
+      "contract": "Anthropic Agent Skills define portable SKILL.md conventions that ECC can curate and operationalize."
+    },
+    {
+      "source": "anthropic-sdk-typescript",
+      "target": "anthropic-quickstarts",
+      "mode": "sdk-to-example",
+      "contract": "The SDK is the production dependency; quickstarts demonstrate working tool-use and app patterns."
+    },
+    {
+      "source": "claude-code",
+      "target": "everything-claude-code",
+      "mode": "official-template-to-expanded-plugin",
+      "contract": "Claude Code assets provide official plugin shapes; ECC expands them into a broader workflow system."
+    },
+    {
+      "source": "system-prompts-and-models-of-ai-tools",
+      "target": "claude-code-abc",
+      "mode": "research-correlation",
+      "contract": "Prompt and tool-schema archives can be compared with mirrored implementation patterns for research only."
+    },
+    {
+      "source": "mythos",
+      "target": "autonomous-trading-engine",
+      "mode": "analysis-and-automation-brain",
+      "contract": "Mythos can plan backtests, inspect logs, and operate safe tooling around the trading system."
+    },
+    {
+      "source": "tradingboy",
+      "target": "autonomous-trading-engine",
+      "mode": "future-thin-bot-client",
+      "contract": "Tradingboy can become a small CLI or worker that consumes the trading engine's bounded APIs."
+    },
+    {
+      "source": "amjad2161",
+      "target": "dji-owner",
+      "mode": "navigation-and-telemetry-intelligence",
+      "contract": "BRAINIAC modules can enrich SkyCore missions with navigation, satellite, telemetry, and security capabilities."
+    },
+    {
+      "source": "superagi",
+      "target": "amjad2161",
+      "mode": "agent-platform-to-specialized-api",
+      "contract": "SuperAGI can invoke BRAINIAC modules as custom tools through HTTP or Python adapters."
+    },
+    {
+      "source": "superagi",
+      "target": "comfyui",
+      "mode": "agent-triggered-media-workflows",
+      "contract": "SuperAGI tools can submit workflow JSON to ComfyUI for creative generation jobs."
+    },
+    {
+      "source": "dji-owner",
+      "target": "comfyui",
+      "mode": "flight-media-postproduction",
+      "contract": "SkyCore flight media can feed ComfyUI workflows for cinematic post-processing."
+    },
+    {
+      "source": "cors-anywhere",
+      "target": "auto-save-sync",
+      "mode": "local-dev-proxy",
+      "contract": "CORS Anywhere can support local browser development where third-party services block direct requests."
+    },
+    {
+      "source": "cors-anywhere",
+      "target": "superagi",
+      "mode": "local-dev-proxy",
+      "contract": "CORS Anywhere can support local GUI and API experiments, never as an open production proxy."
+    },
+    {
+      "source": "agency-agents",
+      "target": "auto-save-sync",
+      "mode": "domain-review-swarm",
+      "contract": "Agency personas can review payroll, UX, i18n, and security surfaces of the timesheet application."
+    }
+  ]
+}
