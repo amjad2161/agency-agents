@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from .catalog import load_catalog
+from .external import load_external_opportunities
 from .orchestrator import PROFILES, SingularityOrchestrator
 
 
@@ -51,11 +52,38 @@ def build_parser() -> argparse.ArgumentParser:
     profile.add_argument("slug", choices=sorted(PROFILES))
     profile.add_argument("--format", choices=("text", "json"), default="text")
 
+    opportunities = subparsers.add_parser("opportunities", help="List GitHub enhancement opportunities")
+    opportunities.add_argument("--catalog", help="Optional path to an external opportunities JSON file")
+    opportunities.add_argument("--module", help="Filter by local module slug")
+    opportunities.add_argument("--layer", help="Filter by strengthened local layer")
+    opportunities.add_argument("--top", type=int, help="Return the top N usable opportunities")
+    opportunities.add_argument("--format", choices=("text", "json"), default="text")
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
+
+    if args.command == "opportunities":
+        external = load_external_opportunities(args.catalog)
+        selected = external.opportunities
+        if args.module:
+            selected = tuple(item for item in selected if args.module in item.relevant_modules)
+        if args.layer:
+            selected = tuple(item for item in selected if args.layer in item.strengthens_layers)
+        if args.top is not None:
+            usable = [item for item in selected if item.adoption_mode != "research-only"]
+            selected = tuple(sorted(usable, key=lambda item: (-item.priority_score, -item.stars, item.slug))[: args.top])
+
+        payload = {
+            "source": external.source,
+            "searched_at": external.searched_at,
+            "opportunities": [item.to_dict() for item in selected],
+        }
+        _emit(payload, args.format)
+        return
+
     catalog = load_catalog(args.catalog)
     orchestrator = SingularityOrchestrator(catalog)
 

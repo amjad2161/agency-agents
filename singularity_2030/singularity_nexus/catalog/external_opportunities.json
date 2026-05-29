@@ -1,0 +1,934 @@
+{
+  "source": "GitHub repository search via gh CLI",
+  "searched_at": "2026-05-29T08:50:00Z",
+  "opportunities": [
+    {
+      "slug": "langgraph",
+      "name_with_owner": "langchain-ai/langgraph",
+      "url": "https://github.com/langchain-ai/langgraph",
+      "description": "Build resilient agents.",
+      "stars": 33296,
+      "license_key": "mit",
+      "license_name": "MIT License",
+      "updated_at": "2026-05-29T08:36:44Z",
+      "domain": "agent-orchestration",
+      "strengthens_layers": [
+        "agent-runtime",
+        "ai-control-plane",
+        "quality-harness"
+      ],
+      "relevant_modules": [
+        "agency-agents",
+        "mythos",
+        "amjad2161",
+        "everything-claude-code"
+      ],
+      "adoption_mode": "adapter-integration",
+      "recommendation": "Use its graph-state model as the reference pattern for durable, inspectable agent workflows and add adapters rather than replacing current runtimes.",
+      "risks": [
+        "Avoid framework sprawl by wrapping only durable graph primitives",
+        "Keep existing CLI and persona catalogs as separate boundaries"
+      ],
+      "tags": [
+        "graphs",
+        "agents",
+        "durability",
+        "state-machines"
+      ],
+      "priority_score": 97,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "langchain",
+      "name_with_owner": "langchain-ai/langchain",
+      "url": "https://github.com/langchain-ai/langchain",
+      "description": "The agent engineering platform.",
+      "stars": 137943,
+      "license_key": "mit",
+      "license_name": "MIT License",
+      "updated_at": "2026-05-29T08:41:43Z",
+      "domain": "agent-platform",
+      "strengthens_layers": [
+        "agent-runtime",
+        "reference-implementation"
+      ],
+      "relevant_modules": [
+        "mythos",
+        "amjad2161",
+        "anthropic-quickstarts"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Mine interface patterns for tools, retrievers, callbacks, and provider abstraction; keep the Singularity contract framework-neutral.",
+      "risks": [
+        "Large dependency surface",
+        "Version churn can leak into domain apps if used directly everywhere"
+      ],
+      "tags": [
+        "tools",
+        "retrieval",
+        "providers",
+        "callbacks"
+      ],
+      "priority_score": 87,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "openai-agents-python",
+      "name_with_owner": "openai/openai-agents-python",
+      "url": "https://github.com/openai/openai-agents-python",
+      "description": "A lightweight, powerful framework for multi-agent workflows.",
+      "stars": 26741,
+      "license_key": "mit",
+      "license_name": "MIT License",
+      "updated_at": "2026-05-29T08:42:39Z",
+      "domain": "agent-orchestration",
+      "strengthens_layers": [
+        "agent-runtime",
+        "reference-implementation"
+      ],
+      "relevant_modules": [
+        "mythos",
+        "agency-agents",
+        "anthropic-quickstarts"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Study handoff, guardrail, and tool declaration ergonomics for the next Agency runtime interface.",
+      "risks": [
+        "Provider-specific examples should not become a hard dependency",
+        "Keep Anthropic SDK paths first-class"
+      ],
+      "tags": [
+        "handoffs",
+        "guardrails",
+        "tools",
+        "multi-agent"
+      ],
+      "priority_score": 85,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "microsoft-agent-framework",
+      "name_with_owner": "microsoft/agent-framework",
+      "url": "https://github.com/microsoft/agent-framework",
+      "description": "A framework for building, orchestrating and deploying AI agents and multi-agent workflows with support for Python and .NET.",
+      "stars": 10842,
+      "license_key": "mit",
+      "license_name": "MIT License",
+      "updated_at": "2026-05-29T08:18:45Z",
+      "domain": "enterprise-agent-framework",
+      "strengthens_layers": [
+        "agent-runtime",
+        "harness-extension",
+        "ai-control-plane"
+      ],
+      "relevant_modules": [
+        "amjad2161",
+        "agency-agents",
+        "everything-claude-code"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Use as enterprise architecture reference for typed agent deployments, not as the only orchestration substrate.",
+      "risks": [
+        "Cross-language scope can overcomplicate this Python/TypeScript workspace",
+        "Validate maturity before production adoption"
+      ],
+      "tags": [
+        "enterprise",
+        "python",
+        ".net",
+        "deployment"
+      ],
+      "priority_score": 80,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "crewai",
+      "name_with_owner": "crewAIInc/crewAI",
+      "url": "https://github.com/crewAIInc/crewAI",
+      "description": "Framework for orchestrating role-playing, autonomous AI agents.",
+      "stars": 52414,
+      "license_key": "mit",
+      "license_name": "MIT License",
+      "updated_at": "2026-05-29T08:45:13Z",
+      "domain": "role-based-agents",
+      "strengthens_layers": [
+        "agent-runtime",
+        "skill-standard"
+      ],
+      "relevant_modules": [
+        "agency-agents",
+        "mythos",
+        "superagi"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Adapt crew/role/task vocabulary to formalize Agency personas into executable teams.",
+      "risks": [
+        "Avoid duplicating existing persona taxonomy",
+        "Test delegation contracts before exposing autonomous execution"
+      ],
+      "tags": [
+        "roles",
+        "crews",
+        "delegation",
+        "teams"
+      ],
+      "priority_score": 84,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "autogen",
+      "name_with_owner": "microsoft/autogen",
+      "url": "https://github.com/microsoft/autogen",
+      "description": "A programming framework for agentic AI.",
+      "stars": 58509,
+      "license_key": "cc-by-4.0",
+      "license_name": "Creative Commons Attribution 4.0 International",
+      "updated_at": "2026-05-29T08:10:01Z",
+      "domain": "multi-agent-research",
+      "strengthens_layers": [
+        "agent-runtime",
+        "research-archive"
+      ],
+      "relevant_modules": [
+        "agency-agents",
+        "superagi",
+        "system-prompts-and-models-of-ai-tools"
+      ],
+      "adoption_mode": "research-only",
+      "recommendation": "Use as conceptual research for conversation patterns and multi-agent protocols; do not copy implementation without license review.",
+      "risks": [
+        "CC-BY licensing may not fit copied source code",
+        "Research findings need independent implementation"
+      ],
+      "tags": [
+        "conversation",
+        "multi-agent",
+        "research",
+        "protocols"
+      ],
+      "priority_score": 68,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "llama-index",
+      "name_with_owner": "run-llama/llama_index",
+      "url": "https://github.com/run-llama/llama_index",
+      "description": "LlamaIndex is the leading document agent and OCR platform.",
+      "stars": 49746,
+      "license_key": "mit",
+      "license_name": "MIT License",
+      "updated_at": "2026-05-29T08:24:02Z",
+      "domain": "rag-and-document-agents",
+      "strengthens_layers": [
+        "agent-runtime",
+        "domain-application",
+        "reference-implementation"
+      ],
+      "relevant_modules": [
+        "skills",
+        "auto-save-sync",
+        "amjad2161",
+        "anthropic-quickstarts"
+      ],
+      "adoption_mode": "adapter-integration",
+      "recommendation": "Use for document/OCR/RAG adapters around timesheets, agent skills, and knowledge-base ingestion.",
+      "risks": [
+        "Keep indexed data ACL-aware",
+        "Avoid coupling every domain app to one retrieval stack"
+      ],
+      "tags": [
+        "rag",
+        "documents",
+        "ocr",
+        "indexes"
+      ],
+      "priority_score": 88,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "haystack",
+      "name_with_owner": "deepset-ai/haystack",
+      "url": "https://github.com/deepset-ai/haystack",
+      "description": "Open-source AI orchestration framework for context-engineered, production-ready LLM applications.",
+      "stars": 25409,
+      "license_key": "apache-2.0",
+      "license_name": "Apache License 2.0",
+      "updated_at": "2026-05-29T08:24:10Z",
+      "domain": "llm-pipelines",
+      "strengthens_layers": [
+        "agent-runtime",
+        "ai-control-plane"
+      ],
+      "relevant_modules": [
+        "amjad2161",
+        "mythos",
+        "anthropic-quickstarts"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Borrow explicit pipeline composition ideas for retrieval, routing, memory, generation, and evaluation.",
+      "risks": [
+        "Pipeline abstraction can duplicate existing agent loops",
+        "Benchmark before adding dependencies"
+      ],
+      "tags": [
+        "pipelines",
+        "rag",
+        "routing",
+        "memory"
+      ],
+      "priority_score": 79,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "langfuse",
+      "name_with_owner": "langfuse/langfuse",
+      "url": "https://github.com/langfuse/langfuse",
+      "description": "Open source LLM engineering platform: observability, metrics, evals, prompt management, playground, and datasets.",
+      "stars": 28176,
+      "license_key": "other",
+      "license_name": "Other",
+      "updated_at": "2026-05-29T08:43:40Z",
+      "domain": "llm-observability",
+      "strengthens_layers": [
+        "quality-harness",
+        "ai-control-plane",
+        "agent-runtime"
+      ],
+      "relevant_modules": [
+        "everything-claude-code",
+        "agency-agents",
+        "mythos",
+        "amjad2161"
+      ],
+      "adoption_mode": "adapter-integration",
+      "recommendation": "Integrate through APIs/OpenTelemetry-style traces for prompt, cost, latency, and evaluation visibility.",
+      "risks": [
+        "License is not simple MIT/Apache",
+        "Do not vendor source without legal review"
+      ],
+      "tags": [
+        "observability",
+        "traces",
+        "evals",
+        "prompts"
+      ],
+      "priority_score": 91,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "phoenix",
+      "name_with_owner": "Arize-ai/phoenix",
+      "url": "https://github.com/Arize-ai/phoenix",
+      "description": "AI Observability & Evaluation.",
+      "stars": 9894,
+      "license_key": "other",
+      "license_name": "Other",
+      "updated_at": "2026-05-29T08:46:11Z",
+      "domain": "ai-observability",
+      "strengthens_layers": [
+        "quality-harness",
+        "ai-control-plane"
+      ],
+      "relevant_modules": [
+        "everything-claude-code",
+        "amjad2161",
+        "agency-agents"
+      ],
+      "adoption_mode": "adapter-integration",
+      "recommendation": "Use as an evaluation and trace analysis integration candidate alongside Langfuse.",
+      "risks": [
+        "License review required",
+        "Pick one observability spine to avoid duplicate telemetry"
+      ],
+      "tags": [
+        "observability",
+        "evaluation",
+        "traces"
+      ],
+      "priority_score": 77,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "opentelemetry-collector",
+      "name_with_owner": "open-telemetry/opentelemetry-collector",
+      "url": "https://github.com/open-telemetry/opentelemetry-collector",
+      "description": "OpenTelemetry Collector.",
+      "stars": 7071,
+      "license_key": "apache-2.0",
+      "license_name": "Apache License 2.0",
+      "updated_at": "2026-05-29T00:50:03Z",
+      "domain": "telemetry-pipeline",
+      "strengthens_layers": [
+        "infrastructure",
+        "quality-harness",
+        "ai-control-plane"
+      ],
+      "relevant_modules": [
+        "everything-claude-code",
+        "amjad2161",
+        "superagi",
+        "agency-agents"
+      ],
+      "adoption_mode": "adapter-integration",
+      "recommendation": "Make OpenTelemetry the neutral trace/log/metric contract for all autonomous modules.",
+      "risks": [
+        "Telemetry volume can become costly",
+        "Define semantic conventions for agent events before broad rollout"
+      ],
+      "tags": [
+        "otel",
+        "traces",
+        "metrics",
+        "logs"
+      ],
+      "priority_score": 92,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "backstage",
+      "name_with_owner": "backstage/backstage",
+      "url": "https://github.com/backstage/backstage",
+      "description": "Backstage is an open framework for building developer portals.",
+      "stars": 33466,
+      "license_key": "apache-2.0",
+      "license_name": "Apache License 2.0",
+      "updated_at": "2026-05-29T08:43:07Z",
+      "domain": "developer-portal",
+      "strengthens_layers": [
+        "quality-harness",
+        "infrastructure"
+      ],
+      "relevant_modules": [
+        "everything-claude-code",
+        "agency-agents",
+        "skills"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Adapt service-catalog concepts into a lightweight Singularity module registry before considering a full portal.",
+      "risks": [
+        "Full Backstage may be operationally heavy",
+        "Start with catalog YAML/JSON and health probes"
+      ],
+      "tags": [
+        "service-catalog",
+        "developer-portal",
+        "scorecards"
+      ],
+      "priority_score": 83,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "temporal",
+      "name_with_owner": "temporalio/temporal",
+      "url": "https://github.com/temporalio/temporal",
+      "description": "Temporal service.",
+      "stars": 20588,
+      "license_key": "mit",
+      "license_name": "MIT License",
+      "updated_at": "2026-05-29T08:05:09Z",
+      "domain": "durable-workflows",
+      "strengthens_layers": [
+        "infrastructure",
+        "agent-runtime",
+        "domain-application"
+      ],
+      "relevant_modules": [
+        "mythos",
+        "superagi",
+        "autonomous-trading-engine",
+        "dji-owner",
+        "auto-save-sync"
+      ],
+      "adoption_mode": "adapter-integration",
+      "recommendation": "Use for long-running, retryable, auditable workflows once module contracts stabilize.",
+      "risks": [
+        "Operational overhead",
+        "Avoid before workflow boundaries are stable"
+      ],
+      "tags": [
+        "durability",
+        "workflow",
+        "retries",
+        "audit"
+      ],
+      "priority_score": 90,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "prefect",
+      "name_with_owner": "PrefectHQ/prefect",
+      "url": "https://github.com/PrefectHQ/prefect",
+      "description": "Workflow orchestration framework for building resilient data pipelines in Python.",
+      "stars": 22495,
+      "license_key": "apache-2.0",
+      "license_name": "Apache License 2.0",
+      "updated_at": "2026-05-29T08:07:48Z",
+      "domain": "python-workflows",
+      "strengthens_layers": [
+        "infrastructure",
+        "agent-runtime",
+        "domain-application"
+      ],
+      "relevant_modules": [
+        "mythos",
+        "amjad2161",
+        "auto-save-sync",
+        "autonomous-trading-engine"
+      ],
+      "adoption_mode": "adapter-integration",
+      "recommendation": "Use for Python-native scheduled workflows, backtests, sync jobs, and health checks before heavier workflow engines.",
+      "risks": [
+        "Do not split orchestration between too many workflow engines",
+        "Clarify Temporal vs Prefect boundaries"
+      ],
+      "tags": [
+        "python",
+        "scheduling",
+        "pipelines",
+        "health-checks"
+      ],
+      "priority_score": 86,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "airflow",
+      "name_with_owner": "apache/airflow",
+      "url": "https://github.com/apache/airflow",
+      "description": "A platform to programmatically author, schedule, and monitor workflows.",
+      "stars": 45584,
+      "license_key": "apache-2.0",
+      "license_name": "Apache License 2.0",
+      "updated_at": "2026-05-29T08:34:29Z",
+      "domain": "batch-workflows",
+      "strengthens_layers": [
+        "infrastructure",
+        "domain-application"
+      ],
+      "relevant_modules": [
+        "auto-save-sync",
+        "autonomous-trading-engine",
+        "amjad2161"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Use DAG and scheduling concepts for batch jobs; only deploy Airflow if real batch complexity appears.",
+      "risks": [
+        "Heavy for the current control plane",
+        "May duplicate Prefect/Temporal"
+      ],
+      "tags": [
+        "dag",
+        "batch",
+        "scheduler",
+        "monitoring"
+      ],
+      "priority_score": 70,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "dagster",
+      "name_with_owner": "dagster-io/dagster",
+      "url": "https://github.com/dagster-io/dagster",
+      "description": "An orchestration platform for the development, production, and observation of data assets.",
+      "stars": 15588,
+      "license_key": "apache-2.0",
+      "license_name": "Apache License 2.0",
+      "updated_at": "2026-05-29T08:07:44Z",
+      "domain": "data-assets",
+      "strengthens_layers": [
+        "infrastructure",
+        "domain-application"
+      ],
+      "relevant_modules": [
+        "auto-save-sync",
+        "amjad2161",
+        "autonomous-trading-engine"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Borrow asset lineage and data-quality ideas for timesheets, telemetry, trading logs, and evaluations.",
+      "risks": [
+        "Do not introduce data platform complexity until data contracts exist",
+        "Prefer manifest-level lineage first"
+      ],
+      "tags": [
+        "lineage",
+        "assets",
+        "data-quality",
+        "pipelines"
+      ],
+      "priority_score": 75,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "dify",
+      "name_with_owner": "langgenius/dify",
+      "url": "https://github.com/langgenius/dify",
+      "description": "Production-ready platform for agentic workflow development.",
+      "stars": 143060,
+      "license_key": "other",
+      "license_name": "Other",
+      "updated_at": "2026-05-29T08:38:15Z",
+      "domain": "ai-app-platform",
+      "strengthens_layers": [
+        "agent-platform",
+        "harness-extension"
+      ],
+      "relevant_modules": [
+        "superagi",
+        "everything-claude-code",
+        "agency-agents"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Study product UX for workflow publishing, datasets, prompt management, and app packaging.",
+      "risks": [
+        "License review before code reuse",
+        "Avoid replacing the lighter manifest-first control plane"
+      ],
+      "tags": [
+        "workflow-ui",
+        "datasets",
+        "apps",
+        "prompt-management"
+      ],
+      "priority_score": 78,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "flowise",
+      "name_with_owner": "FlowiseAI/Flowise",
+      "url": "https://github.com/FlowiseAI/Flowise",
+      "description": "Build AI Agents, Visually.",
+      "stars": 53186,
+      "license_key": "other",
+      "license_name": "Other",
+      "updated_at": "2026-05-29T07:52:36Z",
+      "domain": "visual-agent-builder",
+      "strengthens_layers": [
+        "agent-platform",
+        "creative-runtime"
+      ],
+      "relevant_modules": [
+        "superagi",
+        "comfyui",
+        "agency-agents"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Borrow visual workflow and node UX ideas for future dashboard design; do not copy source without review.",
+      "risks": [
+        "License review required",
+        "Visual builders can obscure safety-critical execution"
+      ],
+      "tags": [
+        "visual-builder",
+        "nodes",
+        "agents",
+        "ux"
+      ],
+      "priority_score": 72,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "langflow",
+      "name_with_owner": "langflow-ai/langflow",
+      "url": "https://github.com/langflow-ai/langflow",
+      "description": "A powerful tool for building and deploying AI-powered agents and workflows.",
+      "stars": 148862,
+      "license_key": "mit",
+      "license_name": "MIT License",
+      "updated_at": "2026-05-29T08:16:09Z",
+      "domain": "visual-agent-workflows",
+      "strengthens_layers": [
+        "agent-platform",
+        "agent-runtime"
+      ],
+      "relevant_modules": [
+        "superagi",
+        "agency-agents",
+        "mythos"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Use as a permissive visual-workflow reference for future Singularity dashboard and flow editor design.",
+      "risks": [
+        "Do not make visual editing the only source of truth",
+        "Keep JSON manifests canonical"
+      ],
+      "tags": [
+        "visual-builder",
+        "agents",
+        "workflow",
+        "dashboard"
+      ],
+      "priority_score": 82,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "n8n",
+      "name_with_owner": "n8n-io/n8n",
+      "url": "https://github.com/n8n-io/n8n",
+      "description": "Fair-code workflow automation platform with native AI capabilities.",
+      "stars": 190168,
+      "license_key": "other",
+      "license_name": "Other",
+      "updated_at": "2026-05-29T08:43:50Z",
+      "domain": "workflow-automation",
+      "strengthens_layers": [
+        "infrastructure",
+        "agent-platform"
+      ],
+      "relevant_modules": [
+        "superagi",
+        "amjad2161",
+        "auto-save-sync"
+      ],
+      "adoption_mode": "adapter-integration",
+      "recommendation": "Use as an external automation surface through webhooks/connectors, not vendored code.",
+      "risks": [
+        "Fair-code license requires review",
+        "External automation can bypass policy gates if not mediated"
+      ],
+      "tags": [
+        "workflows",
+        "webhooks",
+        "integrations",
+        "automation"
+      ],
+      "priority_score": 76,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "open-webui",
+      "name_with_owner": "open-webui/open-webui",
+      "url": "https://github.com/open-webui/open-webui",
+      "description": "User-friendly AI Interface.",
+      "stars": 139130,
+      "license_key": "other",
+      "license_name": "Other",
+      "updated_at": "2026-05-29T08:37:59Z",
+      "domain": "ai-interface",
+      "strengthens_layers": [
+        "harness-extension",
+        "agent-platform"
+      ],
+      "relevant_modules": [
+        "agency-agents",
+        "amjad2161",
+        "mythos"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Study chat/workspace UX for a future operator console; keep source separate unless license is approved.",
+      "risks": [
+        "License review required",
+        "Operator console must expose safety gates clearly"
+      ],
+      "tags": [
+        "chat-ui",
+        "operator-console",
+        "workspace"
+      ],
+      "priority_score": 74,
+      "strengthens_capabilities": []
+    },
+    {
+      "slug": "hummingbot",
+      "name_with_owner": "hummingbot/hummingbot",
+      "url": "https://github.com/hummingbot/hummingbot",
+      "description": "Open source software that helps you create and deploy high-frequency crypto trading bots.",
+      "stars": 18731,
+      "license_key": "apache-2.0",
+      "license_name": "Apache License 2.0",
+      "updated_at": "2026-05-29T08:39:40Z",
+      "domain": "crypto-trading",
+      "strengthens_layers": [
+        "domain-application"
+      ],
+      "relevant_modules": [
+        "autonomous-trading-engine",
+        "tradingboy",
+        "mythos"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Study connector architecture, paper-trading boundaries, and strategy isolation for TradingCore hardening.",
+      "risks": [
+        "Never copy live-trading defaults blindly",
+        "Keep exchange credentials and order execution behind approval gates"
+      ],
+      "tags": [
+        "trading",
+        "connectors",
+        "paper-trading",
+        "strategies"
+      ],
+      "priority_score": 89,
+      "strengthens_capabilities": [
+        "real-world-operations"
+      ]
+    },
+    {
+      "slug": "hftbacktest",
+      "name_with_owner": "nkaz001/hftbacktest",
+      "url": "https://github.com/nkaz001/hftbacktest",
+      "description": "High frequency trading and market making backtesting with tick data, queue positions, and latency.",
+      "stars": 4121,
+      "license_key": "mit",
+      "license_name": "MIT License",
+      "updated_at": "2026-05-29T07:08:37Z",
+      "domain": "trading-backtest",
+      "strengthens_layers": [
+        "domain-application"
+      ],
+      "relevant_modules": [
+        "autonomous-trading-engine",
+        "tradingboy"
+      ],
+      "adoption_mode": "pattern-adaptation",
+      "recommendation": "Adapt latency-aware backtest concepts before any high-frequency or scalping claims.",
+      "risks": [
+        "Backtest realism must be validated against Gate.io market structure",
+        "Avoid overfitting strategy parameters"
+      ],
+      "tags": [
+        "backtesting",
+        "latency",
+        "order-book",
+        "market-making"
+      ],
+      "priority_score": 86,
+      "strengthens_capabilities": [
+        "real-world-operations"
+      ]
+    },
+    {
+      "slug": "freqtrade",
+      "name_with_owner": "freqtrade/freqtrade",
+      "url": "https://github.com/freqtrade/freqtrade",
+      "description": "Free, open source crypto trading bot.",
+      "stars": 50881,
+      "license_key": "gpl-3.0",
+      "license_name": "GNU General Public License v3.0",
+      "updated_at": "2026-05-29T08:47:13Z",
+      "domain": "crypto-trading",
+      "strengthens_layers": [
+        "domain-application"
+      ],
+      "relevant_modules": [
+        "autonomous-trading-engine",
+        "tradingboy"
+      ],
+      "adoption_mode": "research-only",
+      "recommendation": "Use for conceptual comparison of strategy lifecycle, dry-run mode, and risk controls; avoid copying GPL code into permissive modules.",
+      "risks": [
+        "GPL copyleft implications",
+        "Trading risk if configs are copied without domain testing"
+      ],
+      "tags": [
+        "trading",
+        "risk-controls",
+        "dry-run",
+        "strategies"
+      ],
+      "priority_score": 66,
+      "strengthens_capabilities": [
+        "real-world-operations"
+      ]
+    },
+    {
+      "slug": "px4-autopilot",
+      "name_with_owner": "PX4/PX4-Autopilot",
+      "url": "https://github.com/PX4/PX4-Autopilot",
+      "description": "PX4 Autopilot Software.",
+      "stars": 11839,
+      "license_key": "bsd-3-clause",
+      "license_name": "BSD 3-Clause License",
+      "updated_at": "2026-05-29T08:02:38Z",
+      "domain": "drone-autopilot",
+      "strengthens_layers": [
+        "domain-application"
+      ],
+      "relevant_modules": [
+        "dji-owner",
+        "amjad2161"
+      ],
+      "adoption_mode": "adapter-integration",
+      "recommendation": "Use PX4 SITL and mission concepts as the serious simulator/autopilot reference for SkyCore evolution.",
+      "risks": [
+        "Hardware safety and regulatory constraints",
+        "Keep DJI-specific adapters separate from PX4 abstractions"
+      ],
+      "tags": [
+        "drone",
+        "autopilot",
+        "sitl",
+        "missions"
+      ],
+      "priority_score": 88,
+      "strengthens_capabilities": [
+        "real-world-operations"
+      ]
+    },
+    {
+      "slug": "mavsdk",
+      "name_with_owner": "mavlink/MAVSDK",
+      "url": "https://github.com/mavlink/MAVSDK",
+      "description": "API and library for MAVLink compatible systems written in C++ 20.",
+      "stars": 881,
+      "license_key": "bsd-3-clause",
+      "license_name": "BSD 3-Clause License",
+      "updated_at": "2026-05-26T19:30:25Z",
+      "domain": "drone-sdk",
+      "strengthens_layers": [
+        "domain-application"
+      ],
+      "relevant_modules": [
+        "dji-owner"
+      ],
+      "adoption_mode": "adapter-integration",
+      "recommendation": "Use as the MAVLink adapter boundary for SkyCore mission execution and telemetry.",
+      "risks": [
+        "Native dependency management",
+        "Separate adapter failures from mission-planner logic"
+      ],
+      "tags": [
+        "mavlink",
+        "sdk",
+        "telemetry",
+        "missions"
+      ],
+      "priority_score": 81,
+      "strengthens_capabilities": [
+        "real-world-operations"
+      ]
+    },
+    {
+      "slug": "ardupilot",
+      "name_with_owner": "ArduPilot/ardupilot",
+      "url": "https://github.com/ArduPilot/ardupilot",
+      "description": "ArduPlane, ArduCopter, ArduRover, ArduSub source.",
+      "stars": 15158,
+      "license_key": "gpl-3.0",
+      "license_name": "GNU General Public License v3.0",
+      "updated_at": "2026-05-29T08:11:17Z",
+      "domain": "drone-autopilot",
+      "strengthens_layers": [
+        "domain-application"
+      ],
+      "relevant_modules": [
+        "dji-owner"
+      ],
+      "adoption_mode": "research-only",
+      "recommendation": "Study mission safety, vehicle diversity, and simulation concepts; avoid copying GPL source into SkyCore unless licensing strategy changes.",
+      "risks": [
+        "GPL copyleft implications",
+        "Flight safety and hardware certification concerns"
+      ],
+      "tags": [
+        "drone",
+        "autopilot",
+        "simulation",
+        "vehicles"
+      ],
+      "priority_score": 62,
+      "strengthens_capabilities": [
+        "real-world-operations"
+      ]
+    }
+  ]
+}

@@ -29,13 +29,16 @@ The common denominator across the workspace is not a single framework. It is a p
 singularity_2030/
   singularity_nexus/
     catalog/repositories.json   # canonical repo/module manifest
+    catalog/external_opportunities.json
     catalog/__init__.py         # loader and validator
+    external.py                 # GitHub enhancement opportunity model
     models.py                   # typed contracts
     orchestrator.py             # profiles, capability map, common vision
     cli.py                      # command line inspector
   docs/
     architecture.md
     integration-map.md
+    external-opportunities.md
   tests/
 ```
 
@@ -54,6 +57,9 @@ singularity-nexus capabilities --format json
 singularity-nexus profile full-stack-ai-ops
 singularity-nexus profile real-world-autonomy
 singularity-nexus profile research-to-runtime
+singularity-nexus opportunities --top 10
+singularity-nexus opportunities --module autonomous-trading-engine
+singularity-nexus opportunities --layer agent-runtime --format json
 
 pytest
 ```
@@ -81,3 +87,12 @@ For turning prompts, mirrored code, SDKs, and quickstarts into legal, tested, pr
 ## Design principle
 
 Singularity 2030 is a manifest-first architecture. The manifest is the stable seam. Code can evolve inside each repo while the control plane keeps the integration vocabulary consistent.
+
+## GitHub enhancement research
+
+`catalog/external_opportunities.json` captures high-value open-source projects found through GitHub search. Each candidate has a license-aware adoption mode:
+
+- `direct-integration`: safe to use as a normal dependency when technically appropriate
+- `adapter-integration`: integrate through a boundary such as API, SDK, webhook, or sidecar
+- `pattern-adaptation`: study the idea and reimplement the needed pattern locally
+- `research-only`: useful for learning, but do not copy source without a deliberate license strategy
